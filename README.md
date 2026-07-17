@@ -1,73 +1,65 @@
-# React + TypeScript + Vite
+# Chez Samoa 3D 🍳
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A 3D browser cooking / restaurant game built with React, Vite, Three.js
+([@react-three/fiber](https://github.com/pmndrs/react-three-fiber) +
+[drei](https://github.com/pmndrs/drei)).
 
-Currently, two official plugins are available:
+## ▶️ Play now
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+**https://samayiat.github.io/chez-samoa-3D/**
 
-## React Compiler
+It's an installable PWA — you can add it to your phone's home screen and it
+launches full-screen like a native app (see below).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 📲 Install on your phone
 
-## Expanding the ESLint configuration
+**Android (Chrome):** open the link above → tap the **⋮** menu → **Install app**
+(or **Add to Home screen**). You may also get an automatic "Install" banner.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+**iPhone / iPad (Safari):** open the link → tap the **Share** button →
+**Add to Home Screen**. (On iOS, installing must be done from Safari — Chrome
+on iOS can't install web apps.)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Once installed, tap the chef-hat icon on your home screen to play full-screen.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## 🎮 Controls
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Action    | Keys                          |
+| --------- | ----------------------------- |
+| Move      | `W` `A` `S` `D` / Arrow keys  |
+| Interact  | `E` or `Space`                |
+| Punch     | `J` (or click the 3D scene)   |
+| Mute      | `M`                           |
+| Pause     | `Esc`                         |
+
+> Note: controls are currently keyboard-based, so it plays best on a laptop/desktop
+> or a device with a keyboard. On-screen touch controls for phones are a TODO.
+
+## 🛠️ Develop locally
+
+```bash
+npm install
+npm run dev      # http://localhost:3000/chez-samoa-3D/
+npm run build    # production build → dist/
+npm run preview  # serve the production build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Requires Node.js 20.19+ or 22.12+ (Vite 7).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 🚀 Deployment
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+The live site is served from the **`gh-pages`** branch (GitHub Pages). To publish
+a new build:
+
+```bash
+npm run build
+npm run deploy   # builds and force-pushes dist/ to the gh-pages branch
 ```
+
+The Vite `base` is set to `/chez-samoa-3D/` in [vite.config.ts](vite.config.ts) so
+assets resolve correctly under the Pages sub-path. PWA behavior comes from
+[`public/manifest.webmanifest`](public/manifest.webmanifest) and the service worker
+in [`public/sw.js`](public/sw.js).
+
+> Tip: to switch to fully automated CI deploys, grant the GitHub CLI the `workflow`
+> scope (`gh auth refresh -s workflow`) and re-add a GitHub Actions Pages workflow.
