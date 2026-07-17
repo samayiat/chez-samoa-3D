@@ -24,16 +24,23 @@ Once installed, tap the chef-hat icon on your home screen to play full-screen.
 
 ## 🎮 Controls
 
-| Action    | Keys                          |
-| --------- | ----------------------------- |
-| Move      | `W` `A` `S` `D` / Arrow keys  |
-| Interact  | `E` or `Space`                |
-| Punch     | `J` (or click the 3D scene)   |
-| Mute      | `M`                           |
-| Pause     | `Esc`                         |
+| Action           | Keyboard                     | Xbox gamepad              |
+| ---------------- | ---------------------------- | ------------------------- |
+| Move             | `W` `A` `S` `D` / Arrow keys | Left stick / D-pad        |
+| Interact / confirm | `E` or `Space`             | `A`                       |
+| Punch            | `J` (or click the 3D scene)  | `X` / `RB` / `RT`         |
+| Pause            | `Esc`                        | `Start`                   |
+| Mute             | `M`                          | `Back` / `View`           |
 
-> Note: controls are currently keyboard-based, so it plays best on a laptop/desktop
-> or a device with a keyboard. On-screen touch controls for phones are a TODO.
+On the title & results screens, `A` starts/advances and `B` returns to the title.
+
+Gamepad support uses the standard [Gamepad API](https://developer.mozilla.org/docs/Web/API/Gamepad_API)
+mapping — just plug in (or connect over Bluetooth) an Xbox controller and press a
+button to wake it. Wired Xbox pads and the Xbox Wireless Controller over Bluetooth
+both report the standard mapping in Chrome/Edge.
+
+> Note: movement is stick/keyboard-based, so it plays best on a laptop/desktop or
+> with a controller. On-screen touch controls for phones are still a TODO.
 
 ## 🛠️ Develop locally
 

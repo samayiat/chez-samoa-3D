@@ -5,6 +5,7 @@ import { HUD } from "./components/HUD";
 import { Screens } from "./components/Screens";
 import { sim } from "./game/sim";
 import { isMuted, setMuted } from "./game/audio";
+import { startGamepad } from "./game/gamepad";
 
 const keys = new Set<string>();
 
@@ -48,6 +49,7 @@ function useGameInput() {
 
 function Game() {
   useGameInput();
+  useEffect(() => startGamepad(), []);
   return (
     <div
       style={{ position: "fixed", inset: 0, overflow: "hidden", background: "#181220" }}

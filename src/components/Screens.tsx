@@ -50,6 +50,7 @@ function TitleScreen() {
           <div>🥊 <b style={{ color: "#f2e8d8" }}>J / click</b> — punch (when the mob shows up)</div>
           <div>💰 serve fast for the <b style={{ color: "#ffd86b" }}>+50% speed tip</b> · chain serves for combo cash</div>
           <div>🌙 survive close, then run <b style={{ color: "#ff9de2" }}>bottle service</b> after hours</div>
+          <div>🎮 <b style={{ color: "#f2e8d8" }}>Xbox pad</b> — stick/D-pad move · <b style={{ color: "#f2e8d8" }}>A</b> act · <b style={{ color: "#f2e8d8" }}>X/RB/RT</b> punch · <b style={{ color: "#f2e8d8" }}>Start</b> pause</div>
         </div>
         <div style={{ marginTop: 18, fontSize: 11, color: "#7a6a58", letterSpacing: 1 }}>
           a fan-made 3D remake of the HTML game “Culinary Dash” · best on desktop
