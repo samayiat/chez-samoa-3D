@@ -128,7 +128,7 @@ function Flashes() {
 }
 
 export function Effects() {
-  useSimVersion();
+  useSimVersion(() => sim.flashes.map((f) => `${f.x.toFixed(1)}:${f.text}:${f.t.toFixed(1)}`).join(","));
   return (
     <group>
       <Particles />

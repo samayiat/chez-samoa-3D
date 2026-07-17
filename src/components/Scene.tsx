@@ -125,7 +125,7 @@ function Lights() {
       <hemisphereLight ref={hemi} intensity={0.35} color="#fff2dc" groundColor="#8a6a4a" />
       <directionalLight
         ref={dir} position={[6, 12, 7]} intensity={1.25} color="#fff0d8"
-        castShadow shadow-mapSize={[1024, 1024]}
+        castShadow shadow-mapSize={[512, 512]}
         shadow-camera-left={-16} shadow-camera-right={16} shadow-camera-top={12} shadow-camera-bottom={-12}
       />
       <pointLight ref={rageGlow} position={[0, 5, 2]} intensity={0} color="#ff5040" distance={22} />
@@ -145,7 +145,7 @@ export function Scene() {
   return (
     <Canvas
       shadows
-      dpr={[1, 1.75]}
+      dpr={[1, 1.5]}
       camera={{ position: [0, 8.4, 11.7], fov: 50, near: 0.1, far: 120 }}
       gl={{ antialias: true }}
       style={{ background: "#181220" }}

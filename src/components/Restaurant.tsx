@@ -330,7 +330,7 @@ function Pass() {
         <group key={i} position={[x, 2.1, -1.25]}>
           <mesh><coneGeometry args={[0.3, 0.35, 12, 1, true]} /><meshStandardMaterial color="#c04838" side={THREE.DoubleSide} /></mesh>
           <mesh position={[0, -0.18, 0]}><sphereGeometry args={[0.07, 8, 8]} /><meshStandardMaterial color="#ffd070" emissive="#ffb040" emissiveIntensity={2} /></mesh>
-          <pointLight intensity={0.35} color="#ffb060" distance={4} />
+          {/* heat-lamp point lights removed (GPU trim) — emissive bulbs kept */}
         </group>
       ))}
       {/* slots with items */}
@@ -441,7 +441,15 @@ function Tables() {
 }
 
 export function Restaurant() {
-  useSimVersion();
+  // Only the wreck/plating slices are drawn in JSX here; live station state
+  // (ready lights, cook bars, steam) is handled in useFrame refs, so it's
+  // deliberately excluded from this signature.
+  useSimVersion(() =>
+    (sim.barBroken ? "1" : "0") + "|" +
+    sim.plants.map((p) => (p.broken ? 1 : 0)).join("") + "|" +
+    sim.tables.map((t) => t.plate ?? "").join(",") + "|" +
+    sim.passSlots.map((p) => (p.item ? p.item.id + (p.item.quality ?? "") : "")).join(",")
+  );
   return (
     <group>
       <Floor />

@@ -254,7 +254,18 @@ function GroupView({ g }: { g: NightGroup }) {
 }
 
 export function Characters() {
-  useSimVersion();
+  // State flips drive structural re-renders; the Math.floor(time*10) term keeps
+  // JSX-positioned movers and countdown bars ticking at 10Hz (Characters-only now).
+  useSimVersion(() =>
+    sim.phase + "|" +
+    sim.customers.map((c) => `${c.id}:${c.state}:${c.order}:${c.badItem}:${c.table}:${c.bench}:${c.angry ? 1 : 0}`).join(",") + "|" +
+    sim.enemies.map((e) => `${e.id}:${e.state}:${Math.ceil(e.hp)}:${e.buffed ? 1 : 0}:${e.steal?.id ?? ""}`).join(",") + "|" +
+    sim.groups.map((g) => `${g.id}:${g.state}:${g.price}`).join(",") + "|" +
+    sim.spectators.length + "|" +
+    (sim.chef.carry ? `${sim.chef.carry.kind}:${sim.chef.carry.id}:${sim.chef.carry.quality ?? ""}` : "") + "|" +
+    (sim.chef.wastedT > 0 ? 1 : 0) + "|" +
+    Math.floor(sim.time * 10)
+  );
   const ch = sim.chef;
   return (
     <group>
