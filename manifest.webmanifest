@@ -1,0 +1,16 @@
+{
+  "name": "Chez Samoa 3D",
+  "short_name": "Chez Samoa",
+  "description": "A 3D browser cooking/restaurant game.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#181220",
+  "theme_color": "#e0552e",
+  "icons": [
+    { "src": "pwa-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "pwa-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "maskable-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
