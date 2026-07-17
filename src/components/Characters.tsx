@@ -31,7 +31,8 @@ function Chef() {
   const ch = sim.chef;
   return (
     <group ref={g}>
-      <Person cast={CHEF_CAST} chefWhites walkPh={ch.walkPh} moving={ch.moving} hurt={ch.hurtT > 0} />
+      <Person cast={CHEF_CAST} chefWhites walkPh={ch.walkPh} moving={ch.moving} hurt={ch.hurtT > 0}
+        anim={() => ({ walkPh: sim.chef.walkPh, moving: sim.chef.moving })} />
       {/* carried item floats in front */}
       {ch.carry && (
         <group position={[0, 1.32, 0.62]}>
@@ -99,26 +100,43 @@ const bubbleStyle: React.CSSProperties = {
   fontFamily: "system-ui", transform: "translateY(-8px)",
 };
 
+const SEATED_STATES = ["thinking", "waiting", "badorder", "eating"];
+
 function Customers() {
   return (
     <group>
-      {sim.customers.map((c) => {
-        const seated = ["thinking", "waiting", "badorder", "eating"].includes(c.state);
-        const angry = c.angry;
-        return (
-          <group key={c.id} position={[c.x, seated ? 0.12 : 0, c.z]} rotation={[0, seated ? Math.PI : c.dir, 0]}>
-            <Person cast={c.cast} walkPh={c.walkPh} moving={!seated && c.state !== "bench"} seated={seated || c.state === "bench"} tint={angry ? "#e86a5a" : null} />
-            <Html position={[0, 2.35, 0]} center distanceFactor={11} zIndexRange={[6, 0]}>
-              <OrderBubble c={c} />
-            </Html>
-            {angry && (
-              <Html position={[0, 2.9, 0]} center distanceFactor={11} zIndexRange={[6, 0]}>
-                <div style={{ fontSize: 18 }}>💢</div>
-              </Html>
-            )}
-          </group>
-        );
-      })}
+      {sim.customers.map((c) => <CustomerView key={c.id} c={c} />)}
+    </group>
+  );
+}
+function CustomerView({ c }: { c: Cust }) {
+  const g = useRef<THREE.Group>(null);
+  // Position/facing follow the live sim every frame (no host re-render needed).
+  useFrame(() => {
+    const seated = SEATED_STATES.includes(c.state);
+    g.current!.position.set(c.x, seated ? 0.12 : 0, c.z);
+    g.current!.rotation.set(0, seated ? Math.PI : c.dir, 0);
+  });
+  const seated = SEATED_STATES.includes(c.state);
+  const angry = c.angry;
+  return (
+    <group ref={g}>
+      <Person
+        cast={c.cast}
+        walkPh={c.walkPh}
+        moving={!seated && c.state !== "bench"}
+        seated={seated || c.state === "bench"}
+        tint={angry ? "#e86a5a" : null}
+        anim={() => ({ walkPh: c.walkPh, moving: !SEATED_STATES.includes(c.state) && c.state !== "bench" })}
+      />
+      <Html position={[0, 2.35, 0]} center distanceFactor={11} zIndexRange={[6, 0]}>
+        <OrderBubble c={c} />
+      </Html>
+      {angry && (
+        <Html position={[0, 2.9, 0]} center distanceFactor={11} zIndexRange={[6, 0]}>
+          <div style={{ fontSize: 18 }}>💢</div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -159,6 +177,7 @@ function EnemyView({ e }: { e: Enemy }) {
         moving={e.state === "walk" || e.state === "flee"}
         tint={e.buffed ? "#c03830" : e.kind === "thief" ? "#3a3440" : e.kind === "smasher" ? "#6a3a30" : null}
         hurt={e.state === "hurt"}
+        anim={() => ({ walkPh: e.walkPh, moving: e.state === "walk" || e.state === "flee" })}
       />
       {e.kind === "smasher" && <mesh position={[0, 1.72, 0.2]}><boxGeometry args={[0.5, 0.08, 0.06]} /><meshStandardMaterial color="#c03830" /></mesh>}
       {e.kind === "thief" && <mesh position={[0, 1.62, 0.24]}><boxGeometry args={[0.42, 0.1, 0.06]} /><meshStandardMaterial color="#181818" /></mesh>}
@@ -217,22 +236,36 @@ function Groups() {
     </group>
   );
 }
-function GroupView({ g }: { g: NightGroup }) {
+function GroupMember({ g, i }: { g: NightGroup; i: number }) {
+  const grp = useRef<THREE.Group>(null);
+  useFrame(() => {
+    const seated = g.state === "ordering" || g.state === "partying";
+    const t = sim.tables[g.table];
+    const ang = (i / g.size) * Math.PI * 1.2 + Math.PI * 0.9;
+    const ox = seated ? t.x + Math.sin(ang) * 1.05 : g.x + (i - (g.size - 1) / 2) * 0.7;
+    const oz = seated ? t.z + Math.cos(ang) * 1.05 : g.z + (i % 2) * 0.4;
+    grp.current!.position.set(ox, seated ? 0.12 : 0, oz);
+    grp.current!.rotation.set(0, seated ? ang + Math.PI : 0, 0);
+  });
   const seated = g.state === "ordering" || g.state === "partying";
+  return (
+    <group ref={grp}>
+      <Person
+        cast={g.members[i]}
+        seated={seated}
+        walkPh={g.walkPh}
+        moving={!seated}
+        anim={() => ({ walkPh: g.walkPh, moving: !(g.state === "ordering" || g.state === "partying") })}
+      />
+    </group>
+  );
+}
+function GroupView({ g }: { g: NightGroup }) {
   const t = sim.tables[g.table];
   const left = g.state === "ordering" ? Math.max(0, 1 - g.t / 26) : 0;
   return (
     <group>
-      {g.members.map((cast, i) => {
-        const ang = (i / g.size) * Math.PI * 1.2 + Math.PI * 0.9;
-        const ox = seated ? t.x + Math.sin(ang) * 1.05 : g.x + (i - (g.size - 1) / 2) * 0.7;
-        const oz = seated ? t.z + Math.cos(ang) * 1.05 : g.z + (i % 2) * 0.4;
-        return (
-          <group key={i} position={[ox, seated ? 0.12 : 0, oz]} rotation={[0, seated ? ang + Math.PI : 0, 0]}>
-            <Person cast={cast} seated={seated} walkPh={g.walkPh} moving={!seated} />
-          </group>
-        );
-      })}
+      {g.members.map((_, i) => <GroupMember key={i} g={g} i={i} />)}
       {g.state === "ordering" && (
         <Html position={[t.x, 2.7, t.z]} center distanceFactor={11} zIndexRange={[6, 0]}>
           <div style={{ ...bubbleStyle, background: "#2a1430", border: "2px solid #e07ab8" }}>
@@ -254,18 +287,25 @@ function GroupView({ g }: { g: NightGroup }) {
 }
 
 export function Characters() {
-  // State flips drive structural re-renders; the Math.floor(time*10) term keeps
-  // JSX-positioned movers and countdown bars ticking at 10Hz (Characters-only now).
-  useSimVersion(() =>
-    sim.phase + "|" +
-    sim.customers.map((c) => `${c.id}:${c.state}:${c.order}:${c.badItem}:${c.table}:${c.bench}:${c.angry ? 1 : 0}`).join(",") + "|" +
-    sim.enemies.map((e) => `${e.id}:${e.state}:${Math.ceil(e.hp)}:${e.buffed ? 1 : 0}:${e.steal?.id ?? ""}`).join(",") + "|" +
-    sim.groups.map((g) => `${g.id}:${g.state}:${g.price}`).join(",") + "|" +
-    sim.spectators.length + "|" +
-    (sim.chef.carry ? `${sim.chef.carry.kind}:${sim.chef.carry.id}:${sim.chef.carry.quality ?? ""}` : "") + "|" +
-    (sim.chef.wastedT > 0 ? 1 : 0) + "|" +
-    Math.floor(sim.time * 10)
-  );
+  // Movement + leg-swing now live in useFrame refs (per-entity views + Person
+  // `anim`), so re-render only for structural state flips, the brawl HP hearts,
+  // and a 4Hz tick gated to when countdown bars are actually on screen.
+  useSimVersion(() => {
+    const hasCountdown =
+      sim.customers.some((c) => c.state === "waiting" || c.state === "badorder") ||
+      sim.groups.some((g) => g.state === "ordering");
+    return (
+      sim.phase + "|" +
+      sim.customers.map((c) => `${c.id}:${c.state}:${c.order}:${c.badItem}:${c.table}:${c.bench}:${c.angry ? 1 : 0}`).join(",") + "|" +
+      sim.enemies.map((e) => `${e.id}:${e.state}:${Math.ceil(e.hp)}:${e.buffed ? 1 : 0}:${e.steal?.id ?? ""}`).join(",") + "|" +
+      sim.groups.map((g) => `${g.id}:${g.state}:${g.price}`).join(",") + "|" +
+      sim.spectators.length + "|" +
+      (sim.chef.carry ? `${sim.chef.carry.kind}:${sim.chef.carry.id}:${sim.chef.carry.quality ?? ""}` : "") + "|" +
+      (sim.chef.wastedT > 0 ? 1 : 0) + "|" +
+      (sim.phase === "brawl" ? Math.max(0, Math.ceil((sim.chef.hp / CHEF_HP) * 5)) : 0) + "|" +
+      (hasCountdown ? Math.floor(sim.time * 4) : 0)
+    );
+  });
   const ch = sim.chef;
   return (
     <group>

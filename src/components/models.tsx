@@ -53,15 +53,21 @@ export interface PersonProps {
   hurt?: boolean;
   scale?: number;
   chefWhites?: boolean;
+  // Optional live-animation source: read fresh walkPh/moving every frame so
+  // leg-swing runs at framerate without the host component re-rendering.
+  anim?: () => { walkPh: number; moving: boolean };
 }
 
-export function Person({ cast, walkPh = 0, moving = false, seated = false, tint = null, hurt = false, scale = 1, chefWhites = false }: PersonProps) {
+export function Person({ cast, walkPh = 0, moving = false, seated = false, tint = null, hurt = false, scale = 1, chefWhites = false, anim }: PersonProps) {
   const legL = useRef<THREE.Mesh>(null);
   const legR = useRef<THREE.Mesh>(null);
   const armL = useRef<THREE.Mesh>(null);
   const armR = useRef<THREE.Mesh>(null);
   useFrame(() => {
-    const s = seated ? 0 : moving ? Math.sin(walkPh) * 0.55 : 0;
+    const a = anim ? anim() : null;
+    const wp = a ? a.walkPh : walkPh;
+    const mv = a ? a.moving : moving;
+    const s = seated ? 0 : mv ? Math.sin(wp) * 0.55 : 0;
     if (legL.current) legL.current.rotation.x = seated ? -1.35 : s;
     if (legR.current) legR.current.rotation.x = seated ? -1.35 : -s;
     if (armL.current) armL.current.rotation.x = -s * 0.7;
