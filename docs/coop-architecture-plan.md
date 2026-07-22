@@ -2,12 +2,13 @@
 
 ## Context
 
-This session started as "look at the `chez-samoa1` repo" and turned into discovering that it holds
-the *real* origin of everything built today: `culinary-dash` (a mature, single-file 2D canvas
+This started as "look at the `chez-samoa1` repo" and turned into discovering that it holds the
+*real* origin of everything built today: `culinary-dash` (a mature, single-file 2D canvas
 restaurant-brawler, built as a personal gift, 623+ tests) and `culinary-dash-3d` (a from-scratch
 Three.js reimagining of it — real kitchen layout, a 3-boss roster, proper `sim/`+`render`/`engine`
 module split, Vitest + Playwright coverage, and a CI pipeline that already ships multiple preview
-builds).
+builds). Both now live in this repo (`culinary-dash/`, `culinary-dash-3d/`, consolidated here
+rather than in a separate repo, per direction).
 
 Meanwhile, *this* repo independently built **Short Order** (`public/short-order/`), a single-file
 Three.js beat-em-up with a materially better combat feel than either — full IK rig, weight-driven
@@ -20,28 +21,42 @@ replacing `culinary-dash-3d`'s current simpler combat. The 2D original's drink/"
 gets ported in alongside. Bottle service and the riot system are explicitly deferred to later.
 The eventual goal is real networked co-op (two separate devices) for a small friend group (~10-15
 people, 2-3 concurrent game sessions), reusable across whichever games this group plays together —
-which reframes several architecture decisions below from "nice to have" to "must build this way
-from the start," even though the actual networking is a later phase.
+which is why several decisions below are "build it this way from the start" rather than "nice to
+have," even though the actual networking is a later phase.
 
-This document is a planning/reference doc, not itself an implementation — it exists so the shape of
-this multi-phase effort is written down somewhere durable before work starts, in the spirit of
-`chez-samoa1`'s own docs-driven house style (`ROADMAP.md`/`DECISIONS.md`/`SYSTEMS.md`).
+This document is a planning/reference doc. **No implementation has started yet** — the interview
+below locked in scope and decisions for when work actually begins.
+
+## Decisions locked in (from the follow-up interview)
+
+- **Sequencing:** Track A (combat port) goes first. Track B (relay/matchmaking) doesn't depend on
+  it and can start independently whenever.
+- **Boss scope:** Vince only, first. He's the one with a dedicated preview build and screenshots
+  already, suggesting he's the most battle-tested of the three. The Inspector and Bruno stay on the
+  roster architecture for later, not part of the initial port.
+- **The pre-existing `PASS` build bug** (below) gets fixed as part of this work, not left parked —
+  it'll be in the way once combat-port work starts touching `render/meshes.js` anyway.
+- **Relay hosting:** Cloudflare Durable Objects — one object instance per room, holding just that
+  room's sockets, spinning down when empty. Fits the small/bursty usage pattern (10-15 friends,
+  2-3 rooms) without paying for an always-on box.
+- **N-chef shape:** build the sim to support N independently-controlled chef entities *now*, not
+  as a deferred follow-up pass. Avoids a second structural rewrite later; the cost is mostly
+  "don't assume a singleton `player`," not extra feature work.
+- **Drink mechanic tuning:** port the 2D game's exact numbers first (3 drinks = permanent buzz, 5 =
+  WASTED with wild-punch chance, healing that decays per drink). They're already playtested;
+  retuning for 3D pacing/combat speed happens later, once it's actually playable, not preemptively.
+- **Input parity:** keep keyboard + gamepad + touch, matching what Short Order already had. Touch
+  matters here specifically because a co-op friend group is likely to include phones.
 
 ## The two tracks
 
-These are independent and can proceed in either order or in parallel — Track B needs nothing from
-Track A to exist, and single-player work on Track A doesn't need Track B until real networking is
-wired in.
-
-### Track A — Combat port into `culinary-dash-3d`
+### Track A — Combat port into `culinary-dash-3d` (do this first)
 
 **Goal:** `culinary-dash-3d` keeps its restaurant layout, service loop, and boss roster, but its
-combat/rig/camera/juice is replaced by Short Order's (materially better feel), and the drink/wasted
-mechanic is ported in from the 2D original. Built deterministic and multi-chef-shaped from the
-start, since co-op is the eventual goal — even though no networking is being built in this pass.
+combat/rig/camera/juice is replaced by Short Order's, and the drink/wasted mechanic is ported in
+from the 2D original. Built deterministic and N-chef-shaped from the start.
 
-**Reference material (all currently only accessible via an uploaded `chez-samoa1` zip — real repo
-access was denied once already this session and should be retried before real work starts):**
+**Reference material (all now in this repo):**
 - `culinary-dash-3d/src/preview/kitchen-room.js` — the restaurant layout (stations, tables, doors,
   windows, the tropical outside-world backdrop). Built at `sim/data.js`'s real station/table
   positions via `rpos()` — reusable close to as-is.
@@ -49,12 +64,14 @@ access was denied once already this session and should be retried before real wo
   the Health Inspector, Chef Bruno), a clean `createBoss(scene, bossId)` factory with HP-phase-gated
   attack rotations (`telegraph → strike → recover`). Currently deals damage through its own
   `resolveStrike`/`onGroundStrike` in `main-vince.js` — needs rewiring to go through the ported
-  combat's single damage door instead.
-- `culinary-dash/culinary-dash_src.html` (the 2D original, NOT the built file with embedded art —
-  see its own docs warning about never reading the built file's art blobs) — the drink mechanic:
-  `chefDrink()`, `wastedAmt()`, `drinkDmgMult/drinkSpeedMult/drinkDrift`, the hold-to-chug chain,
-  the 3-drinks-permanent / 5-drinks-WASTED ladder. This is the mechanic to port; the bottle-service
-  night-mode code in the same file (`startNight`/`spawnGroup`/`startRiot`) is explicitly deferred.
+  combat's single damage door instead. **Only `vince` needs wiring up for the initial port** — the
+  other two roster entries can stay as-is architecturally.
+- `culinary-dash/culinary-dash_src.html` (the 2D original — NOT `culinary-dash.html`, the built
+  file with embedded art blobs; see its own docs warning about never reading those) — the drink
+  mechanic: `chefDrink()`, `wastedAmt()`, `drinkDmgMult/drinkSpeedMult/drinkDrift`, the hold-to-chug
+  chain, the 3-drinks-permanent / 5-drinks-WASTED ladder. Port these numbers as-is first. The
+  bottle-service night-mode code in the same file (`startNight`/`spawnGroup`/`startRiot`) stays
+  deferred.
 - `public/short-order/index.html` (this repo) — the combat to extract: `COMBAT`
   (`startAttack`/`resolveHit`), `WEAPONS` table, `POSE`/IK, Verlet ragdoll, `FX`/juice/impact spine,
   `CAMERA` lock-on. `CLAUDE.md` in the same folder documents its hard invariants (length-locked
@@ -71,17 +88,24 @@ access was denied once already this session and should be retried before real wo
    (e.g. `pick()`), and make sure ported timing logic uses the sim's own fixed-step tick, not
    `performance.now()`. Preserves the existing "two sims, same seed, byte-identical for 2400
    frames" determinism test — this is load-bearing for co-op, not just a test nicety.
-3. Genericize the single global `player`/camera/input into N independently-controlled chef entities
-   (concretely 2, for two devices) — each device only ever renders/controls its own camera locally;
-   only sim state needs to be shared/synced later.
-4. Rewire boss damage through the ported single damage door so mobs and bosses share one hit-
+3. Build the sim around N independently-controlled chef entities from the start (concretely 2, for
+   two devices) — not a global `player` singleton. Each device only ever renders/controls its own
+   camera locally; only sim state needs to be shared/synced later.
+4. Rewire Vince's damage through the ported single damage door so mobs and the boss share one hit-
    resolution path.
 5. Port the drink ladder into the new sim layer as new pure functions in the same house style as
    `culinary-dash-3d`'s existing `sim/combat.js`/`sim/movement.js` (see `HANDOFF_CLAUDE_CODE.md`'s
    rules: extract pure decision functions, mutation-test every new invariant).
+6. Keep keyboard + gamepad + touch input parity through the port.
 
-**Explicitly out of scope for this track (for now):** bottle service, the riot system, any actual
-network transport.
+**Explicitly out of scope for this track (for now):** bottle service, the riot system, the
+Inspector/Bruno bosses, any actual network transport.
+
+**First concrete step when implementation starts:** fix the pre-existing build bug —
+`culinary-dash-3d/src/render/meshes.js` imports a `PASS` constant that `sim/data.js` never exports.
+Its own CI never catches this because `pages.yml` only builds the vince/kitchen singlefile targets,
+never plain `vite build`. Small, isolated, and it'll be in the way once combat-port work starts
+touching that file regardless.
 
 ### Track B — standalone relay + matchmaking service
 
@@ -99,26 +123,12 @@ then so be it").
 session gets a code; sending it to friends (however they already coordinate) is the entire
 "matchmaking" flow.
 
-**Hosting shape (not yet decided, flag for a follow-up decision):** needs something that keeps a
-persistent connection alive — not compatible with static hosting or spin-down serverless. Leading
-candidates from the brainstorm: Cloudflare Durable Objects (one instance per room, holds exactly the
-sockets in that room, spins down when empty — a strong fit for this exact pattern), or a small
-always-on process on Fly.io/Railway/Render. Both are viable; pick when this track actually starts.
+**Hosting:** Cloudflare Durable Objects — one instance per room, holding exactly that room's
+sockets, spinning down when empty. Decided over a conventional always-on process (Fly.io/Railway/
+Render) because it fits the small, bursty usage pattern without paying for constant uptime.
 
 **Persistence:** none, by design. Game progress/saves live client-side only (`localStorage`/
 IndexedDB per device), never touch the relay.
-
-## Immediate next steps (before either track's real work starts)
-
-1. **Get real git access to `chez-samoa1`.** Everything referenced above was read out of an
-   uploaded zip in scratch space, not a live clone — `add_repo` was denied once already this
-   session. Re-attempt (or ask the user to approve it) before doing real Track A work, since editing
-   off a stale scratch copy risks working from outdated source.
-2. Decide where Track A's work actually lives — presumably a proper clone/fork of `culinary-dash-3d`
-   once access exists, not `chez-samoa-3D` (this repo is the React/R3F "Chez Samoa" spinoff, a
-   different and less-developed codebase than `culinary-dash-3d`).
-3. Track B can start independently at any point — it needs no game code, just a design pass on the
-   room/message protocol and a hosting decision.
 
 ## Verification
 
