@@ -1631,8 +1631,14 @@ function updatePlayer(dt, pad){
   }
 
   // ----- GRAB: pick up a utensil you're standing on, else tackle-charge a person -----
+  // Reach is 2.0, not the old 1.0: the weapons sit ON TOP of the pass counter,
+  // whose collision box holds the player ~1.44 away from a weapon at its center
+  // (counter half-depth 1.1 + player radius 0.34). At 1.0 the "pick up" prompt
+  // showed but F whiffed into a tackle -- you literally could not arm up at the
+  // pass. 2.0 comfortably clears the counter so you can grab over it, and stays
+  // >= the prompt's detection range so anything prompted is actually grabbable.
   if(pad.pickup||tapK('f')||consume('pickupEdge')){
-    if(nearPickup && Math.hypot(nearPickup.x-P.pos.x, nearPickup.z-P.pos.z)<1.0) tryPickup();
+    if(nearPickup && Math.hypot(nearPickup.x-P.pos.x, nearPickup.z-P.pos.z)<2.0) tryPickup();
     else startTackle(P);
   }
 
@@ -2201,7 +2207,10 @@ function attachPlayerHelpers(P){
 /* ================================================================ PICKUPS */
 let nearPickup=null;
 function updatePrompt(){
-  nearPickup=null; let bd=1.6;
+  // detection range 1.9 (was 1.6) -- kept just under the grab reach (2.0) so
+  // the "pick up" prompt only appears when F will actually grab, and wide
+  // enough to trigger while the pass counter holds you back off its weapons
+  nearPickup=null; let bd=1.9;
   for(const p of PICKUPS){ if(p.taken)continue; const d=Math.hypot(p.x-player.pos.x,p.z-player.pos.z);
     if(d<bd){ bd=d; nearPickup=p; } }
   const el=document.getElementById('prompt');
