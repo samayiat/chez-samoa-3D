@@ -127,13 +127,32 @@ Smaller, independently mergeable/testable pieces, each with its own tests writte
      entity list (chefs + mobs, N of either, **3D world units** — matches `render/meshes.js`'s
      `to3()` output, not the day-service loop's 2D pixel space). Emits hit events rather than
      touching FX, mirroring `sim/combat.js`'s existing "sim only emits events" convention.
+   - `src/sim/requestAttack.js` — the recovery-cancel gate + combo-step advancement between an
+     attack *request* and `startAttack`.
+   - `src/sim/chargedAttack.js` — this port's control scheme (developer call, not ported): tap the
+     one attack button for light, hold past `HEAVY_HOLD` (0.35s, a new tunable) for heavy, rather
+     than Short Order's separate two-button scheme — this project's input only has one free action
+     button.
+   - `src/sim/combat3d.js` — **wired into real play.** `startBrawl3D`/`stepBrawl3D` are now what
+     `service.js`'s badOrders trigger and `main.js`'s dev "press B" actually call — a new `brawl3d`
+     phase in `state.js`/`stepSim`, alongside (not replacing in code) the old `brawl` phase. Spawns
+     one placeholder "punching bag" mob (arbitrary hp/r, no AI — not a step-4 balance call) so the
+     full loop (input → attack → hit → damage) is provable end to end. `sim/combat.js`'s own
+     `startBrawl`/`updateCombat`/33 tests are untouched and still directly reachable (as
+     `test/determinism.test.js` does) — only the *live trigger path* was repointed, so real play
+     never reaches the old brawl anymore even though the module itself still exists.
+   - `probe-brawl3d.mjs` (repo root) — a manual debug probe (Short Order's `harness.js` ad-hoc-probe
+     pattern), plain Node since `sim/` has never needed THREE.js stubbing. `node probe-brawl3d.mjs
+     [--heavy] [--bags N]`.
 
-   Still open: starting attacks (input for chefs / AI for mobs — neither exists), combo-streak
-   tracking (Short Order's `GAME.combo`/`comboT`; `resolveHit`'s `reachBonus`/`dmgMult`/
-   `comboWeight` opts are the hook for when it lands), a real mob roster/target selection, routing
-   any gameplay-affecting randomness through `sim/rng.js` (hasn't been needed yet — nothing landed
-   so far touches `Math.random()`), the chef rig/IK (step 3), and wiring any of this into
-   `state.js`/`stepSim`.
+   Still open: real AI/mob roster (target selection right now is just "any living entity on the
+   other team"), combo-streak tracking (Short Order's `GAME.combo`/`comboT`; `resolveHit`'s
+   `reachBonus`/`dmgMult`/`comboWeight` opts are the hook for when it lands), routing any
+   gameplay-affecting randomness through `sim/rng.js` (still hasn't been needed — nothing landed so
+   far touches `Math.random()`), chef movement inside brawl3d (the chef entity doesn't move yet,
+   only attacks), and the chef rig/IK (step 3) — until that lands, brawl3d has **no visual
+   representation at all**; it's real, tested, and playable-by-input only in the sense that hp
+   numbers change, not in the sense of anything rendering.
 3. The chef rig (re-rigging `chef.js`'s existing mesh onto the new IK).
 4. Mob combat (redesigned roster, wave escalation, reputation scaling).
 5. Vince, wired through the single damage door, with his grab reusing mash-to-escape.
