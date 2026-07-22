@@ -85,6 +85,13 @@ below locked in scope and decisions for when work actually begins.
 - **Audio is out of scope for this pass.** culinary-dash-3d's existing audio code stays as-is;
   unifying with Short Order's procedural sfx (or the 2D game's room-tone approach) is a separate,
   later pass.
+- **Numeric balance: Short Order's numbers win.** Chef HP, enemy HP, and weapon damage all come
+  over as Short Order already has them tuned; culinary-dash-3d's existing HP/economy numbers get
+  adjusted to match rather than the other way around. Not the lower-risk option, but the explicit
+  call — Short Order's numbers are the ones that were actually tuned around this combat feel.
+- **Reputation keeps scaling wave/mob size.** The 2D game's `brawlSizeMult` (worse rating = bigger,
+  harder mobs) stays in effect on top of the new `waveSizes` escalation (3,4,5,6,7) — not replaced
+  by fixed numbers.
 
 ## The two tracks
 
