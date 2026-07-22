@@ -3,7 +3,8 @@
 // spot-checking during the rig's development. Not part of the main game.
 import * as THREE from 'three';
 import { buildChefRig, poseChefRig } from './render/chefRig.js';
-import { PUNCHES } from './sim/attackShapes.js';
+import { PUNCHES, SWINGS, FINISH } from './sim/attackShapes.js';
+import { WEAPONS } from './sim/weapons.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(900, 900);
@@ -34,9 +35,19 @@ render();
 // Exposed for the Playwright verify script to drive.
 window.__rigPreview = {
   rig,
-  setIdle() { poseChefRig(rig, null); render(); },
+  setIdle(weaponKey = 'fists') { poseChefRig(rig, null, weaponKey); render(); },
   setPunch(t, hand = 0) {
-    poseChefRig(rig, { t, hitAt: 0.11, shape: PUNCHES[hand === 0 ? 0 : 1] });
+    poseChefRig(rig, { t, hitAt: 0.11, shape: PUNCHES[hand === 0 ? 0 : 1] }, 'fists');
+    render();
+  },
+  // weaponKey: a WEAPONS key (e.g. 'castiron', 'knife'); heavy: use the
+  // FINISH shape instead of cycling SWINGS; swingIdx picks which SWINGS
+  // entry for a light swing. hitAt matches startAttack.js's own formula
+  // (wind * 1.5 for heavy) so t=hitAt lines up with the real strike moment.
+  setSwing(t, weaponKey, heavy = false, swingIdx = 0) {
+    const shape = heavy ? FINISH : SWINGS[swingIdx % SWINGS.length];
+    const hitAt = WEAPONS[weaponKey].wind * (heavy ? 1.5 : 1);
+    poseChefRig(rig, { t, hitAt, shape }, weaponKey);
     render();
   },
   ready: true,

@@ -8,15 +8,20 @@
 // replaced with two flat IK bones posed by a world-space hand target each
 // frame, matching how Short Order's own arms work.
 //
-// Deliberately minimal first slice: idle guard stance + a punch that lerps
-// the throwing hand from the attack shape's windup point `s` to its strike
-// point `e` (attackShapes.js) as attack.t approaches hitAt. Does NOT yet
-// replicate poseChef's full fidelity (footwork, weight shift, lean, coil,
-// follow-through/recovery curve, squash) -- later slices. Legs/torso/head
-// are static; only arms move. Only bare-hand PUNCHES shapes (which carry a
-// `hand` field) are posed correctly right now -- weapon SWINGS shapes have
-// no `hand` field and aren't reachable yet anyway (chef3d's only wielded
-// weapon so far is fists).
+// Deliberately minimal first slice: idle guard stance + a punch/swing that
+// lerps the throwing hand from the attack shape's windup point `s` to its
+// strike point `e` (attackShapes.js) as attack.t approaches hitAt. Does NOT
+// yet replicate poseChef's full fidelity (footwork, weight shift, lean,
+// coil, follow-through/recovery curve, squash) -- later slices. Legs/torso/
+// head are static; only arms move.
+//
+// Weapons: a weapon mesh (render/weaponMesh.js, ported from Short Order's
+// makeWeaponMesh) always rides the right hand, per Short Order's own
+// convention ("give a chef a weapon in the right hand", equip()). Bare-hand
+// PUNCHES carry an explicit `hand` field (0=L/1=R) picking which fist
+// throws; weapon SWINGS/FINISH shapes have no such field since the weapon is
+// always right-handed -- poseChefRig forces the right hand to throw whenever
+// the equipped weapon isn't fists, regardless of what shape.hand would say.
 //
 // GUARD_TARGET's numbers are this slice's own approximation (no equivalent
 // "resting IK target" exists to port from her old FK rig, which posed idle
@@ -39,6 +44,12 @@
 import * as THREE from 'three';
 import { mat, box, put } from '../preview/util.js';
 import { boneIK, orientFixed, solveTwoBone } from './ik.js';
+import { makeWeaponMesh } from './weaponMesh.js';
+
+// Short Order's grip offset for a held weapon, relative to the hand
+// (equip(): "slight grip tilt; hand orients along the forearm").
+const GRIP_OFFSET = new THREE.Vector3(0.02, 0, 0.04);
+const GRIP_TILT_X = 0.15;
 
 // Her exact palette (preview/chef.js) -- unchanged.
 const TOP = 0xb56a92;
@@ -157,9 +168,18 @@ export function buildChefRig() {
   function armBones() {
     const upper = boneIK(0.095, 0.075, topMat);
     const fore = boneIK(0.072, 0.058, skinMat);
+    // `hand`: a small pivot at the wrist, oriented along the forearm each
+    // frame (matches Short Order's own arm.hand) -- the fist and any held
+    // weapon are its children, so they move/orient together.
+    const hand = new THREE.Group();
     const fist = ball(0.09, skinMat, 1, 0.95, 1.05);
-    body.add(upper); body.add(fore); body.add(fist);
-    return { upper, fore, fist };
+    hand.add(fist);
+    const weapon = makeWeaponMesh('fists'); // empty group -- bare hand by default
+    weapon.position.copy(GRIP_OFFSET);
+    weapon.rotation.x = GRIP_TILT_X;
+    hand.add(weapon);
+    body.add(upper); body.add(fore); body.add(hand);
+    return { upper, fore, hand, fist, weapon, weaponKey: 'fists' };
   }
   const armL = armBones(), armR = armBones();
 
@@ -169,15 +189,31 @@ export function buildChefRig() {
 
 /**
  * Poses the arms for one frame. `attack` is a sim attack envelope (from
- * startAttack.js/stepCombat.js) or null/idle. Only the throwing hand (per
- * the shape's `hand` field, 0=L/1=R) moves toward the punch target; the
- * other arm holds guard.
+ * startAttack.js/stepCombat.js/attackShapes.js) or null/idle. `weaponKey` is
+ * the chef's currently equipped weapon (a WEAPONS key, default 'fists') --
+ * independent of `attack`, since the weapon is held at rest too, not just
+ * mid-swing. Whichever hand is throwing (the right hand whenever a weapon is
+ * equipped; otherwise the shape's own `hand` field for bare-hand punches)
+ * moves toward the attack target; the other arm holds guard.
  */
-export function poseChefRig(rig, attack) {
+export function poseChefRig(rig, attack, weaponKey = 'fists') {
   const u = rig.userData;
-  const throwingHand = attack && attack.shape && attack.shape.hand;
-  const arms = [['L', u.armL, 0], ['R', u.armR, 1]];
-  for (const [side, arm, handIdx] of arms) {
+
+  if (u.armR.weaponKey !== weaponKey) {
+    u.armR.hand.remove(u.armR.weapon);
+    const weapon = makeWeaponMesh(weaponKey);
+    weapon.position.copy(GRIP_OFFSET);
+    weapon.rotation.x = GRIP_TILT_X;
+    u.armR.hand.add(weapon);
+    u.armR.weapon = weapon;
+    u.armR.weaponKey = weaponKey;
+  }
+
+  const throwingHand = attack && attack.shape
+    ? (weaponKey !== 'fists' ? 1 : attack.shape.hand)
+    : undefined;
+
+  for (const [side, arm, handIdx] of [['L', u.armL, 0], ['R', u.armR, 1]]) {
     const shoulder = SHOULDER[side];
     let target = GUARD_TARGET[side];
     if (attack && attack.shape && throwingHand === handIdx) {
@@ -188,6 +224,7 @@ export function poseChefRig(rig, attack) {
     }
     solveTwoBone(arm.upper, arm.fore, shoulder, target, UPPER_LEN, FORE_LEN, BEND_DIR);
     const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(arm.fore.quaternion);
-    arm.fist.position.copy(arm.fore.position).addScaledVector(dir, arm.fore.scale.y * 0.5);
+    arm.hand.position.copy(arm.fore.position).addScaledVector(dir, arm.fore.scale.y * 0.5);
+    arm.hand.quaternion.copy(arm.fore.quaternion);
   }
 }

@@ -39,6 +39,22 @@ await page.screenshot({ path: path.join(shotDir, 'chef-rig-2-punch-left.png') })
 await page.evaluate(() => window.__rigPreview.setPunch(0.11, 1));
 await page.screenshot({ path: path.join(shotDir, 'chef-rig-3-punch-right.png') });
 
+// weapon idle: castiron pan held at rest, no swing in progress
+await page.evaluate(() => window.__rigPreview.setIdle('castiron'));
+await page.screenshot({ path: path.join(shotDir, 'chef-rig-4-castiron-idle.png') });
+
+// light swing with the cast iron pan, near full extension
+await page.evaluate(() => window.__rigPreview.setSwing(0.3, 'castiron', false, 0));
+await page.screenshot({ path: path.join(shotDir, 'chef-rig-5-castiron-swing.png') });
+
+// heavy swing (the FINISH shape) with the cast iron pan
+await page.evaluate(() => window.__rigPreview.setSwing(0.5, 'castiron', true));
+await page.screenshot({ path: path.join(shotDir, 'chef-rig-6-castiron-heavy.png') });
+
+// knife swing, to check a second weapon silhouette
+await page.evaluate(() => window.__rigPreview.setSwing(0.1, 'knife', false, 1));
+await page.screenshot({ path: path.join(shotDir, 'chef-rig-7-knife-swing.png') });
+
 await browser.close();
 vite.kill();
 
