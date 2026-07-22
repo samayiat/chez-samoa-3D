@@ -45,6 +45,11 @@ export const STATIONS = [
   { id: 'pass',     x: 300, y: 150, kind: 'pass', slots: 3 },
 ];
 
+// The pass counter's own position, for renderers that place it as a fixture
+// distinct from the generic station loop. Derived from STATIONS rather than
+// re-stating x/y so the two can't drift apart.
+export const PASS = STATIONS.find((s) => s.kind === 'pass');
+
 // Dining tables — spread across the floor with real walking space between them.
 export const TABLES = [
   { id: 't0', x: 120, y: 240 },
