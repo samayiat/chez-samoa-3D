@@ -34,6 +34,8 @@ below locked in scope and decisions for when work actually begins.
 - **Boss scope:** Vince only, first. He's the one with a dedicated preview build and screenshots
   already, suggesting he's the most battle-tested of the three. The Inspector and Bruno stay on the
   roster architecture for later, not part of the initial port.
+- **Mob combat is in scope too, now — not staged after the boss.** Both the regular day→brawl mob
+  fight and the Vince encounter move to Short Order's combat engine in this same pass.
 - **The pre-existing `PASS` build bug** (below) gets fixed as part of this work, not left parked —
   it'll be in the way once combat-port work starts touching `render/meshes.js` anyway.
 - **Relay hosting:** Cloudflare Durable Objects — one object instance per room, holding just that
@@ -47,6 +49,30 @@ below locked in scope and decisions for when work actually begins.
   retuning for 3D pacing/combat speed happens later, once it's actually playable, not preemptively.
 - **Input parity:** keep keyboard + gamepad + touch, matching what Short Order already had. Touch
   matters here specifically because a co-op friend group is likely to include phones.
+- **Weapons carry over into the fight** (Vince included) — grabbing kitchen implements
+  (spatula/pan/cast iron/knife/pot lid), each with Short Order's weight/feel, stays the combat
+  identity rather than going bare-hands-only.
+- **Camera splits by context:** the existing fixed-perspective "diorama" camera stays for the cozy
+  day-service loop; combat (mob brawl and Vince alike) uses Short Order's free/lock-on camera. These
+  were already conceptually separate in `kitchen-room.js`'s own comments about the OTS brawl view.
+- **Juice/feedback carries over at full intensity** — chromatic aberration, zoom punch, heavy shake,
+  2-tone impact frames, unreduced. The contrast between the warm, cozy kitchen and a brutal
+  after-hours brawl is the theme ("after hours, the patrons came back"), not a mismatch to soften.
+- **Mob roster gets redesigned**, not preserved — culinary-dash-3d's current 3 mob archetypes don't
+  carry over as-is; the new mob roster is built around Short Order's own archetype approach.
+- **culinary-dash-3d's existing `sim/combat.js` gets replaced outright** once the new combat covers
+  its ground — no dead code, no two parallel combat implementations to keep in sync. Its 33 existing
+  tests get replaced by equivalent coverage for the new combat, not kept as a parallel regression net.
+- **Wave escalation reuses what was already built for Short Order today** — the discrete
+  `waveSizes`-chunked wave system (rest + toast + HUD readout between waves) becomes the model for
+  how the day→brawl mob fight escalates, replacing whatever wave logic culinary-dash-3d currently has.
+- **The chef's visual identity is explicitly protected — this is the one hard line.** The game is
+  built as a gift where the default chef represents a specific real person ("her"). Her established
+  hairstyle, body, and proportions stay exactly as they are now, pixel-for-pixel — **only her
+  movement/animation/IK (run cycles, punch poses, ragdoll) switches to Short Order's system**, for
+  combat consistency with everything else. This is distinct from the mob roster above, which is
+  being freely redesigned — the chef is not part of that redesign in any visual sense, only in how
+  she moves.
 
 ## The two tracks
 
@@ -97,6 +123,18 @@ from the 2D original. Built deterministic and N-chef-shaped from the start.
    `culinary-dash-3d`'s existing `sim/combat.js`/`sim/movement.js` (see `HANDOFF_CLAUDE_CODE.md`'s
    rules: extract pure decision functions, mutation-test every new invariant).
 6. Keep keyboard + gamepad + touch input parity through the port.
+7. Replace culinary-dash-3d's regular mob-brawl combat at the same time as Vince — one combat
+   system, not two running in parallel. This includes redesigning the mob roster around Short
+   Order's archetype approach and reusing Short Order's `waveSizes`-chunked wave-escalation system
+   (built earlier for Short Order itself) for how the mob fight paces and escalates.
+8. Split the camera by context: keep the existing fixed diorama camera for day service, switch to
+   Short Order's free/lock-on camera for all combat (mob and Vince alike).
+9. Port the chef's weapon-pickup model (grab a kitchen implement, each with its own weight/feel)
+   into the fight as-is — combat isn't bare-hands-only.
+10. **Preserve the chef's established visual identity exactly** (hairstyle/body/proportions,
+    pixel-for-pixel) while porting over *only* her movement/animation/IK/ragdoll to Short Order's
+    system. This is the one part of the visual redesign that's off the table — everything else
+    (mob roster, juice intensity, camera) is free to change; her look is not.
 
 **Explicitly out of scope for this track (for now):** bottle service, the riot system, the
 Inspector/Bruno bosses, any actual network transport.
