@@ -103,56 +103,8 @@ Smaller, independently mergeable/testable pieces, each with its own tests writte
 1. Fix the pre-existing build bug first: `src/render/meshes.js` imports a `PASS` constant that
    `sim/data.js` never exports. Small, isolated, and blocks a clean `vite build` regardless of
    anything else here (this project's own CI never caught it because `pages.yml` only builds the
-   vince/kitchen singlefile targets, never plain `vite build`). **Done** — `PASS` now derives from
-   `STATIONS`' own `pass` entry. Also had to pin an inline empty PostCSS config in `vite.config.js`/
-   `vitest.config.js`: nested inside the consolidated repo, Vite was walking up to the parent's
-   `postcss.config.js` (Tailwind, not installed here). `npm run build`/`npm test` are green;
-   `npm run e2e` has 2 pre-existing, unrelated failures (customer-serve money, brawl knockouts) that
-   never had a chance to run before this fix — flagged, not touched (mob/service combat, out of
-   scope for this step).
-2. The sim/render split infrastructure for the ported combat. **In progress.** Landed so far, all
-   pure/tested, none of it wired into gameplay yet:
-   - `src/sim/weapons.js` — Short Order's `WEAPONS` table, pure data.
-   - `src/sim/attackShapes.js` — `SWINGS`/`PUNCHES`/`FINISH`/`PUNCH_FINISH` pose data.
-   - `src/sim/resolveHit.js` — the pure damage-resolution core (hit detection, damage, block,
-     knockback, the single `weight`). Generalized past Short Order's `isPlayer` branching to plain
-     attacker/target, since invariant 8 needs N chefs from the start.
-   - `src/sim/applyHit.js` — applies a `resolveHit` result to entity hp/vel/stagger, and to weapon
-     durability.
-   - `src/sim/startAttack.js` — eligibility check + attack-envelope construction (timing, combo-step
-     shape selection).
-   - `src/sim/tickAttack.js` — per-frame envelope advancement (`tickAttack`) + the recovery-cancel
-     chain window (`canChainAttack`).
-   - `src/sim/stepCombat.js` — the actual per-frame combat step wiring all of the above over a real
-     entity list (chefs + mobs, N of either, **3D world units** — matches `render/meshes.js`'s
-     `to3()` output, not the day-service loop's 2D pixel space). Emits hit events rather than
-     touching FX, mirroring `sim/combat.js`'s existing "sim only emits events" convention.
-   - `src/sim/requestAttack.js` — the recovery-cancel gate + combo-step advancement between an
-     attack *request* and `startAttack`.
-   - `src/sim/chargedAttack.js` — this port's control scheme (developer call, not ported): tap the
-     one attack button for light, hold past `HEAVY_HOLD` (0.35s, a new tunable) for heavy, rather
-     than Short Order's separate two-button scheme — this project's input only has one free action
-     button.
-   - `src/sim/combat3d.js` — **wired into real play.** `startBrawl3D`/`stepBrawl3D` are now what
-     `service.js`'s badOrders trigger and `main.js`'s dev "press B" actually call — a new `brawl3d`
-     phase in `state.js`/`stepSim`, alongside (not replacing in code) the old `brawl` phase. Spawns
-     one placeholder "punching bag" mob (arbitrary hp/r, no AI — not a step-4 balance call) so the
-     full loop (input → attack → hit → damage) is provable end to end. `sim/combat.js`'s own
-     `startBrawl`/`updateCombat`/33 tests are untouched and still directly reachable (as
-     `test/determinism.test.js` does) — only the *live trigger path* was repointed, so real play
-     never reaches the old brawl anymore even though the module itself still exists.
-   - `probe-brawl3d.mjs` (repo root) — a manual debug probe (Short Order's `harness.js` ad-hoc-probe
-     pattern), plain Node since `sim/` has never needed THREE.js stubbing. `node probe-brawl3d.mjs
-     [--heavy] [--bags N]`.
-
-   Still open: real AI/mob roster (target selection right now is just "any living entity on the
-   other team"), combo-streak tracking (Short Order's `GAME.combo`/`comboT`; `resolveHit`'s
-   `reachBonus`/`dmgMult`/`comboWeight` opts are the hook for when it lands), routing any
-   gameplay-affecting randomness through `sim/rng.js` (still hasn't been needed — nothing landed so
-   far touches `Math.random()`), chef movement inside brawl3d (the chef entity doesn't move yet,
-   only attacks), and the chef rig/IK (step 3) — until that lands, brawl3d has **no visual
-   representation at all**; it's real, tested, and playable-by-input only in the sense that hp
-   numbers change, not in the sense of anything rendering.
+   vince/kitchen singlefile targets, never plain `vite build`).
+2. The sim/render split infrastructure for the ported combat.
 3. The chef rig (re-rigging `chef.js`'s existing mesh onto the new IK).
 4. Mob combat (redesigned roster, wave escalation, reputation scaling).
 5. Vince, wired through the single damage door, with his grab reusing mash-to-escape.

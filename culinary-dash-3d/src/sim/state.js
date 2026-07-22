@@ -7,7 +7,6 @@ import { makeRng } from './rng.js';
 import { WORLD } from './data.js';
 import { initService, updateService } from './service.js';
 import { updateCombat } from './combat.js';
-import { stepBrawl3D } from './combat3d.js';
 import { buildObstacles, moveChef, findNearStation } from './movement.js';
 
 // `mods` = the back office's purchases collapsed to multipliers/bonuses (see
@@ -46,9 +45,7 @@ export function createState(seed = 12345, day = 1, mods = null, broken = null) {
 export function stepSim(state, dt, input) {
   state.t += dt;
 
-  if (state.phase === 'brawl3d') {
-    stepBrawl3D(state, dt, input);
-  } else if (state.phase === 'brawl') {
+  if (state.phase === 'brawl') {
     updateCombat(state, dt, input);
   } else {
     moveChef(state, dt, input.move.x, input.move.y);
