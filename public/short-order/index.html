@@ -594,15 +594,56 @@ function makeChef(o){
     toque.position.set(0,2.02,0.02);
   }
   toque.children.forEach(c=>c.castShadow=true); upper.add(toque);
+  // her dreadlocks, worn under the toque (chez-samoa-3D's default chef look --
+  // ported from culinary-dash-3d/src/preview/chef.js's loc-ring generator).
+  // Rings of thin cylinders flaring down-and-back from under the hat brim,
+  // deterministic wobble via a sine jitter, face left open (FRONT_GAP).
+  // Parented to `head` itself (in head-local coordinates, not upper's) so
+  // they follow it correctly when the ragdoll writes head.position directly
+  // (buildRagdoll/resetRagPose) -- NOT pushed into `cos` (which the ragdoll
+  // hides), since hair should stay visible falling with the head, not vanish.
+  if(o.locs){
+    const locMat=M(0x17110d,.9);
+    const LR=0.24, FRONT_GAP=0.95;
+    const locRings=[{phi:1.40,n:16,len:0.42},{phi:1.52,n:20,len:0.54},{phi:1.62,n:22,len:0.62}];
+    for(const ring of locRings){
+      const hr=LR*Math.sin(ring.phi), ry=LR*Math.cos(ring.phi);
+      for(let i=0;i<ring.n;i++){
+        const th=(i/ring.n)*TAU;
+        const rx=hr*Math.sin(th), rz=hr*Math.cos(th);
+        if(Math.abs(Math.atan2(rx,rz))<FRONT_GAP) continue;
+        const jit=Math.sin(i*12.9+ring.phi*78.2);
+        const len=ring.len*(0.9+0.16*(jit*0.5+0.5));
+        const root=new V3(rx, ry+0.02, rz-0.02);
+        const dir=new V3(rx*0.4,0,rz*1.6-0.1).normalize()
+          .multiplyScalar(0.62+0.12*jit).add(new V3(0,-1,0)).normalize();
+        const loc=new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.033,len,5),locMat);
+        loc.castShadow=true;
+        loc.quaternion.setFromUnitVectors(UP,dir);
+        loc.position.copy(root).add(dir.clone().multiplyScalar(len/2));
+        head.add(loc);
+      }
+    }
+  }
 
   // arms: IK bones under `upper` so the shoulder rides the torso twist.
   // each hand is a world-target the arm reaches for (guard pose / punch / swing).
+  // Upper arm wears a sleeve (jacket-colored); forearm is bare skin -- matches
+  // her actual look (preview/chef.js's arm(): pink sleeve, bare brown forearm)
+  // rather than the original all-skin bone.
   const arms=[];
   for(let i=0;i<2;i++){
-    const uArm=boneIK(0.10,0.088,skin), fArm=boneIK(0.09,0.078,skin);
+    const uArm=boneIK(0.10,0.088,jacketMat), fArm=boneIK(0.09,0.078,skin);
     const hand=new THREE.Group();
     const fist=new THREE.Mesh(new THREE.SphereGeometry(0.1,10,8),skin); fist.castShadow=true; hand.add(fist);
     upper.add(uArm); upper.add(fArm); upper.add(hand);
+    // shoulder cap: rounds off the sleeve/torso seam, matching her rounder
+    // shoulder silhouette (preview/chef.js's shoulder-cap balls on the torso).
+    if(o.locs){
+      const cap=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,8),jacketMat);
+      cap.scale.set(1,0.95,1); cap.position.set((i===0?-0.4:0.4),1.56,0); cap.castShadow=true;
+      upper.add(cap); cos.push(cap);
+    }
     arms.push({ up:uArm, fore:fArm, hand, fist,
       sh:new V3((i===0?-0.4:0.4),1.54,0),
       tgt:new V3((i===0?-0.32:0.34),1.34,0.36), elb:new V3() });
@@ -793,7 +834,11 @@ let player=null;
 
 /* --- player object --- */
 function makePlayer(){
-  const chef=makeChef({ skin:0xc98b63, jacket:0xf2ead9, apron:0x3a2c55, scarf:COL.tomato, boot:0x241326 });
+  // chez-samoa-3D's default chef: dark skin, mauve-pink top, cream apron,
+  // dreadlocks under the toque (see the `o.locs` block in makeChef above --
+  // colors match preview/chef.js's SKIN/TOP/APRON exactly; her established
+  // look is a hard invariant, not a style choice).
+  const chef=makeChef({ skin:0x7a4328, jacket:0xb56a92, apron:0xf1ede2, boot:0x1a1a20, locs:true });
   chef.userData.isPlayer=true;
   equip(chef,'fists');
   return {
