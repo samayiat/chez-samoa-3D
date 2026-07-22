@@ -103,8 +103,16 @@ Smaller, independently mergeable/testable pieces, each with its own tests writte
 1. Fix the pre-existing build bug first: `src/render/meshes.js` imports a `PASS` constant that
    `sim/data.js` never exports. Small, isolated, and blocks a clean `vite build` regardless of
    anything else here (this project's own CI never caught it because `pages.yml` only builds the
-   vince/kitchen singlefile targets, never plain `vite build`).
-2. The sim/render split infrastructure for the ported combat.
+   vince/kitchen singlefile targets, never plain `vite build`). **Done** — `PASS` now derives from
+   `STATIONS`' own `pass` entry. Also had to pin an inline empty PostCSS config in `vite.config.js`/
+   `vitest.config.js`: nested inside the consolidated repo, Vite was walking up to the parent's
+   `postcss.config.js` (Tailwind, not installed here). `npm run build`/`npm test` are green;
+   `npm run e2e` has 2 pre-existing, unrelated failures (customer-serve money, brawl knockouts) that
+   never had a chance to run before this fix — flagged, not touched (mob/service combat, out of
+   scope for this step).
+2. The sim/render split infrastructure for the ported combat. **Started** — `src/sim/weapons.js`
+   has Short Order's `WEAPONS` table ported as pure data (`test/weapons.test.js`), not yet wired
+   into gameplay. The rest of the split (combat resolution, IK) is still open.
 3. The chef rig (re-rigging `chef.js`'s existing mesh onto the new IK).
 4. Mob combat (redesigned roster, wave escalation, reputation scaling).
 5. Vince, wired through the single damage door, with his grab reusing mash-to-escape.
