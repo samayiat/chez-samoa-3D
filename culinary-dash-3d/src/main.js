@@ -11,7 +11,7 @@ import { syncScene, commitPrev, attachScene } from './render/scene.js';
 import { createSparks } from './render/sparks.js';
 import { createAudio } from './fx/audio.js';
 import { createImpactBus, decayImpact, impact } from './fx/impact.js';
-import { startBrawl } from './sim/combat.js';
+import { startBrawl3D } from './sim/combat3d.js';
 import { ANTIALIAS, PIXEL_CAP } from './engine/quality.js';
 
 const app = document.getElementById('app');
@@ -110,7 +110,7 @@ addEventListener('resize', () => {
 
 // dev: press B to trigger the brawl on demand
 addEventListener('keydown', (e) => {
-  if (e.code === 'KeyB' && state.phase === 'service') startBrawl(state);
+  if (e.code === 'KeyB' && state.phase === 'service') startBrawl3D(state);
 });
 
 // dismiss the start overlay on button, key, or tap
@@ -125,5 +125,7 @@ document.getElementById('startBtn')?.addEventListener('click', dismissStart);
 addEventListener('keydown', dismissStart, { once: true });
 addEventListener('pointerdown', dismissStart, { once: true });
 
-// expose for the e2e harness to drive/inspect
-window.__game = { state, bus, THREE, startBrawl, renderer };
+// expose for the e2e harness to drive/inspect. `startBrawl` now points at the
+// new combat -- the old sim/combat.js system stays reachable only by
+// importing it directly (as test/determinism.test.js does), not through here.
+window.__game = { state, bus, THREE, startBrawl: startBrawl3D, renderer };

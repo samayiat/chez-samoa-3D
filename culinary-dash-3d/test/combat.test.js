@@ -115,7 +115,11 @@ describe('day -> brawl transition', () => {
     // seat a customer and starve them to push badOrders over the line
     s.customers = [{ id: 'z', table: 't0', x: 96, y: 128, dish: 'salad', hearts: 0.0001, orderAge: 5, state: 'waiting', leaveT: 0 }];
     for (let i = 0; i < 4 && s.phase === 'service'; i++) stepSim(s, STEP, NO);
-    expect(s.phase).toBe('brawl');
+    // service.js's trigger now starts the new combat (brawl3d), not this old
+    // module's own brawl -- that old phase is still exercised directly by the
+    // tests above (via startBrawl()), just no longer reached through the
+    // service loop's real trigger path.
+    expect(s.phase).toBe('brawl3d');
   });
 });
 

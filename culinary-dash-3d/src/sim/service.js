@@ -14,7 +14,7 @@ import {
   COMBAT,
 } from './data.js';
 import { range, pick } from './rng.js';
-import { startBrawl } from './combat.js';
+import { startBrawl3D } from './combat3d.js';
 
 const stationById = (id) => STATIONS.find((s) => s.id === id);
 const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
@@ -238,5 +238,5 @@ export function updateService(state, dt, input) {
   if (input.primaryDown) interact(state);
 
   // enough walkouts and the mob comes back swinging (BRAWL_SPEC trigger)
-  if (state.badOrders > COMBAT.BRAWL_TRIGGER) startBrawl(state);
+  if (state.badOrders > COMBAT.BRAWL_TRIGGER) startBrawl3D(state);
 }
