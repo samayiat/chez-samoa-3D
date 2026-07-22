@@ -311,17 +311,32 @@ function hitPost(power,col){ const U=POST.uniforms;
   if(power>0.7) U.uGlitch.value=0.6; }
 
 /* ---------------------------------------------------------------- lights */
-const hemi = new THREE.HemisphereLight(0xffdcae, 0x1a0e06, 0.55); scene.add(hemi);
-const key = new THREE.DirectionalLight(0xffe3b0, 1.5);
-key.position.set(6,12,4); key.castShadow = true;
+// Vince's boss-fight lighting (arena.js, the reference this whole arena was
+// ported from) reads far moodier and deeper than a flat, evenly-lit room:
+// a cooler, dimmer ambient so the warm practicals (key light, the stove,
+// the swinging work-lamp added below) carve out depth instead of everything
+// being lit uniformly. Ported that balance here instead of just brightening
+// what already existed.
+const hemi = new THREE.HemisphereLight(0x3f3a55, 0x140b06, 0.42); scene.add(hemi);
+const key = new THREE.DirectionalLight(0xffe3b0, 2.0);
+key.position.set(6,13,4); key.castShadow = true;
 key.shadow.mapSize.set(2048,2048);
-key.shadow.camera.near=1; key.shadow.camera.far=44;
-key.shadow.camera.left=-16; key.shadow.camera.right=16; key.shadow.camera.top=16; key.shadow.camera.bottom=-16;
+key.shadow.camera.near=1; key.shadow.camera.far=48;
+// bounds sized for the restaurant arena (34x24, see ARENA below) with
+// margin -- this runs before ARENA exists, so it's a literal, not a
+// reference; the old +-16 was tuned for the pre-restaurant kitchen and
+// clipped shadows at the new arena's edges (HALFW=17 alone exceeds it).
+key.shadow.camera.left=-19; key.shadow.camera.right=19; key.shadow.camera.top=19; key.shadow.camera.bottom=-19;
 key.shadow.bias=-0.0007; key.shadow.radius=3;
 scene.add(key);
 const fill = new THREE.DirectionalLight(0x6f9fd0, 0.5); fill.position.set(-8,6,-6); scene.add(fill);
-const stoveGlow = new THREE.PointLight(0xff6a1e, 0.9, 16, 2); stoveGlow.position.set(-8.5,1.4,-4); scene.add(stoveGlow);
-const rim = new THREE.PointLight(0x8fc866, 0.5, 20, 2); rim.position.set(9,3,7); scene.add(rim);
+// cold backlight for silhouette separation against the dark walls -- Vince's
+// arena has this (its RIM_LIGHT); the kitchen this arena replaced never did
+const backRim = new THREE.DirectionalLight(0x5a72ff, 0.7); backRim.position.set(-9,9,-14); scene.add(backRim);
+// positioned at the actual stove once BAR exists, in the ARENA section below
+// -- (-8.5,1.4,-4) was a leftover from the pre-restaurant kitchen layout and
+// had drifted away from the flame it's supposed to be lighting
+const stoveGlow = new THREE.PointLight(0xff6a1e, 0.9, 16, 2); scene.add(stoveGlow);
 
 /* ================================================================ ARENA */
 // Chez Samoa, after hours — the same restaurant the daytime loop is served in
@@ -357,38 +372,46 @@ const floor = new THREE.Mesh(new THREE.PlaneGeometry(ARENA.w,ARENA.d),
 floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; arena.add(floor);
 
 /* warm plaster walls (the restaurant's own, not a generic kitchen's tile) */
+const WALL_H=4.5;
 const wallMat = new THREE.MeshStandardMaterial({ color:0x2e2118, roughness:1 });
 function wall(x,z,w,h,d,mat){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat||wallMat);
   m.position.set(x,h/2,z); m.receiveShadow=true; m.castShadow=true; arena.add(m); return m; }
-wall(0,-HALFD,ARENA.w,4.5,0.5);
-wall(0, HALFD,ARENA.w,4.5,0.5);
-wall(-HALFW,0,0.5,4.5,ARENA.d);
-wall( HALFW,0,0.5,4.5,ARENA.d);
+wall(0,-HALFD,ARENA.w,WALL_H,0.5);
+wall(0, HALFD,ARENA.w,WALL_H,0.5);
+wall(-HALFW,0,0.5,WALL_H,ARENA.d);
+wall( HALFW,0,0.5,WALL_H,ARENA.d);
 
 /* the restaurant's windows — moonlit ocean panes with a palm silhouette,
    ported from arena.js's oceanWindow(); on the back wall, either side of
    the bar. This IS "the windows" from the daytime loop, not a lookalike. */
 const winFrameMat=new THREE.MeshStandardMaterial({color:0x5a3f28,roughness:.8,flatShading:true});
-// Big panoramic window -- wide enough that a single center mullion reads as
-// undersized, so it's a row of panes (WIN_PANES) across the full width
-// instead of the original two-pane design.
-const WIN_W=7.2, WIN_H=2.8, WIN_PANES=4;
+// Floor-to-ceiling panoramic glass -- there's a real skybox/ocean behind
+// these already, so there's no reason to hide most of it behind wall; WIN_H
+// now spans nearly the full WALL_H (defined up with the walls) instead of
+// sitting as a smallish band above eye level, and WIN_W is pushed out to the
+// widest it can go while still clearing the bar on the back wall (its
+// half-width 4, windows centered at HALFW*0.53 -- see the placement calls
+// below).
+const WIN_W=8.6, WIN_H=4.0, WIN_PANES=4;
 function oceanWindow(x,z,ry,palm){
-  const w=new THREE.Group(); w.position.set(x,2.9,z); w.rotation.y=ry; arena.add(w);
+  const w=new THREE.Group(); w.position.set(x,WALL_H/2,z); w.rotation.y=ry; arena.add(w);
   const fr=new THREE.Mesh(new THREE.BoxGeometry(WIN_W,WIN_H,0.16),winFrameMat); fr.castShadow=true; w.add(fr);
   const sea=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,WIN_H-0.3,0.06),
     new THREE.MeshStandardMaterial({color:0x123240,emissive:0x16404e,emissiveIntensity:.55,roughness:.6})); sea.position.z=0.07; w.add(sea);
   const horizon=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,0.08,0.08),new THREE.MeshStandardMaterial({color:0x0c2028,flatShading:true}));
   horizon.position.set(0,0.4,0.11); w.add(horizon);
   const moon=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.07,0.08),
-    new THREE.MeshStandardMaterial({color:0xcfe8ef,emissive:0xcfe8ef,emissiveIntensity:.8})); moon.position.set(WIN_W*0.28,1.0,0.11); w.add(moon);
+    new THREE.MeshStandardMaterial({color:0xcfe8ef,emissive:0xcfe8ef,emissiveIntensity:.8})); moon.position.set(WIN_W*0.28,1.4,0.11); w.add(moon);
   // vertical mullions dividing the pane into WIN_PANES equal strips
   for(let i=1;i<WIN_PANES;i++){
     const mx=-WIN_W/2+0.15+(WIN_W-0.3)*(i/WIN_PANES);
     const mullion=new THREE.Mesh(new THREE.BoxGeometry(0.1,WIN_H-0.3,0.09),winFrameMat); mullion.position.set(mx,0,0.1); w.add(mullion);
   }
-  // a horizontal transom for the "big window" read (not just tall-and-narrow)
-  const transom=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,0.1,0.09),winFrameMat); transom.position.set(0,WIN_H*0.22,0.1); w.add(transom);
+  // two horizontal transoms (not one) -- a floor-to-ceiling pane needs more
+  // than a single crossbar to read as built, not just a stretched texture
+  for(const ty of [WIN_H*0.22, -WIN_H*0.22]){
+    const transom=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,0.1,0.09),winFrameMat); transom.position.set(0,ty,0.1); w.add(transom);
+  }
   if(palm){
     const trunk=new THREE.Mesh(new THREE.BoxGeometry(0.14,1.5,0.08),new THREE.MeshStandardMaterial({color:0x0a1a20,flatShading:true}));
     trunk.position.set(-WIN_W*0.32,-0.5,0.11); trunk.rotation.z=0.22; w.add(trunk);
@@ -443,8 +466,12 @@ const BAR={ x:0, z:-HALFD+1.1, w:8, d:1.5 };
     new THREE.MeshStandardMaterial({color:0x2e3238,metalness:.5,roughness:.5})); pot.position.set(-BAR.w/2+0.9,1.9,0); g.add(pot);
   const flame=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.26,10),
     new THREE.MeshStandardMaterial({color:0xff7a1e,emissive:0xff5a10,emissiveIntensity:2.2,roughness:.4}));
-  flame.position.set(-BAR.w/2+0.9,1.72,0); g.add(flame);
+  flame.position.set(-BAR.w/2+0.9,1.72,0); flame.userData.b=Math.random()*10; g.add(flame);
   arena.userData.stoveFlames=[flame];
+  // stoveGlow (declared up with the other lights) actually sits at the
+  // flame now -- it used to be hardcoded at a pre-restaurant-kitchen spot
+  // that had nothing to do with this bar
+  stoveGlow.position.set(BAR.x-BAR.w/2+0.9,1.9,BAR.z);
   OBST.push({x:BAR.x,z:BAR.z,rx:BAR.w/2+0.35,rz:BAR.d/2+0.35});
 })();
 
@@ -516,8 +543,50 @@ function passSlotX(i){ return (i-(PASS_SLOTS-1)/2) * (PASS.w-1.4)/(PASS_SLOTS-1)
       const fr=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.1,0.26),new THREE.MeshStandardMaterial({color:0x1e4a30,flatShading:true,roughness:.85}));
       fr.position.y=3.2; fr.rotation.y=(i/6)*Math.PI*2; fr.rotation.z=0.42; fr.castShadow=true; p.add(fr);
     }
+    // a small warm-green uplight in the fronds -- replaces a stray point
+    // light that used to sit at a fixed (9,3,7), a leftover from the
+    // pre-restaurant kitchen layout with no relationship to anything here
+    const glow=new THREE.PointLight(0x8fc866,0.35,7,2); glow.position.set(0,2.6,0); p.add(glow);
     OBST.push({x:sx,z:-HALFD*0.15,rx:0.7,rz:0.7});
   }
+})();
+
+/* the caged work-lamp swinging over the pass -- Vince's arena (arena.js)
+   has this and it's most of why that room reads as lived-in instead of
+   just lit: a physical fixture, not just an invisible light source, with
+   its own gentle sway. Hung above the pass since that's the room's other
+   natural focal point besides the bar. */
+(function workLamp(){
+  const lampPivot=new THREE.Group(); lampPivot.position.set(PASS.x,WALL_H+2.6,PASS.z); arena.add(lampPivot);
+  const cord=new THREE.Mesh(new THREE.BoxGeometry(0.04,3,0.04),new THREE.MeshStandardMaterial({color:0x111111,roughness:.8}));
+  cord.position.y=-1.5; lampPivot.add(cord);
+  const lamp=new THREE.Group(); lamp.position.y=-3; lampPivot.add(lamp);
+  const bulb=new THREE.Mesh(new THREE.SphereGeometry(0.22,12,8),
+    new THREE.MeshStandardMaterial({color:0xfff0c0,emissive:0xffd98a,emissiveIntensity:3})); lamp.add(bulb);
+  const cageMat=new THREE.MeshStandardMaterial({color:0x222222,metalness:.6,roughness:.4});
+  const cage=new THREE.Mesh(new THREE.TorusGeometry(0.32,0.03,6,12),cageMat); lamp.add(cage);
+  // a second ring, not cage.clone() -- the harness's minimal THREE stub
+  // (headless, no renderer) doesn't implement Mesh.clone()
+  const cage2=new THREE.Mesh(new THREE.TorusGeometry(0.32,0.03,6,12),cageMat); cage2.rotation.x=Math.PI/2; lamp.add(cage2);
+  const lampLight=new THREE.PointLight(0xffdd9e,26,17,2); lamp.add(lampLight);
+  arena.userData.lampPivot=lampPivot;
+})();
+
+/* floating dust motes, drifting through the key/lamp light shafts --
+   ported from arena.js; the single biggest reason its lighting reads as
+   "a room with air in it" rather than a lit diorama */
+(function dustMotes(){
+  const N=110;
+  const pos=new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    pos[i*3]=(Math.random()-0.5)*ARENA.w*0.8;
+    pos[i*3+1]=Math.random()*6.5+0.3;
+    pos[i*3+2]=(Math.random()-0.5)*ARENA.d*0.8;
+  }
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const motes=new THREE.Points(geo,new THREE.PointsMaterial({color:0xffe9c7,size:0.045,transparent:true,opacity:0.45,depthWrite:false}));
+  arena.add(motes);
+  arena.userData.motes={points:motes,geo,n:N};
 })();
 
 /* =============================================================== WEAPONS */
@@ -734,19 +803,37 @@ function makeChef(o){
   const brow=new THREE.Mesh(new THREE.BoxGeometry(0.32,0.06,0.08),M(0x1a120a,.9)); brow.position.set(0,1.9,0.22); upper.add(brow); cos.push(brow);
   for(const sx of [-1,1]){ const eye=new THREE.Mesh(new THREE.SphereGeometry(0.03,6,6),M(0x120a06,.5));
     eye.position.set(sx*0.09,1.86,0.22); upper.add(eye); cos.push(eye); }
-  // headwear: the player's a chef (toque); enemies are customers (hair, no hat)
+  // headwear: the player's a chef (toque); enemies are customers (hair, no hat).
+  // A child of `head` itself, not `upper` -- the hat/hair never comes off,
+  // so it has no business being a second, independently-tracked object that
+  // can drift out of sync with the head. That was the actual "hat sliding
+  // off" bug: toque used to live under `upper` with its own position that a
+  // couple of other places had to remember to re-sync by hand (ragdoll,
+  // reset) -- miss a spot and it visibly separates. As a head child it just
+  // inherits head's position for free, the same way the dreadlocks below
+  // already did (they never had this bug). `toque.rotation.x/z`, set
+  // elsewhere for the little spring "hat bobble", still works exactly the
+  // same -- it's layered ON TOP of head's own motion now instead of being
+  // computed independently of it, which is the actually-correct version of
+  // that effect anyway.
   const toque=new THREE.Group();
   if(o.customer){
     const hairMat=M(o.hair||0x2a1c12,.92);
     const hair=new THREE.Mesh(new THREE.SphereGeometry(0.245,12,9,0,TAU,0,Math.PI*0.6),hairMat);
     hair.scale.set(1.02,0.92,1.05); toque.add(hair);
-    toque.position.set(0,1.9,0.0);
+    toque.position.set(0,0.04,-0.02);
   } else {
-    const band=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.24,0.16,14),toqueMat); band.position.y=0.08; toque.add(band);
-    const puff=new THREE.Mesh(new THREE.SphereGeometry(0.27,14,10),toqueMat); puff.position.y=0.28; puff.scale.y=1.15; toque.add(puff);
-    toque.position.set(0,2.02,0.02);
+    // the cuff -- the snug band the hat actually sits on -- sized to overlap
+    // down onto the dreadlocks' top ring instead of stopping short of it.
+    // That gap of bare scalp between the hairline and the hatband was the
+    // other half of "the hat sliding off": a floating thin band with
+    // nothing bridging it to the hair reads as detached even when it isn't.
+    const cuff=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.25,0.16,14),toqueMat); toque.add(cuff);
+    const cuffLip=new THREE.Mesh(new THREE.CylinderGeometry(0.265,0.265,0.035,14),toqueMat); cuffLip.position.y=-0.08; toque.add(cuffLip);
+    const puff=new THREE.Mesh(new THREE.SphereGeometry(0.27,14,10),toqueMat); puff.position.y=0.20; puff.scale.y=1.15; toque.add(puff);
+    toque.position.set(0,0.06,0);
   }
-  toque.children.forEach(c=>c.castShadow=true); upper.add(toque);
+  toque.children.forEach(c=>c.castShadow=true); head.add(toque);
   // her dreadlocks, worn under the toque (chez-samoa-3D's default chef look --
   // ported from culinary-dash-3d/src/preview/chef.js's loc-ring generator).
   // Rings of thin cylinders flaring down-and-back from under the hat brim,
@@ -755,10 +842,12 @@ function makeChef(o){
   // they follow it correctly when the ragdoll writes head.position directly
   // (buildRagdoll/resetRagPose) -- NOT pushed into `cos` (which the ragdoll
   // hides), since hair should stay visible falling with the head, not vanish.
+  // Four rings, not three -- the added top one (phi:1.15) reaches up far
+  // enough to meet the cuff above with no gap of bare scalp between them.
   if(o.locs){
     const locMat=M(0x17110d,.9);
     const LR=0.24, FRONT_GAP=0.95;
-    const locRings=[{phi:1.40,n:16,len:0.42},{phi:1.52,n:20,len:0.54},{phi:1.62,n:22,len:0.62}];
+    const locRings=[{phi:1.15,n:14,len:0.30},{phi:1.30,n:16,len:0.40},{phi:1.44,n:20,len:0.52},{phi:1.58,n:22,len:0.62}];
     for(const ring of locRings){
       const hr=LR*Math.sin(ring.phi), ry=LR*Math.cos(ring.phi);
       for(let i=0;i<ring.n;i++){
@@ -812,7 +901,7 @@ function makeChef(o){
     mats:{ skin, jacket:jacketMat, apron:apronMat, scarf:scarf?scarf.material:null },
     weaponGroup:null, weaponKey:'fists',
     rest:{ torso:{p:torso.position.clone(),q:torso.quaternion.clone(),s:torso.scale.clone()},
-           head:head.position.clone(), hips:hips.position.clone(), toque:toque.position.clone() }
+           head:head.position.clone(), hips:hips.position.clone() }
   };
   scene.add(root);
   return root;
@@ -824,7 +913,8 @@ function resetRagPose(a){
   u.torso.position.copy(R.torso.p); u.torso.quaternion.copy(R.torso.q); u.torso.scale.copy(R.torso.s);
   u.head.position.copy(R.head); u.head.rotation.set(0,0,0);
   u.hips.position.copy(R.hips); u.hips.rotation.set(0,0,0);
-  u.toque.position.copy(R.toque); u.toque.rotation.set(0,0,0);
+  // toque no longer needs a position restore -- it's a fixed child of head now
+  u.toque.rotation.set(0,0,0);
   u.spine.rotation.set(0,0,0); u.upper.rotation.set(0,0,0); u.abMesh.rotation.set(0,0,0);
   u.body.position.set(0,0,0); u.body.rotation.set(0,0,0); u.body.scale.set(1,1,1);
   a.chef.scale.setScalar(a.kind==='tough'?1.12:1);
@@ -1901,7 +1991,8 @@ function ragApply(a){
   orientBone(u.torso, hipMid, shMid);
   u.head.position.copy(Lhead);
   u.hips.position.copy(hipMid); u.hips.quaternion.copy(u.torso.quaternion);
-  u.toque.position.copy(Lhead); u.toque.position.y += 0.16;
+  // toque is a head child now -- it follows Lhead automatically, same as
+  // the dreadlocks already did, no manual re-sync needed here anymore
   orientFixed(u.arms[0].up, LshL, LelbL, ARM_U); orientFixed(u.arms[0].fore, LelbL, LhanL, ARM_F); u.arms[0].hand.position.copy(LhanL);
   orientFixed(u.arms[1].up, LshR, LelbR, ARM_U); orientFixed(u.arms[1].fore, LelbR, LhanR, ARM_F); u.arms[1].hand.position.copy(LhanR);
   orientFixed(u.legs[0].thigh, LhipL, LkneL, THIGH); orientFixed(u.legs[0].shin, LkneL, LfooL, SHIN); u.legs[0].boot.position.copy(LfooL);
@@ -2311,6 +2402,15 @@ function tick(){
   const flames=arena.userData.stoveFlames||[];
   for(const f of flames){ f.scale.y=1+Math.sin(GAME.t*18+f.userData.b)*0.15; f.material.emissiveIntensity=1.8+Math.sin(GAME.t*22+f.userData.b)*0.6; }
   stoveGlow.intensity=0.8+Math.sin(GAME.t*16)*0.2;
+  // the work-lamp's gentle overhead sway
+  const lp=arena.userData.lampPivot;
+  if(lp){ lp.rotation.z=Math.sin(GAME.t*0.9)*0.1; lp.rotation.x=Math.cos(GAME.t*0.7)*0.07; }
+  // dust motes drifting through the light
+  const md=arena.userData.motes;
+  if(md){ md.points.rotation.y=GAME.t*0.015;
+    const arr=md.geo.attributes.position.array;
+    for(let i=0;i<md.n;i++){ arr[i*3+1]+=dt*0.12*((i%3)-1); if(arr[i*3+1]>6.8)arr[i*3+1]=0.3; if(arr[i*3+1]<0.3)arr[i*3+1]=6.8; }
+    md.geo.attributes.position.needsUpdate=true; }
 
   updateCamera(dt);
   postTick(dt);
