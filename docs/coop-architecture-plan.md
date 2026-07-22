@@ -107,10 +107,12 @@ below locked in scope and decisions for when work actually begins.
 - **`culinary-dash-3d` gets its own `CLAUDE.md`**, written now (before the port itself starts),
   capturing everything locked in this document as dev-facing invariants — mirrors the house style
   both source projects already use, and means a future session isn't reconstructing this from
-  conversation history.
+  conversation history. **Done** — see `culinary-dash-3d/CLAUDE.md`.
 - **Track A work happens on a new dedicated branch**, not piled onto `claude/godot-setup-6qgsqq`
   (which already carries Short Order, the repo consolidation, and this planning doc) — a change
-  this size (replacing a whole combat system) gets its own branch/PR.
+  this size (replacing a whole combat system) gets its own branch/PR. **Done** — created as
+  `claude/culinary-dash-combat-port`, branched off this one, currently empty (no implementation
+  yet — see sequencing in `culinary-dash-3d/CLAUDE.md`).
 - **A dev preview deploy is wanted, but treated as disposable.** Not a committed permanent URL/path
   — just something viewable to check progress against while the port is in flight. No need to
   carefully plan the final serving path now; that can change freely later.
