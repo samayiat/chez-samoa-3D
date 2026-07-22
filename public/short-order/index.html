@@ -407,6 +407,18 @@ function oceanWindow(x,z,ry,palm){
 // (half-width 3.6) doesn't overlap the bar (half-width 4) sitting between them
 oceanWindow(-HALFW*0.53,-HALFD+0.4,0,true);
 oceanWindow( HALFW*0.53,-HALFD+0.4,0,false);
+// windows on every wall, not just the back one -- ry rotates each window's
+// local +Z (its "into the room" face, see the comment above) to point at the
+// room interior from whichever wall it's on: ry=PI for the front wall
+// (interior is -Z from there), +-PI/2 for the side walls (interior is +-X).
+// Front wall — mirrors the back wall's spacing.
+oceanWindow(-HALFW*0.53, HALFD-0.4, Math.PI, false);
+oceanWindow( HALFW*0.53, HALFD-0.4, Math.PI, true);
+// Side walls — two per wall, spread front-to-back, clear of the corner tables.
+oceanWindow(-HALFW+0.4, -HALFD*0.55,  Math.PI/2, false);
+oceanWindow(-HALFW+0.4,  HALFD*0.55,  Math.PI/2, false);
+oceanWindow( HALFW-0.4, -HALFD*0.55, -Math.PI/2, false);
+oceanWindow( HALFW-0.4,  HALFD*0.55, -Math.PI/2, false);
 
 /* the bar — the back counter, dark wood, stocked bottles catching the light.
    This IS the daytime loop's bar (see arena.js's back-counter block) --
