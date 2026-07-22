@@ -929,7 +929,12 @@ function seg(r1,r2,mat){ // a limb bone, oriented so length runs down -Y from it
 
 /* ---- 2-bone IK + world-space footwork (ported from Glass Jaw) ---- */
 const UP=new V3(0,1,0), FWD=new V3(0,0,1);
-const THIGH=0.44, SHIN=0.44, ARM_U=0.40, ARM_F=0.40;
+// legs lengthened 0.44 -> 0.52: at 0.44 the leg was barely longer than the hip
+// height (0.8), so it stood nearly straight and could only reach ~0.3 sideways
+// -- which is why everyone SHUFFLED (a 0.19 stride was all the geometry allowed)
+// and looked stubby. Longer legs bend at the knee when standing and give real
+// stride room, so the gait below can take actual steps.
+const THIGH=0.52, SHIN=0.52, ARM_U=0.40, ARM_F=0.40;
 const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
 const KNEE_FWD=new V3(0,0,1);                        // knees break forward
 /* combo cycle: distinct swing shapes so a chain reads as jab->cross->hook, not
@@ -1256,6 +1261,9 @@ function ringTick(dt){ for(const r of RINGS){ if(r.life<=0)continue; r.life-=dt;
 const wordsEl=document.getElementById('words');
 const wproj=new V3();
 function popWord(worldPos, txt, col, size){
+  return;   // FLAVOR TEXT OFF -- every 'TENDERIZED'/'SLAMMED'/'DISARMED' callout
+            // was just noise over the fight. Killed at the source so nothing has
+            // to change at the call sites; the hits speak for themselves now.
   wproj.copy(worldPos); wproj.project(camera);
   if(wproj.z>1) return;
   const x=(wproj.x*0.5+0.5)*STAGE.w, y=(-wproj.y*0.5+0.5)*STAGE.h;
@@ -1317,10 +1325,13 @@ function kitchenTick(raw){ if(!ROOM.on)return;
 }
 /* one call site for buzz: the phone and any pad motors */
 function haptic(strong, weak, ms){
-  if(navigator.vibrate){ try{ navigator.vibrate(Math.round(ms*0.5)); }catch(e){} }
+  // was cut in half for mobile (ms*0.5) and passed magnitudes straight through
+  // -- under-driving hardware that can take a lot more. Full duration now, and
+  // both motors pushed up, so every connection actually THUMPS.
+  if(navigator.vibrate){ try{ navigator.vibrate(Math.round(ms)); }catch(e){} }
   const gp=GP._pad;
   if(gp && gp.vibrationActuator){ try{
-    gp.vibrationActuator.playEffect('dual-rumble',{duration:ms,strongMagnitude:strong,weakMagnitude:weak});
+    gp.vibrationActuator.playEffect('dual-rumble',{duration:ms,strongMagnitude:Math.min(1,strong*1.25),weakMagnitude:Math.min(1,weak*1.2)});
   }catch(e){} }
 }
 function env(node,g,dur,a){ const t=AC.currentTime; const gg=AC.createGain(); gg.gain.setValueAtTime(0,t);
@@ -1534,7 +1545,7 @@ if(stickBase){
 });
 
 /* ================================================================ CAMERA */
-const CAM={ yaw:Math.PI, dist:5.8, height:3.2, lockK:0, look:new V3(), pos:new V3() };
+const CAM={ yaw:Math.PI, dist:4.9, height:2.9, lockK:0, look:new V3(), pos:new V3() };  // closer + lower (was 5.8/3.2) so the limbs read
 const camFwd=new V3(), camRight=new V3();
 function updateCameraVectors(){ camFwd.set(Math.sin(CAM.yaw),0,Math.cos(CAM.yaw)); camRight.set(-camFwd.z,0,camFwd.x); }
 
@@ -1547,6 +1558,33 @@ function collide(pos,r){
     const px=(o.rx+r)-Math.abs(dx), pz=(o.rz+r)-Math.abs(dz);
     if(px>0&&pz>0){ if(px<pz){ pos.x+=(dx<0?-px:px); } else { pos.z+=(dz<0?-pz:pz); } }
   }
+}
+/* HARD body-to-body collision. The enemy AI's soft "separation" steer only
+   nudges intent; bodies still walked through each other and the player, which
+   is exactly the wrong feel for a brawl -- you should be able to bump, wall off,
+   and shove into people. This pushes every overlapping pair (player + all live
+   enemies) apart to their combined radius, twice for stability. The player is
+   treated as heavier (a live actor gives way more than the chef) so you feel
+   solid; enemy-vs-enemy splits the push evenly. Runs after everyone has moved,
+   then re-clamps to walls/props so nobody gets shoved through the bar. */
+function resolveBodies(){
+  const live=[player]; for(const e of enemies) if(!e.dead) live.push(e);
+  for(let iter=0; iter<2; iter++){
+    for(let i=0;i<live.length;i++) for(let j=i+1;j<live.length;j++){
+      const a=live[i], b=live[j];
+      let dx=b.pos.x-a.pos.x, dz=b.pos.z-a.pos.z, d=Math.hypot(dx,dz);
+      const min=(a.r||0.34)+(b.r||0.34);
+      if(d>=min) continue;
+      if(d<1e-4){ dx=Math.cos(i*2.4+j); dz=Math.sin(i*2.4+j); d=1; }   // exact overlap: split along a stable direction
+      const overlap=min-d; dx/=d; dz/=d;
+      // weight the push: the player barely gives (0.15), enemies give the rest
+      const aw=(a===player)?0.15:0.5, bw=(b===player)?0.15:0.5, s=aw+bw||1;
+      a.pos.x-=dx*overlap*(aw/s); a.pos.z-=dz*overlap*(aw/s);
+      b.pos.x+=dx*overlap*(bw/s); b.pos.z+=dz*overlap*(bw/s);
+    }
+  }
+  collide(player.pos, player.r);
+  for(const e of enemies) if(!e.dead) collide(e.pos, e.r);
 }
 function nearestEnemy(fromPos, facingYaw, cone){
   let best=null,bd=1e9;
@@ -1621,7 +1659,7 @@ function resolveHit(A, isPlayer){
     burst(cpos, Math.round(((blocked?6:11) + weight*30)*bw + 2), col, (0.9 + weight*2.4)*bw);
     ring(cpos, w.metal?COL.cream:COL.flame, (1.0 + weight*1.7)*bw);
     if(weight>0.55 && !blocked){ ring(cpos, 0xffffff, 1.5+weight); burst(cpos, 8, 0xffffff, 1.6+weight); }
-    shake((0.16 + weight*1.4) * bw);
+    shake((0.28 + weight*2.0) * bw);   // chunkier -- hits have to LAND
     hitstop((0.03 + weight*0.17) * (blocked?0.5:1));
     const power=Math.min(1, weight*1.15) * bw;
     impactFrames(weight>0.75?4:(weight>0.45?3:(weight>0.2?2:1)), blocked?0x7fb2d6:(power>0.6?0xFFE03D:0xFFF6E3), 0x140c07);
@@ -1638,9 +1676,12 @@ function resolveHit(A, isPlayer){
     else {
       w.metal? sfx.clang(0.4+weight) : sfx.thud(0.4+weight);
       if(weight>0.45) sfx.heavy(clamp(weight,0,1));
-      if(isPlayer){ hitWord(cpos, heavy, w);
-        haptic(0.25 + weight*0.75, 0.35 + weight*0.45, Math.round(55 + weight*280));
-        kitchenBump(0.12 + weight*0.4); }
+      if(isPlayer){
+        // crank the rumble -- these handhelds can take a LOT more than we were
+        // giving, and the feedback is the whole point. Near-max strong motor on
+        // any solid hit, longer buzz, scaled up across the board.
+        haptic(0.55 + weight*0.45, 0.5 + weight*0.5, Math.round(110 + weight*380));
+        kitchenBump(0.2 + weight*0.55); }
     }
     if(isPlayer){ if(T.hp<=0){ killChef(T, ang); } }
     else { playerHurtFlash(taken); break; } // enemy hits the player once
@@ -2001,7 +2042,7 @@ function startGrab(e){
   if(player.grabbed||player.dead||player.iframe>0||grabCD>0) return;
   player.grabbed={ by:e, mash:0, need:(e.kind==='tough'?8:5), t:0, max:2.6, dmgT:0.4 };
   e.state='holding'; e.stateT=3.2; if(e.hasToken){ e.hasToken=false; tokensUsed--; }
-  grabCD=2.4; shake(0.45); sfx.hurt(); haptic(0.5,0.5,120); kitchenBump(0.3);
+  grabCD=2.4; shake(0.6); sfx.hurt(); haptic(0.85,0.6,200); kitchenBump(0.3);
   player.attack=null; player.dodge=null;
   const hp=player.pos.clone(); hp.y=1.5; popWord(hp,'GRABBED!','#ff8a3a',30);
 }
@@ -2126,9 +2167,9 @@ function updateFeet(a, dt, moving){
   a._stepCool=(a._stepCool||0)-dt;
   const spd=a.speed||0, run=a._runK||0;
   const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0, vm=Math.hypot(vx,vz)||1;
-  const lead=Math.min(0.42, spd*0.11) + run*0.16;       // reach further ahead at a run
-  const stepDur = moving ? clamp(0.15 - spd*0.01, 0.065, 0.15) : 0.2;
-  const stepLen = 0.19 + run*0.17;                       // longer strides at a run
+  const lead=Math.min(0.5, spd*0.13) + run*0.2;          // reach further ahead
+  const stepDur = moving ? clamp(0.17 - spd*0.01, 0.08, 0.17) : 0.2;
+  const stepLen = 0.36 + run*0.22;                        // ACTUAL steps (was 0.19) -- pick a foot up and plant it ahead
   const fast = spd>3.2;                                  // running: let both feet catch up
   let anyStepping=false; for(const L of legs) if(L.stepT<1) anyStepping=true;
   let stepPhase=-1, whichFoot=0;
@@ -2145,12 +2186,12 @@ function updateFeet(a, dt, moving){
     } else {
       L.stepT=Math.min(1, L.stepT + dt/stepDur);
       const tt=L.stepT; L.world.lerpVectors(L.from,L.to, tt*tt*(3-2*tt));
-      L.lift=Math.sin(tt*Math.PI)*(0.06+Math.min(0.07,spd*0.012)+run*0.15); L.world.y=L.lift; if(tt>=1){ L.lift=0; L.world.y=0; }
+      L.lift=Math.sin(tt*Math.PI)*(0.13+Math.min(0.1,spd*0.02)+run*0.18); L.world.y=L.lift; if(tt>=1){ L.lift=0; L.world.y=0; }  // pick the foot up higher -- a step, not a scuff
       stepPhase=tt; whichFoot=i;
     }
   }
-  a._swayTarget = stepPhase>=0 ? (whichFoot===0? 0.05 : -0.05) : 0;
-  a._stepDip = stepPhase>=0 ? Math.sin(stepPhase*Math.PI)*0.02 : 0;
+  a._swayTarget = stepPhase>=0 ? (whichFoot===0? 0.09 : -0.09) : 0;   // weight shifts onto the planted foot
+  a._stepDip = stepPhase>=0 ? Math.sin(stepPhase*Math.PI)*0.05 : 0;    // body bobs down as the foot swings (gravity read)
 }
 const _hipV=new V3(), _footV=new V3();
 function solveLegsIK(a, b){
@@ -2180,14 +2221,16 @@ function solveArmsIK(a, dt, atk){
   const activeHand = atk ? ((isFist && atk.A.shape && atk.A.shape.hand!=null) ? atk.A.shape.hand : 1) : -1;
   for(let i=0;i<2;i++){
     const A=u.arms[i]; const isWeapon=(i===1); const isActive=(i===activeHand); const sign=(i===0?-1:1);
-    // default: a ready guard, hands up and in front
-    let tx=A.sh.x + sign*0.02, ty=1.34, tz=0.36;
+    // default: arms HANG, extended down and a touch out -- was a tucked guard
+    // (ty 1.34 / tz 0.36) so close to the shoulder the forearms read as T-Rex
+    // stubs. Dropping the hands lets the arms actually extend; guard/attack
+    // (below) still lift them when you commit to the fight.
+    let tx=A.sh.x + sign*0.06, ty=0.98, tz=0.16;
     const idleK=a._idleK||0;
     if(idleK>0.01 && !atk && g<0.1){
-      // square up: hands lift into a loose ready position and float
-      ty += idleK*(0.09 + Math.sin(GAME.t*3.3 + i*1.7)*0.035);
-      tz += idleK*(0.05 + Math.sin(GAME.t*2.6 + i)*0.03);
-      tx += idleK*sign*-0.03;
+      // a little breathing float, not a full square-up
+      ty += idleK*(0.05 + Math.sin(GAME.t*3.3 + i*1.7)*0.03);
+      tz += idleK*(0.03 + Math.sin(GAME.t*2.6 + i)*0.025);
     }
     if(a.state==='holding'){ tx=A.sh.x*0.4; ty=1.40; tz=0.72 + Math.sin(GAME.t*18+i)*0.03; }  // clamped onto the player
     if(a.tackle){ tx=A.sh.x*0.55; ty=1.28; tz=0.78; }   // arms out to plow through
@@ -2445,7 +2488,7 @@ function tackleEnemy(P,e){
   shake(0.7); hitstop(0.06); impactFrames(3,0xffe03d,0x140c07); hitPost(0.72,0xff8a3a);
   burst(cp,16,0xffe03d,1.3); ring(cp,COL.flame,1.3);
   popWord(cp, disarmed?'DISARMED!':pick(['SHOVED!','NO SUBSTITUTIONS!','SEND IT BACK!','86 THAT GUY!']),'#ffe03d',34);
-  sfx.thud(1); haptic(0.7,0.6,150); kitchenBump(0.4); applyImpact(e,ang,1.5); punchScale(e.chef,0.35);
+  sfx.thud(1); haptic(1.0,0.8,260); kitchenBump(0.4); applyImpact(e,ang,1.5); punchScale(e.chef,0.35);
   addCombo();
   if(e.hp<=0) killChef(e, ang);
   P.vel.multiplyScalar(0.35); if(P.tackle) P.tackle.t=P.tackle.dur;   // charge ends on contact
@@ -2490,7 +2533,7 @@ function handleGrab(P,dt,pad){
     P.hp-=(e.kind==='tough'?12:8); P.grabbed=null; hideMashUI();
     P.stagger=0.5; P.iframe=0.3; P.vel.set(-dx/d*9,0,-dz/d*9);
     e.state='recover'; e.stateT=0.7;
-    shake(0.9); impactFrames(3,0xff3b30,0x140c07); hitPost(0.85,0xff3b30); sfx.hurt(); haptic(0.9,0.7,200);
+    shake(1.2); impactFrames(3,0xff3b30,0x140c07); hitPost(0.85,0xff3b30); sfx.hurt(); haptic(1.0,0.85,320);
     const hp=P.pos.clone(); hp.y=1.4; popWord(hp,'SLAMMED','#ff3b30',34); updateHUDHealth();
     if(P.hp<=0) playerDown();
     return;
@@ -2575,16 +2618,10 @@ function spawnWaveChunk(delay){
     if(WAVE.spawned>=WAVE.total) WAVE.waveDone=true;
     updateHUDCooks(enemies.filter(e=>!e.dead).length); }, delay+i*350); }
 }
-const WAVE_FLAVOR=[null,
-  'THEY BROUGHT FRIENDS',
-  'SOMEONE CALLED FOR BACKUP',
-  'MANAGEMENT IS HERE',
-  'THE HEALTH INSPECTOR TOO'
-];
 function startNextWave(){
   WAVE.resting=true; updateHUDWave();
-  const nextWave=WAVE.wave+2, flavor=WAVE_FLAVOR[nextWave-1];
-  toast('WAVE '+nextWave+' / '+WAVE.chunks.length+(flavor?' \u2014 '+flavor:''));
+  const nextWave=WAVE.wave+2;
+  toast('WAVE '+nextWave+' / '+WAVE.chunks.length);   // just the number -- flavor line dropped
   setTimeout(()=>{
     WAVE.resting=false; WAVE.wave++;
     WAVE.queue=WAVE.chunks[WAVE.wave]; WAVE.total=WAVE.queue.length;
@@ -2747,6 +2784,7 @@ function tick(){
   if(GAME.mode==='play'){
     updatePlayer(sdt, pad);
     for(const e of enemies) updateEnemy(e, sdt);
+    resolveBodies();                                 // hard body-to-body collision
     // reap
     for(let i=enemies.length-1;i>=0;i--) if(enemies[i]._remove) enemies.splice(i,1);
     // win: all waves spawned and nobody left standing (frame-timed so it can't be missed)
@@ -2809,7 +2847,7 @@ function updateCamera(dt){
   // trail behind the player, but SHORTEN the distance so the camera can never
   // sit outside the room (which would just show the back of a wall).
   const mx=HALFW-0.6, mz=HALFD-0.6;
-  let dist=CAM.dist*(1-0.34*k);                  // pull in tight when locked
+  let dist=CAM.dist*(1-0.42*k);                  // pull in tighter when locked (was .34) -- right on the shoulder
   if(dir.x>1e-4) dist=Math.min(dist,(mx-target.x)/dir.x);
   else if(dir.x<-1e-4) dist=Math.min(dist,(-mx-target.x)/dir.x);
   if(dir.z>1e-4) dist=Math.min(dist,(mz-target.z)/dir.z);
