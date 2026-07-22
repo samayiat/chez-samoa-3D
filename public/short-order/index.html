@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d0906">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Short Order">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>SHORT ORDER — kitchen brawl</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2714,7 +2721,7 @@ function showTitle(){
     'Everything breaks. Everything is heavy in its own way. Tips are not guaranteed.</div>'+
     '<button class="btn" id="playBtn">STEP TO THE PASS</button>'+
     '<div id="ctrls">'+ctrlRows()+'</div>';
-  document.getElementById('playBtn').onclick=()=>{ audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startNight(SLICE, onNightEnd); };
+  document.getElementById('playBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startNight(SLICE, onNightEnd); };
   document.getElementById('veil').classList.remove('hide');
   touchEl.classList.remove('on');
 }
@@ -2745,7 +2752,7 @@ function showEnd(res){
     '<div class="stat">Cooks put down <b>'+res.kills+'</b> &nbsp;·&nbsp; Best combo <b>'+res.maxCombo+'</b>'+
     (win?'':'<br>Last weapon in hand: <b>'+WEAPONS[res.wpn].name+'</b>')+'</div>'+
     '<button class="btn" id="againBtn">'+(win?'ANOTHER NIGHT':'BACK ON THE LINE')+'</button></div>';
-  document.getElementById('againBtn').onclick=()=>{ ended=false; startNight(SLICE, onNightEnd); };
+  document.getElementById('againBtn').onclick=()=>{ goFullscreen(); ended=false; startNight(SLICE, onNightEnd); };
 }
 function onNightEnd(res){ /* the seam hands the cooking-loop layer a result here */ }
 
@@ -2883,6 +2890,21 @@ function updateCamera(dt){
   camera.fov=lerp(camera.fov, 55 - 7*k + s*5, Math.min(1,dt*7));   // zoom in on lock
   camera.updateProjectionMatrix();
 }
+
+/* Force fullscreen + landscape when you start. Browsers only allow this from a
+   real user gesture, so it's fired off the STEP-TO-THE-PASS / rematch taps.
+   Vendor-prefixed for old WebKit; orientation lock is best-effort (throws on
+   desktop / when not fullscreen, hence the catch). iOS Safari ignores the
+   Fullscreen API entirely -- that path is covered by the apple-mobile-web-app
+   meta tags + manifest, i.e. Add to Home Screen runs it chromeless. */
+function goFullscreen(){
+  const el=document.documentElement;
+  const req=el.requestFullscreen||el.webkitRequestFullscreen||el.webkitRequestFullScreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+  if(req && !document.fullscreenElement && !document.webkitFullscreenElement){
+    try{ const p=req.call(el); if(p&&p.then) p.then(lockLandscape).catch(()=>{}); else lockLandscape(); }catch(e){}
+  } else lockLandscape();
+}
+function lockLandscape(){ try{ if(screen.orientation&&screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{}); }catch(e){} }
 
 addEventListener('resize',layout); addEventListener('orientationchange',layout); layout();
 
