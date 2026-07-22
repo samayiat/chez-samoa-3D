@@ -772,11 +772,11 @@ function passSlotX(i){ return (i-(PASS_SLOTS-1)/2) * (PASS.w-1.4)/(PASS_SLOTS-1)
    heavy attacks cost 2 durability, guarding costs 1. class drives the *feel*. */
 const WEAPONS = {
   fists:    { key:'fists',    name:'Bare Hands',   cls:'light',  reach:1.05, light:5,  heavy:9,  wind:0.11, rec:0.15, stagger:0.30, gbreak:false, knock:false, dur:Infinity, shake:0.20, heft:0.12, metal:false, tint:0xd8b38a },
-  spatula:  { key:'spatula',  name:'Spatula',      cls:'light',  reach:1.65, light:6,  heavy:11, wind:0.10, rec:0.14, stagger:0.35, gbreak:false, knock:false, dur:24, shake:0.24, heft:0.20, metal:true,  tint:0xd7d2c4 },
-  nonstick: { key:'nonstick', name:'Nonstick Pan', cls:'medium', reach:1.6,  light:9,  heavy:18, wind:0.17, rec:0.24, stagger:0.65, gbreak:false, knock:false, dur:18, shake:0.5,  heft:0.58, metal:true,  tint:0x2b2b2f },
-  castiron: { key:'castiron', name:'Cast Iron',    cls:'heavy',  reach:1.7,  light:16, heavy:32, wind:0.34, rec:0.44, stagger:1.25, gbreak:true,  knock:true,  dur:12, shake:1.0,  heft:1.0,  metal:true,  tint:0x1a1a1c },
-  knife:    { key:'knife',    name:"Chef's Knife", cls:'light',  reach:1.85, light:8,  heavy:15, wind:0.10, rec:0.13, stagger:0.30, gbreak:false, knock:false, dur:14, shake:0.28, heft:0.24, metal:true, thrust:true, tint:0xdfe6ea },
-  potlid:   { key:'potlid',   name:'Pot Lid',      cls:'shield', reach:1.1,  light:4,  heavy:7,  wind:0.15, rec:0.20, stagger:0.30, gbreak:false, knock:false, dur:30, shake:0.20, heft:0.30, metal:true, shield:true, tint:0xb9c4cc }
+  spatula:  { key:'spatula',  name:'Spatula',      cls:'light',  reach:1.65, light:6,  heavy:11, wind:0.10, rec:0.14, stagger:0.35, gbreak:false, knock:false, dur:40, shake:0.24, heft:0.20, metal:true,  tint:0xd7d2c4 },
+  nonstick: { key:'nonstick', name:'Nonstick Pan', cls:'medium', reach:1.6,  light:9,  heavy:18, wind:0.17, rec:0.24, stagger:0.65, gbreak:false, knock:false, dur:32, shake:0.5,  heft:0.58, metal:true,  tint:0x2b2b2f },
+  castiron: { key:'castiron', name:'Cast Iron',    cls:'heavy',  reach:1.7,  light:16, heavy:32, wind:0.34, rec:0.44, stagger:1.25, gbreak:true,  knock:true,  dur:22, shake:1.0,  heft:1.0,  metal:true,  tint:0x1a1a1c },
+  knife:    { key:'knife',    name:"Chef's Knife", cls:'light',  reach:1.85, light:8,  heavy:15, wind:0.10, rec:0.13, stagger:0.30, gbreak:false, knock:false, dur:26, shake:0.28, heft:0.24, metal:true, thrust:true, tint:0xdfe6ea },
+  potlid:   { key:'potlid',   name:'Pot Lid',      cls:'shield', reach:1.1,  light:4,  heavy:7,  wind:0.15, rec:0.20, stagger:0.30, gbreak:false, knock:false, dur:48, shake:0.20, heft:0.30, metal:true, shield:true, tint:0xb9c4cc }
 };
 /* build a weapon mesh, business-end pointing +Z out of the hand */
 function makeWeaponMesh(key){
@@ -1257,7 +1257,7 @@ function makePlayer(){
   chef.userData.isPlayer=true;
   equip(chef,'fists');
   return {
-    chef, pos:new V3(0,0,4), vel:new V3(), yaw:Math.PI, hp:100, hpMax:100,
+    chef, pos:new V3(0,0,4), vel:new V3(), yaw:Math.PI, hp:150, hpMax:150,   // was 100 -- too fragile, the brawl read as unfair
     facing:Math.PI, movePhase:0, speed:0,
     wpn:'fists', dur:Infinity,
     attack:null, combo:0, comboStep:0, chainT:0,
@@ -1270,9 +1270,15 @@ function makePlayer(){
 }
 /* --- enemy factory --- */
 function makeEnemy(kind, spawnPos){
+  // Everyone spawns UNARMED. Weapons are finite -- they come only off the pass
+  // (the fixed PASS_LOADOUT set), taken via the fetch state below, and removed
+  // from the table when grabbed. Enemies used to conjure a spatula/nonstick out
+  // of thin air on spawn, which is why the table never seemed to empty and why
+  // late arrivals showed up armed for free. If the pass is picked clean, the
+  // rest of the mob fights bare-handed -- that's the point of the race.
   const styles={
-    weak:{ skin:0x8a5a3a, jacket:pick([0x8a3b2f,0x35506b,0x4a5a34,0x6b4a6b]), apron:0x2a2018, scarf:0, hair:pick([0x2a1c12,0x1a1208,0x3a2a1a,0x120a06]), hp:24, scale:1.0, speed:3.6, wind:1.0, aggr:[0.7,1.6], weapon:pick(['fists','fists','spatula']) },
-    tough:{ skin:0x6b4a34, jacket:pick([0x7a2a22,0x2a3550,0x3a4028]), apron:0x241a12, scarf:0, hair:pick([0x1a1208,0x2a1c12,0x0a0805]), hp:60, scale:1.12, speed:3.2, wind:0.72, aggr:[0.5,1.1], weapon:pick(['fists','fists','nonstick']) }
+    weak:{ skin:0x8a5a3a, jacket:pick([0x8a3b2f,0x35506b,0x4a5a34,0x6b4a6b]), apron:0x2a2018, scarf:0, hair:pick([0x2a1c12,0x1a1208,0x3a2a1a,0x120a06]), hp:24, scale:1.0, speed:3.6, wind:1.0, aggr:[0.7,1.6], weapon:'fists' },
+    tough:{ skin:0x6b4a34, jacket:pick([0x7a2a22,0x2a3550,0x3a4028]), apron:0x241a12, scarf:0, hair:pick([0x1a1208,0x2a1c12,0x0a0805]), hp:60, scale:1.12, speed:3.2, wind:0.72, aggr:[0.5,1.1], weapon:'fists' }
   };
   const s=styles[kind];
   const chef=makeChef({ skin:s.skin, jacket:s.jacket, apron:s.apron, scarf:s.scarf, hair:s.hair, customer:true, boot:0x1c130a });
@@ -1486,9 +1492,15 @@ function resolveHit(A, isPlayer){
     T.hp-=taken;
     T.hurt=1;
     // knockback
-    const kb=(heavy?0.9:0.5)*(w.knock?1.7:1)*(blocked?0.3:1);
-    T.vel.x+=Math.sin(ang)*kb*6; T.vel.z+=Math.cos(ang)*kb*6;
+    let kb=(heavy?0.9:0.5)*(w.knock?1.7:1)*(blocked?0.3:1);
     T.stagger=Math.max(T.stagger, (blocked?0.15:w.stagger*(heavy?1.2:0.8)) );
+    // Every clean hit on an ENEMY makes them stumble -- a knockback push plus a
+    // stagger floor -- so the mob reels off each blow instead of tanking hits
+    // standing still until they drop. Gated to isPlayer (player-dealt) so it
+    // does NOT also make the player easier to stun-lock; the player's own
+    // hit-reaction stays as tuned. Light stumble 0.42s, heavy 0.6s.
+    if(isPlayer && !blocked){ T.stagger=Math.max(T.stagger, heavy?0.6:0.42); kb*=1.5; }
+    T.vel.x+=Math.sin(ang)*kb*6; T.vel.z+=Math.cos(ang)*kb*6;
     punchScale(T.chef, heavy?0.3:0.18);
     applyImpact(T, ang, (heavy?1.4:0.85)*(blocked?0.4:1));
     // ---- JUICE, scaled by how heavy the weapon is ----
@@ -1628,8 +1640,11 @@ function updatePlayer(dt, pad){
   if(Math.abs(rs.x)>0.5) weaveDir=rs.x>0?1:-1;
   if(tapK('e')) weaveDir=1; if(tapK('q')) weaveDir=-1;
   if(weaveDir!==0 && P.weaveCD<=0 && !P.attack && P.stagger<=0 && !P.dodge){
-    P.weaveCD=0.45; P.iframe=Math.max(P.iframe,0.22); P._weave=weaveDir; P._weaveT=0.22;
-    const side=camRight.clone().multiplyScalar(weaveDir*0.6); P.vel.addScaledVector(side,4);
+    // a hard lean/duck with real i-frames (0.32s) -- a defensive slip you can
+    // use to duck under a swing and counter, not the tiny cosmetic sidestep it
+    // was (0.22s / small lean). The lean amplitude is bumped in poseChef too.
+    P.weaveCD=0.4; P.iframe=Math.max(P.iframe,0.32); P._weave=weaveDir; P._weaveT=0.32;
+    const side=camRight.clone().multiplyScalar(weaveDir*0.6); P.vel.addScaledVector(side,5.5);
     sfx.whiff();
   }
   if(P._weaveT>0) P._weaveT-=dt;
@@ -1639,7 +1654,10 @@ function updatePlayer(dt, pad){
   if(wantDodge && P.dodgeCD<=0 && P.stagger<=0){
     let ddir=mv.clone(); if(ddir.lengthSq()<0.02){ ddir.copy(camFwd).multiplyScalar(-1); }
     ddir.normalize();
-    P.dodge={ t:0, dur:0.34, dir:ddir }; P.dodgeCD=0.6; P.iframe=0.3; P.attack=null;
+    // snappier evade: faster burst (see integrate), full i-frames through the
+    // whole hop (0.42s > dur), shorter cooldown (0.45). This is the "get the
+    // hell out of the way of a swing" button -- it has to actually clear the arc.
+    P.dodge={ t:0, dur:0.32, dir:ddir }; P.dodgeCD=0.45; P.iframe=0.42; P.attack=null;
     sfx.step();
   }
 
@@ -1696,7 +1714,7 @@ function updatePlayer(dt, pad){
     if(T.t>=T.dur) P.tackle=null;
   } else if(P.dodge){
     const D=P.dodge; D.t+=dt; const k=1-D.t/D.dur;
-    P.vel.x=D.dir.x*11*k; P.vel.z=D.dir.z*11*k;
+    P.vel.x=D.dir.x*15*k; P.vel.z=D.dir.z*15*k;   // 15 (was 11): a fast pop that clears the swing
     if(D.t>=D.dur) P.dodge=null;
   } else if(P.stagger<=0){
     P.vel.x=damp(P.vel.x, mv.x*spd, 18, dt);
@@ -1758,13 +1776,24 @@ function updateEnemy(e, dt){
     if(e.wpn==='fists' && Math.random()<0.8){ const p=nearestFreePickup(e); if(p){ e.grabTarget=p; e.state='fetch'; } else e.state='engage'; }
     else e.state='engage';
   } }
-  else if(e.state==='fetch'){                            // run for a utensil on the floor
-    const p=e.grabTarget;
-    if(!p || p.taken){ e.grabTarget=null; e.state='engage'; e.stateT=0.2; }
-    else {
+  else if(e.state==='fetch'){                            // run for a utensil (floor OR pass)
+    let p=e.grabTarget;
+    if(!p || p.taken){
+      // someone else grabbed the one we were running for -- go for ANOTHER free
+      // weapon if we're still bare-handed, so the pass actually gets picked
+      // clean. Only give up and engage unarmed once there's nothing left.
+      const np = (e.wpn==='fists') ? nearestFreePickup(e) : null;
+      if(np){ e.grabTarget=np; p=np; }
+      else { e.grabTarget=null; e.state='engage'; e.stateT=0.2; }
+    }
+    if(e.state==='fetch' && p && !p.taken){
       const dx=p.x-e.pos.x, dz=p.z-e.pos.z, d=Math.hypot(dx,dz);
       e._fetching=true; wantYaw=Math.atan2(dx,dz);
-      if(d>0.6){ move.set(dx/d,0,dz/d); }
+      // grab from 1.7 (was 0.6): pass weapons sit on the counter, whose
+      // collision box stops an enemy ~1.44 short of them -- at 0.6 they'd jog
+      // to the pass and just STAND there forever, never close enough to grab,
+      // which is exactly the "they loiter at the table until they get hit" bug.
+      if(d>1.7){ move.set(dx/d,0,dz/d); }
       else { equipEnemy(e,p.key); p.taken=true; scene.remove(p.g);
         e.grabTarget=null; e.state='engage'; e.stateT=0.15;
         const hp=e.pos.clone(); hp.y=1.2; ring(hp,COL.flame,0.9); burst(hp,6,COL.flame,0.7); }
@@ -1823,7 +1852,10 @@ function updateEnemy(e, dt){
   const sep=new V3();
   for(const o of enemies){ if(o===e||o.dead)continue; const dx=e.pos.x-o.pos.x,dz=e.pos.z-o.pos.z,d=Math.hypot(dx,dz);
     if(d<1.5&&d>0.001){ sep.x+=dx/d*(1.5-d); sep.z+=dz/d*(1.5-d); } }
-  move.addScaledVector(sep,0.95);
+  // ...but ease off separation while fetching, or the spread-out push fights
+  // enemies trying to pack in at the pass and leaves them loitering just short
+  // of a weapon they can never quite reach.
+  move.addScaledVector(sep, e._fetching?0.3:0.95);
 
   // integrate
   if(!e.attack){
@@ -1920,7 +1952,7 @@ function poseChef(a, isPlayer, dt){
   let leanX=0, leanZ=0;
   if(a.guard) leanX += 0.08;
   if(a.dodge) leanX += Math.sin((a.dodge.t/a.dodge.dur)*Math.PI)*0.45;
-  if(a._weaveT>0) leanZ += a._weave*Math.sin((a._weaveT/0.22)*Math.PI)*0.42;
+  if(a._weaveT>0) leanZ += a._weave*Math.sin((a._weaveT/0.32)*Math.PI)*0.72;  // hard lean/duck (matches the 0.32s weave window)
   if(a.stagger>0) leanZ += Math.sin(GAME.t*30)*0.15*clamp(a.stagger,0,1);
   leanX += clamp(AN.rx,-0.6,0.6); leanZ += clamp(AN.rz,-0.5,0.5) + AN.sway*0.4;
   b.position.set(AN.sway, bob, 0);
@@ -2292,8 +2324,17 @@ function tackleEnemy(P,e){
   if(e.hasToken){ e.hasToken=false; tokensUsed--; }
   if(player.grabbed && player.grabbed.by===e){ player.grabbed=null; hideMashUI(); }
   const cp=e.pos.clone(); cp.y=1.2;
+  // DISARM: if they were holding a weapon, the shove knocks it out of their
+  // hand -- it drops in front of them as a pickup (back into the finite pool,
+  // for you or someone else to grab) and they're left bare-handed, stumbling.
+  let disarmed=false;
+  if(e.wpn!=='fists'){
+    spawnPickup(e.wpn, e.pos.x+Math.sin(ang)*0.7, e.pos.z+Math.cos(ang)*0.7);
+    equipEnemy(e,'fists'); e.dur=Infinity; disarmed=true;
+  }
   shake(0.7); hitstop(0.06); impactFrames(3,0xffe03d,0x140c07); hitPost(0.72,0xff8a3a);
-  burst(cp,16,0xffe03d,1.3); ring(cp,COL.flame,1.3); popWord(cp,pick(['TACKLE!','NO SUBSTITUTIONS!','SEND IT BACK!','86 THAT GUY!']),'#ffe03d',34);
+  burst(cp,16,0xffe03d,1.3); ring(cp,COL.flame,1.3);
+  popWord(cp, disarmed?'DISARMED!':pick(['SHOVED!','NO SUBSTITUTIONS!','SEND IT BACK!','86 THAT GUY!']),'#ffe03d',34);
   sfx.thud(1); haptic(0.7,0.6,150); kitchenBump(0.4); applyImpact(e,ang,1.5); punchScale(e.chef,0.35);
   addCombo();
   if(e.hp<=0) killChef(e, ang);
@@ -2311,7 +2352,12 @@ function handleGrab(P,dt,pad){
   if(tapK('j')) m++; if(tapK('k')) m++; if(tapK('shift')) m++;
   if(MOUSE.l){ m++; MOUSE.l=false; } if(MOUSE.r){ m++; MOUSE.r=false; }
   if(TOUCH.lightEdge){ m++; TOUCH.lightEdge=false; } if(TOUCH.heavyEdge){ m++; TOUCH.heavyEdge=false; } if(TOUCH.dodgeEdge){ m++; TOUCH.dodgeEdge=false; }
-  if(pad){ if(pad.lightEdge)m++; if(pad.heavyEdge)m++; if(pad.dodgeEdge)m++; }
+  // pollPad() exposes edge-triggered face buttons as pad.light/heavy/grab/pickup
+  // (already press-only via tap()), NOT pad.*Edge -- those *Edge names only exist
+  // on TOUCH. Reading pad.lightEdge here meant the whole grapple mash did nothing
+  // on a controller: you could only wiggle free via the stick. Any face button
+  // now counts toward breaking the grab.
+  if(pad){ if(pad.light)m++; if(pad.heavy)m++; if(pad.grab)m++; if(pad.pickup)m++; }
   const mx=(pad?pad.move.x:0)+TOUCH.moveX + ((KEY['a']?-1:0)+(KEY['d']?1:0));
   if(Gr._px===undefined) Gr._px=0;
   if(Math.abs(mx)>0.5 && Math.sign(mx)!==Math.sign(Gr._px)) m+=0.5;
