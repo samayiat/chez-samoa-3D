@@ -51,6 +51,10 @@ jobs:
           # 2.5D kitchen look-proof at /kitchen/
           mkdir -p site/kitchen
           cp culinary-dash-3d/dist-kitchen/kitchen.html site/kitchen/index.html
+          # Short Order — the after-hours brawl (self-contained single file,
+          # loads three.js from a CDN at runtime; no build step) at /brawl/
+          mkdir -p site/brawl
+          cp public/short-order/index.html site/brawl/index.html
           # one hub that routes to both previews at /play/
           mkdir -p site/play
           cp culinary-dash-3d/hub.html site/play/index.html
