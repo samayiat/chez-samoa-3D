@@ -88,7 +88,10 @@ const THREE={
 };
 
 /* ---------- DOM ---------- */
-const ctx={fillStyle:'',strokeStyle:'',lineWidth:1,globalAlpha:1,fillRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){}};
+const fakeGradient={addColorStop(){}};
+const ctx={fillStyle:'',strokeStyle:'',lineWidth:1,globalAlpha:1,fillRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},
+  createLinearGradient(){return fakeGradient;},createRadialGradient(){return fakeGradient;},
+  arc(){},ellipse(){},save(){},restore(){},clip(){},closePath(){},fill(){}};
 function el(){return {style:{setProperty(){}},className:'',dataset:{},classList:{add(){},remove(){},toggle(){},contains(){return false;}},
   addEventListener(){},removeEventListener(){},getBoundingClientRect(){return {left:0,top:0,width:100,height:100};},
   _txt:'',set textContent(v){this._txt=v;},get textContent(){return this._txt;},

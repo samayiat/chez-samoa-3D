@@ -311,14 +311,15 @@ function hitPost(power,col){ const U=POST.uniforms;
   if(power>0.7) U.uGlitch.value=0.6; }
 
 /* ---------------------------------------------------------------- lights */
-// Vince's boss-fight lighting (arena.js, the reference this whole arena was
-// ported from) reads far moodier and deeper than a flat, evenly-lit room:
-// a cooler, dimmer ambient so the warm practicals (key light, the stove,
-// the swinging work-lamp added below) carve out depth instead of everything
-// being lit uniformly. Ported that balance here instead of just brightening
-// what already existed.
-const hemi = new THREE.HemisphereLight(0x3f3a55, 0x140b06, 0.42); scene.add(hemi);
-const key = new THREE.DirectionalLight(0xffe3b0, 2.0);
+// Warm, high-contrast, deep color -- not the cooler/moodier Vince-style
+// balance a first pass here reached for. Depth comes from a DIM ambient
+// (so shadows actually read as dark, not just tinted) plus SATURATED warm
+// practicals doing the heavy lifting -- key, stove, work-lamp -- rather
+// than from cooling the ambient toward blue/purple, which just muddies the
+// warm palette this room's actually going for (amber wood, warm skin
+// tones, an ocean/city/nebula sunset glow now sitting right in the windows).
+const hemi = new THREE.HemisphereLight(0xff9a55, 0x1c0a04, 0.35); scene.add(hemi);
+const key = new THREE.DirectionalLight(0xffcf8a, 2.3);
 key.position.set(6,13,4); key.castShadow = true;
 key.shadow.mapSize.set(2048,2048);
 key.shadow.camera.near=1; key.shadow.camera.far=48;
@@ -329,10 +330,12 @@ key.shadow.camera.near=1; key.shadow.camera.far=48;
 key.shadow.camera.left=-19; key.shadow.camera.right=19; key.shadow.camera.top=19; key.shadow.camera.bottom=-19;
 key.shadow.bias=-0.0007; key.shadow.radius=3;
 scene.add(key);
-const fill = new THREE.DirectionalLight(0x6f9fd0, 0.5); fill.position.set(-8,6,-6); scene.add(fill);
-// cold backlight for silhouette separation against the dark walls -- Vince's
-// arena has this (its RIM_LIGHT); the kitchen this arena replaced never did
-const backRim = new THREE.DirectionalLight(0x5a72ff, 0.7); backRim.position.set(-9,9,-14); scene.add(backRim);
+// dim, deep-red fill instead of a cool blue counterpoint -- softens the key
+// side's shadows without importing a cold color into a warm room
+const fill = new THREE.DirectionalLight(0xaa5028, 0.32); fill.position.set(-8,6,-6); scene.add(fill);
+// backlight for silhouette separation against the dark walls, recolored
+// warm (deep amber/ember, not Vince's cold blue) to stay in-palette
+const backRim = new THREE.DirectionalLight(0xff7a3a, 0.6); backRim.position.set(-9,9,-14); scene.add(backRim);
 // positioned at the actual stove once BAR exists, in the ARENA section below
 // -- (-8.5,1.4,-4) was a leftover from the pre-restaurant kitchen layout and
 // had drifted away from the flame it's supposed to be lighting
@@ -381,9 +384,177 @@ wall(0, HALFD,ARENA.w,WALL_H,0.5);
 wall(-HALFW,0,0.5,WALL_H,ARENA.d);
 wall( HALFW,0,0.5,WALL_H,ARENA.d);
 
-/* the restaurant's windows — moonlit ocean panes with a palm silhouette,
-   ported from arena.js's oceanWindow(); on the back wall, either side of
-   the bar. This IS "the windows" from the daytime loop, not a lookalike. */
+/* ============================================================ LOCALE VIEWS
+   The daytime loop's 2D game (culinary-dash_src.html) already solved "what's
+   outside the window" six different ways -- NEBULA, OCEAN SUNSET, NEON CITY,
+   UNDERWATER, AURORA PEAKS, WARP SPEED -- as animated 2D canvas paintings.
+   Rather than rebuild each as real 3D geometry, ported near-verbatim as a
+   CanvasTexture billboard on the window glass -- quick to try, and these
+   already read well as flat paintings in the 2D game (a real window looking
+   at a real horizon vs. a billboard is not a difference players stop to
+   check). LW/LH are close to WIN_W:WIN_H's aspect so nothing stretches
+   badly; a few genuinely-fixed decorative positions (the ringed planet, the
+   radio tower) are rescaled by SX/SY from the pixel numbers tuned for the
+   2D game's own 320-wide canvas. */
+const LW=280, LH=130, SX=LW/320, SY=LH/40;
+function lcgRand(seed){ let s=seed; return ()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; }; }
+const LSTARS=(()=>{ const a=[]; const r=lcgRand(99);
+  for(let i=0;i<70;i++) a.push({x:r(), y:r(), sp:6+r()*20, tw:0.8+r()*2.2, ph:r()*6.283, big:r()<0.16, col:['#ffffff','#cfe0ff','#ffd9a8'][(r()*3)|0]});
+  return a; })();
+const LENVR=(()=>{ const r=lcgRand(7);
+  const bldg=[]; let bx=6; while(bx<LW-8){ const bw=8+(r()*14|0), bh=8+(r()*14|0); bldg.push({x:bx,w:bw,h:bh,win:(r()*16383)|0}); bx+=bw+2; }
+  const peaks=[]; let px=-8; while(px<LW+20){ const pw=26+(r()*30|0), ph=8+(r()*12|0); peaks.push({x:px,w:pw,h:ph}); px+=(pw*0.6)|0; }
+  const bub=[]; for(let i=0;i<26;i++) bub.push({x:r(), ph:r()*10, sp:0.6+r()*1.2, wob:r()*6.28});
+  const neb=[ {x:44,y:12,r:26,c:'216,80,196'},{x:100,y:24,r:30,c:'70,205,225'},{x:137,y:8,r:20,c:'146,92,255'},
+              {x:185,y:22,r:28,c:'255,110,150'},{x:247,y:12,r:24,c:'92,140,255'},{x:19,y:26,r:20,c:'186,224,120'} ];
+  const fish=[]; for(let i=0;i<3;i++) fish.push({y:8+i*7, sp:0.06+r()*0.05, ph:r()*7, dir:i%2?1:-1});
+  return {bldg,peaks,bub,neb,fish}; })();
+function lgrad(lx,x0,y0,x1,y1,stops){ const g=lx.createLinearGradient(x0,y0,x1,y1); for(const st of stops) g.addColorStop(st[0],st[1]); return g; }
+function ldrawStarfield(lx,x,y,w,h,t,drift){
+  for(const st of LSTARS){
+    const sx=((st.x*LW + t*0.001*st.sp*(drift===undefined?1:drift)) % LW + LW) % LW;
+    if(sx<x+1||sx>x+w-1) continue;
+    const sy=y+1+st.y*(h-3), a=0.35+0.65*(0.5+0.5*Math.sin(t*0.001*st.tw+st.ph));
+    lx.globalAlpha=a; lx.fillStyle=st.col;
+    if(st.big){ lx.fillRect(sx,sy,2,2); if(a>0.85){ lx.fillRect(sx-1,sy,1,1); lx.fillRect(sx+2,sy,1,1); lx.fillRect(sx,sy-1,1,1); lx.fillRect(sx,sy+2,1,1); } }
+    else lx.fillRect(sx,sy,1,1);
+  }
+  lx.globalAlpha=1;
+}
+function locNebula(lx,x,y,w,h,t){
+  lx.fillStyle=lgrad(lx,0,y,0,y+h,[[0,'#0a0c24'],[0.5,'#241a64'],[0.8,'#5e3090'],[1,'#a85898']]); lx.fillRect(x,y,w,h);
+  for(let i=0;i<LENVR.neb.length;i++){ const nb=LENVR.neb[i];
+    const wob=Math.sin(t*0.00018+i*1.7)*3, pul=0.32+0.15*Math.sin(t*0.00031+i*2.4);
+    const rg=lx.createRadialGradient(nb.x+wob,nb.y,1,nb.x+wob,nb.y,nb.r);
+    rg.addColorStop(0,'rgba('+nb.c+','+pul.toFixed(3)+')'); rg.addColorStop(1,'rgba('+nb.c+',0)');
+    lx.fillStyle=rg; lx.fillRect(nb.x-nb.r-6,y,nb.r*2+12,h);
+  }
+  ldrawStarfield(lx,x,y,w,h,t,1);
+  const px=203*SX, py=21*SY, pr=9*SX;
+  lx.strokeStyle='rgba(235,205,155,0.85)'; lx.lineWidth=1.4;
+  lx.beginPath(); lx.ellipse(px,py,15*SX,4.5*SY,-0.32,0,6.283); lx.stroke();
+  lx.save(); lx.beginPath(); lx.arc(px,py,pr,0,6.283); lx.clip();
+  lx.fillStyle='#c98a4b'; lx.fillRect(px-pr,py-pr,pr*2,pr*2);
+  lx.fillStyle='#e2ab6d'; lx.fillRect(px-pr,py-6*SY,pr*2,2*SY); lx.fillRect(px-pr,py-1*SY,pr*2,3*SY); lx.fillRect(px-pr,py+5*SY,pr*2,1*SY);
+  lx.fillStyle='#a86c38'; lx.fillRect(px-pr,py-3*SY,pr*2,2*SY); lx.fillRect(px-pr,py+3*SY,pr*2,2*SY);
+  lx.fillStyle='rgba(10,8,26,0.45)'; lx.beginPath(); lx.arc(px+6*SX,py,pr,0,6.283); lx.fill();
+  lx.restore();
+  lx.beginPath(); lx.ellipse(px,py,15*SX,4.5*SY,-0.32,0.15,2.99); lx.stroke(); lx.lineWidth=1;
+  lx.fillStyle='#9adcd2'; lx.beginPath(); lx.arc(44*SX,12*SY,3*SX,0,6.283); lx.fill();
+  lx.fillStyle='#6fb3aa'; lx.fillRect(43*SX,11*SY,1,1); lx.fillRect(45*SX,13*SY,1,1);
+  const ct=(t%11000)/11000;
+  if(ct<0.16){ const k=ct/0.16, cx=-24+k*(LW+48), cy=(7+k*14)*SY;
+    for(let i=0;i<9;i++){ lx.globalAlpha=(1-i/9)*0.8; lx.fillStyle=i<2?'#ffffff':'#9fd0ff'; lx.fillRect(cx-i*3, cy+i*0.8, i<2?2:1, 1); }
+    lx.globalAlpha=1; }
+}
+function locOcean(lx,x,y,w,h,t){
+  const hz=y+((h*0.6)|0);
+  lx.fillStyle=lgrad(lx,0,y,0,hz,[[0,'#3a2a6e'],[0.55,'#c85a70'],[1,'#ff9a5a']]); lx.fillRect(x,y,w,hz-y);
+  lx.fillStyle=lgrad(lx,0,hz,0,y+h,[[0,'#c8646a'],[0.3,'#4a4a8a'],[1,'#232a55']]); lx.fillRect(x,hz,w,y+h-hz);
+  const sx2=118*SX;
+  lx.fillStyle='rgba(255,220,150,0.25)'; lx.beginPath(); lx.arc(sx2,hz-4*SY,9*SX,0,6.283); lx.fill();
+  lx.fillStyle='#ffd9a0'; lx.beginPath(); lx.arc(sx2,hz-4*SY,5*SX,0,6.283); lx.fill();
+  for(let i=0;i<8;i++){ const gy=hz+1+i*1.6*SY, gw=2+(((Math.sin(t*0.002+i)*0.5+0.5)*6)|0);
+    lx.fillStyle='rgba(255,214,140,'+(0.35-i*0.035).toFixed(3)+')'; lx.fillRect(sx2-gw/2, gy, gw, 1); }
+  lx.fillStyle='rgba(20,24,60,0.35)';
+  for(let i=0;i<3;i++){ const wy=hz+3+i*5*SY, off=Math.sin(t*0.0012+i*2)*3;
+    for(let k=-14;k<LW;k+=14) lx.fillRect(k+off+i*5, wy, 8, 1); }
+  const bx=((t*0.004)%(LW+50))-25, by=hz-1;
+  lx.fillStyle='#1a1430'; lx.fillRect(bx-4,by,8,2);
+  lx.beginPath(); lx.moveTo(bx,by); lx.lineTo(bx,by-7); lx.lineTo(bx+5,by-1); lx.closePath(); lx.fill();
+}
+function locCity(lx,x,y,w,h,t){
+  lx.fillStyle=lgrad(lx,0,y,0,y+h,[[0,'#0a0e20'],[0.6,'#232a55'],[1,'#5a3568']]); lx.fillRect(x,y,w,h);
+  ldrawStarfield(lx,x,y,w,h,t,0.3);
+  const base=y+h;
+  for(const b of LENVR.bldg){
+    lx.fillStyle='#10142a'; lx.fillRect(b.x, base-b.h, b.w, b.h);
+    const rows=((b.h-3)/4)|0, cols=((b.w-2)/4)|0;
+    for(let wy=0;wy<rows;wy++) for(let wx=0;wx<cols;wx++){
+      const lit=(b.win >> ((wy*5+wx)%14)) & 1;
+      const blink=((((t/900)|0)+wy*3+wx+b.x)%23)===0;
+      if(lit!==(blink?1:0)){ lx.fillStyle=(wx+wy)%5?'#e8c26b':'#9fd0ff'; lx.fillRect(b.x+2+wx*4, base-b.h+2+wy*4, 2,2); }
+    }
+  }
+  lx.fillStyle='#0d1122'; lx.fillRect(236*SX, base-24*SY, 2, 24*SY);
+  lx.fillStyle='rgba(255,70,60,'+(0.4+0.6*(0.5+0.5*Math.sin(t*0.004))).toFixed(3)+')'; lx.fillRect(235*SX, base-26*SY, 4, 2);
+  const pt=(t%13000)/13000;
+  if(pt<0.5){ const pxx=-10+(pt/0.5)*(LW+20);
+    lx.fillStyle='#f7f3ea'; lx.fillRect(pxx, y+4*SY, 2,1);
+    if(((t/300)|0)%2){ lx.fillStyle='#ff5a4e'; lx.fillRect(pxx+3,y+4*SY,1,1); } }
+}
+function locUnderwater(lx,x,y,w,h,t){
+  lx.fillStyle=lgrad(lx,0,y,0,y+h,[[0,'#0e5a6e'],[0.5,'#0a3a52'],[1,'#062036']]); lx.fillRect(x,y,w,h);
+  lx.fillStyle='rgba(220,255,255,0.06)';
+  for(let i=0;i<3;i++){ const bx2=x+i*w/3+Math.sin(t*0.0004+i*2)*3;
+    lx.beginPath(); lx.moveTo(bx2,y); lx.lineTo(bx2+8,y); lx.lineTo(bx2+16,y+h); lx.lineTo(bx2+4,y+h); lx.closePath(); lx.fill(); }
+  for(const b of LENVR.bub){
+    const life=((t*0.001*b.sp+b.ph)%10)/10;
+    const bx3=((b.x*LW)%LW)+Math.sin(t*0.003+b.wob)*2, by2=y+h-2-life*(h-3);
+    if(bx3<x+1||bx3>x+w-2) continue;
+    lx.fillStyle='rgba(210,245,255,'+(0.5-life*0.3).toFixed(3)+')'; const bs=life>0.5?2:1; lx.fillRect(bx3,by2,bs,bs);
+  }
+  lx.fillStyle='#0a2a3a';
+  for(const f of LENVR.fish){
+    const ft=((t*0.001*f.sp+f.ph)%1.6); if(ft>1) continue;
+    const fx=f.dir>0 ? -10+ft*(LW+20) : LW+10-ft*(LW+20), fy=y+f.y*SY+Math.sin(t*0.002+f.ph)*1.5;
+    lx.fillRect(fx-3,fy-1,6,3); lx.fillRect(fx-f.dir*5,fy-2,2,4);
+  }
+}
+function locAurora(lx,x,y,w,h,t){
+  lx.fillStyle=lgrad(lx,0,y,0,y+h,[[0,'#050a1a'],[0.7,'#0c1430'],[1,'#18244a']]); lx.fillRect(x,y,w,h);
+  ldrawStarfield(lx,x,y,w,h,t,0.4);
+  for(let px2=x;px2<x+w;px2+=2){
+    const a1=y+6*SY+Math.sin(px2*0.06+t*0.0011)*3;
+    lx.fillStyle='rgba(90,255,170,0.34)'; lx.fillRect(px2,a1,2,3);
+    lx.fillStyle='rgba(90,255,170,0.18)'; lx.fillRect(px2,a1+3,2,3);
+    lx.fillStyle='rgba(90,255,170,0.08)'; lx.fillRect(px2,a1+6,2,3);
+    const a2=y+12*SY+Math.sin(px2*0.045-t*0.0009+2)*4;
+    lx.fillStyle='rgba(190,110,255,0.26)'; lx.fillRect(px2,a2,2,3);
+    lx.fillStyle='rgba(190,110,255,0.12)'; lx.fillRect(px2,a2+3,2,3);
+  }
+  const base=y+h;
+  for(const p of LENVR.peaks){
+    lx.fillStyle='#141a2e'; lx.beginPath(); lx.moveTo(p.x,base); lx.lineTo(p.x+p.w/2,base-p.h*SY); lx.lineTo(p.x+p.w,base); lx.closePath(); lx.fill();
+    lx.fillStyle='#dfe8f4'; lx.beginPath(); lx.moveTo(p.x+p.w/2,base-p.h*SY); lx.lineTo(p.x+p.w/2-3,base-p.h*SY+4); lx.lineTo(p.x+p.w/2+3,base-p.h*SY+4); lx.closePath(); lx.fill();
+  }
+}
+function locWarp(lx,x,y,w,h,t){
+  lx.fillStyle=lgrad(lx,0,y,0,y+h,[[0,'#07051a'],[0.5,'#141040'],[1,'#241a5e']]); lx.fillRect(x,y,w,h);
+  for(const st of LSTARS){
+    const spd=40+st.sp*6, sx4=LW-(((st.x*LW + t*0.001*spd) % LW + LW) % LW), sy4=y+1+st.y*(h-3);
+    if(sx4<x+1||sx4>x+w-1) continue;
+    const len=3+((st.sp*0.4)|0);
+    lx.globalAlpha=st.big?1:0.6; lx.fillStyle=st.big?'#ffffff':'#9fb0ff'; lx.fillRect(sx4,sy4,len,1);
+    if(st.big){ lx.globalAlpha=0.4; lx.fillRect(sx4+len,sy4,len*2,1); }
+  }
+  lx.globalAlpha=1;
+}
+const LOCALES={
+  nebula:{draw:locNebula}, ocean:{draw:locOcean}, city:{draw:locCity},
+  underwater:{draw:locUnderwater}, aurora:{draw:locAurora}, warp:{draw:locWarp},
+};
+for(const key in LOCALES){
+  const cv=document.createElement('canvas'); cv.width=LW; cv.height=LH;
+  const lx=cv.getContext('2d');
+  const tex=new THREE.CanvasTexture(cv); tex.generateMipmaps=false; tex.minFilter=THREE.LinearFilter;
+  LOCALES[key].canvas=cv; LOCALES[key].ctx=lx; LOCALES[key].texture=tex;
+}
+// throttled to ~30fps -- these are slow-drifting background paintings, a
+// full 60fps redraw of six canvases buys nothing visible
+let locTexT=0;
+function updateLocaleTextures(dt,t){
+  locTexT+=dt; if(locTexT<0.033) return; locTexT=0;
+  for(const key in LOCALES){
+    const L=LOCALES[key];
+    L.draw(L.ctx,0,0,LW,LH,t*1000);   // ported functions assume ms, GAME.t is seconds
+    L.texture.needsUpdate=true;
+  }
+}
+
+/* the restaurant's windows — a locale billboard behind real glass, ported
+   from arena.js's oceanWindow(); on the back wall, either side of the bar.
+   This IS "the windows" from the daytime loop, not a lookalike. */
 const winFrameMat=new THREE.MeshStandardMaterial({color:0x5a3f28,roughness:.8,flatShading:true});
 // Floor-to-ceiling panoramic glass -- there's a real skybox/ocean behind
 // these already, so there's no reason to hide most of it behind wall; WIN_H
@@ -393,15 +564,17 @@ const winFrameMat=new THREE.MeshStandardMaterial({color:0x5a3f28,roughness:.8,fl
 // half-width 4, windows centered at HALFW*0.53 -- see the placement calls
 // below).
 const WIN_W=8.6, WIN_H=4.0, WIN_PANES=4;
-function oceanWindow(x,z,ry,palm){
+function oceanWindow(x,z,ry,locale,palm){
   const w=new THREE.Group(); w.position.set(x,WALL_H/2,z); w.rotation.y=ry; arena.add(w);
   const fr=new THREE.Mesh(new THREE.BoxGeometry(WIN_W,WIN_H,0.16),winFrameMat); fr.castShadow=true; w.add(fr);
+  // MeshBasicMaterial, not Standard -- this is a lit-from-outside view, not
+  // a physical surface the room's key light should darken. fog:false too --
+  // kitchen-room.js's own locale materials do the same (its `flat()`
+  // helper): the outside world is its own backdrop, not something standing
+  // IN the room's atmosphere, so the scene fog shouldn't wash it toward the
+  // dark fog color at distance the way it correctly does for room props.
   const sea=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,WIN_H-0.3,0.06),
-    new THREE.MeshStandardMaterial({color:0x123240,emissive:0x16404e,emissiveIntensity:.55,roughness:.6})); sea.position.z=0.07; w.add(sea);
-  const horizon=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,0.08,0.08),new THREE.MeshStandardMaterial({color:0x0c2028,flatShading:true}));
-  horizon.position.set(0,0.4,0.11); w.add(horizon);
-  const moon=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.07,0.08),
-    new THREE.MeshStandardMaterial({color:0xcfe8ef,emissive:0xcfe8ef,emissiveIntensity:.8})); moon.position.set(WIN_W*0.28,1.4,0.11); w.add(moon);
+    new THREE.MeshBasicMaterial({map:LOCALES[locale].texture,fog:false})); sea.position.z=0.07; w.add(sea);
   // vertical mullions dividing the pane into WIN_PANES equal strips
   for(let i=1;i<WIN_PANES;i++){
     const mx=-WIN_W/2+0.15+(WIN_W-0.3)*(i/WIN_PANES);
@@ -427,21 +600,26 @@ function oceanWindow(x,z,ry,palm){
 // -HALFD+0.02 rendered invisible for exactly this reason -- found by walking
 // up to it and looking, not assumed from the numbers.
 // pushed out to HALFW*0.53 (was 0.42) so the now-much-wider WIN_W=7.2 frame
-// (half-width 3.6) doesn't overlap the bar (half-width 4) sitting between them
-oceanWindow(-HALFW*0.53,-HALFD+0.4,0,true);
-oceanWindow( HALFW*0.53,-HALFD+0.4,0,false);
+// (half-width 3.6) doesn't overlap the bar (half-width 4) sitting between them.
+// One locale per wall (not one repeated ocean view everywhere) -- back stays
+// OCEAN SUNSET since that's this restaurant's own home turf, front looks out
+// on NEON CITY (the street), and the two side walls split the rest so all
+// six of the 2D game's locales get a window: NEBULA + WARP SPEED on the
+// left, AURORA PEAKS + UNDERWATER on the right.
+oceanWindow(-HALFW*0.53,-HALFD+0.4,0,'ocean',true);
+oceanWindow( HALFW*0.53,-HALFD+0.4,0,'ocean',false);
 // windows on every wall, not just the back one -- ry rotates each window's
 // local +Z (its "into the room" face, see the comment above) to point at the
 // room interior from whichever wall it's on: ry=PI for the front wall
 // (interior is -Z from there), +-PI/2 for the side walls (interior is +-X).
 // Front wall — mirrors the back wall's spacing.
-oceanWindow(-HALFW*0.53, HALFD-0.4, Math.PI, false);
-oceanWindow( HALFW*0.53, HALFD-0.4, Math.PI, true);
+oceanWindow(-HALFW*0.53, HALFD-0.4, Math.PI, 'city');
+oceanWindow( HALFW*0.53, HALFD-0.4, Math.PI, 'city');
 // Side walls — two per wall, spread front-to-back, clear of the corner tables.
-oceanWindow(-HALFW+0.4, -HALFD*0.55,  Math.PI/2, false);
-oceanWindow(-HALFW+0.4,  HALFD*0.55,  Math.PI/2, false);
-oceanWindow( HALFW-0.4, -HALFD*0.55, -Math.PI/2, false);
-oceanWindow( HALFW-0.4,  HALFD*0.55, -Math.PI/2, false);
+oceanWindow(-HALFW+0.4, -HALFD*0.55,  Math.PI/2, 'nebula');
+oceanWindow(-HALFW+0.4,  HALFD*0.55,  Math.PI/2, 'warp');
+oceanWindow( HALFW-0.4, -HALFD*0.55, -Math.PI/2, 'aurora');
+oceanWindow( HALFW-0.4,  HALFD*0.55, -Math.PI/2, 'underwater');
 
 /* the bar — the back counter, dark wood, stocked bottles catching the light.
    This IS the daytime loop's bar (see arena.js's back-counter block) --
@@ -823,14 +1001,15 @@ function makeChef(o){
     hair.scale.set(1.02,0.92,1.05); toque.add(hair);
     toque.position.set(0,0.04,-0.02);
   } else {
-    // the cuff -- the snug band the hat actually sits on -- sized to overlap
-    // down onto the dreadlocks' top ring instead of stopping short of it.
-    // That gap of bare scalp between the hairline and the hatband was the
-    // other half of "the hat sliding off": a floating thin band with
-    // nothing bridging it to the hair reads as detached even when it isn't.
-    const cuff=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.25,0.16,14),toqueMat); toque.add(cuff);
-    const cuffLip=new THREE.Mesh(new THREE.CylinderGeometry(0.265,0.265,0.035,14),toqueMat); cuffLip.position.y=-0.08; toque.add(cuffLip);
-    const puff=new THREE.Mesh(new THREE.SphereGeometry(0.27,14,10),toqueMat); puff.position.y=0.20; puff.scale.y=1.15; toque.add(puff);
+    // the cuff -- the snug band the hat actually sits on -- sized to CAP
+    // OVER the dreadlocks (radius well past LR=0.24, the locs' own ring
+    // radius, so their outward flare can't poke past it) instead of
+    // stopping at barely the head's own size and getting swallowed by the
+    // hair sitting outside it. A cuff has to be bigger than the head+hair
+    // it wraps, same as a real hatband would be.
+    const cuff=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.18,14),toqueMat); toque.add(cuff);
+    const cuffLip=new THREE.Mesh(new THREE.CylinderGeometry(0.345,0.345,0.04,14),toqueMat); cuffLip.position.y=-0.09; toque.add(cuffLip);
+    const puff=new THREE.Mesh(new THREE.SphereGeometry(0.29,14,10),toqueMat); puff.position.y=0.20; puff.scale.y=1.15; toque.add(puff);
     toque.position.set(0,0.06,0);
   }
   toque.children.forEach(c=>c.castShadow=true); head.add(toque);
@@ -2411,6 +2590,8 @@ function tick(){
     const arr=md.geo.attributes.position.array;
     for(let i=0;i<md.n;i++){ arr[i*3+1]+=dt*0.12*((i%3)-1); if(arr[i*3+1]>6.8)arr[i*3+1]=0.3; if(arr[i*3+1]<0.3)arr[i*3+1]=6.8; }
     md.geo.attributes.position.needsUpdate=true; }
+  // the locale billboards outside the windows
+  updateLocaleTextures(dt,GAME.t);
 
   updateCamera(dt);
   postTick(dt);
