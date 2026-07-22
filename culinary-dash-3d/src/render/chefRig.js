@@ -66,7 +66,16 @@ const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 // (0.28, 0.26) so the IK reach matches her actual built proportions.
 const UPPER_LEN = 0.28, FORE_LEN = 0.26;
 const SHOULDER = { L: new THREE.Vector3(-0.34, 1.16, 0), R: new THREE.Vector3(0.34, 1.16, 0) };
-const GUARD_TARGET = { L: new THREE.Vector3(-0.4, 0.68, 0.15), R: new THREE.Vector3(0.4, 0.68, 0.15) };
+const ARM_REACH = UPPER_LEN + FORE_LEN;
+// Directly below each shoulder, at exactly the arm's full reach: with the
+// target this far away, solveTwoBone's `d >= L1+L2` branch draws the elbow
+// on the dead-straight line from shoulder to target (no bend-direction
+// offset), so the whole arm -- and whatever's in the hand -- hangs exactly
+// vertical, perpendicular to the ground, rather than at a diagonal.
+const GUARD_TARGET = {
+  L: new THREE.Vector3(SHOULDER.L.x, SHOULDER.L.y - ARM_REACH, SHOULDER.L.z),
+  R: new THREE.Vector3(SHOULDER.R.x, SHOULDER.R.y - ARM_REACH, SHOULDER.R.z),
+};
 const BEND_DIR = new THREE.Vector3(0, 0, 1); // elbow breaks forward
 const FWD = new THREE.Vector3(0, 0, 1); // the hand's/weapon's own "business end" axis
 
