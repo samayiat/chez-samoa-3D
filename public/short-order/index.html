@@ -948,19 +948,23 @@ const KNEE_FWD=new V3(0,0,1);                        // knees break forward
    the same swing on repeat. each is a windup point s and a strike point e in
    upper-local space (weapon hand), an elbow pole `bend`, body coil/follow twist,
    and a forward lean. */
+/* `drive` = how far the body COMMITS its weight forward into the strike (the
+   step-in). It scales the kinetic-chain lunge in attackDrive(): the COM coils,
+   surges through the contact point, then recovers -- so a punch is a whole-body
+   step, not an arm poke. Straight/finishing blows commit the most. */
 const SWINGS=[
-  { name:'forehand', s:[0.55,1.62,-0.10], e:[-0.46,1.36,0.92], bend:[0.95,-0.55,0.4], coil:0.50, follow:-0.72, lean:0.26 },
-  { name:'backhand', s:[-0.50,1.54,-0.05], e:[0.56,1.38,0.92], bend:[-0.95,-0.55,0.4], coil:-0.50, follow:0.72, lean:0.26 },
-  { name:'chop',     s:[0.28,2.05,-0.12], e:[-0.10,1.04,0.86], bend:[0.5,-1,0.5],   coil:0.32, follow:-0.46, lean:0.34 }
+  { name:'forehand', s:[0.55,1.62,-0.10], e:[-0.46,1.36,0.92], bend:[0.95,-0.55,0.4], coil:0.50, follow:-0.72, lean:0.26, drive:0.72 },
+  { name:'backhand', s:[-0.50,1.54,-0.05], e:[0.56,1.38,0.92], bend:[-0.95,-0.55,0.4], coil:-0.50, follow:0.72, lean:0.26, drive:0.72 },
+  { name:'chop',     s:[0.28,2.05,-0.12], e:[-0.10,1.04,0.86], bend:[0.5,-1,0.5],   coil:0.32, follow:-0.46, lean:0.34, drive:0.88 }
 ];
-const FINISH={ name:'smash', s:[0.12,2.20,-0.28], e:[0.00,0.92,0.96], bend:[0.35,-1,0.5], coil:0.42, follow:-0.86, lean:0.44 };
+const FINISH={ name:'smash', s:[0.12,2.20,-0.28], e:[0.00,0.92,0.96], bend:[0.35,-1,0.5], coil:0.42, follow:-0.86, lean:0.44, drive:1.05 };
 /* bare-hands: a jab, jab, hook, uppercut cycle. `hand` = which fist throws (0=L,1=R);
    the other stays up in guard. straight punches fire out from the shoulder. */
 const PUNCHES=[
-  { name:'jab',   hand:0, s:[-0.22,1.42,0.28], e:[-0.05,1.56,1.02], bend:[-0.35,-0.45,0.5], coil:0.16, follow:-0.22, lean:0.18 },
-  { name:'jab',   hand:1, s:[ 0.22,1.42,0.28], e:[ 0.05,1.56,1.02], bend:[ 0.35,-0.45,0.5], coil:-0.16, follow:0.22, lean:0.18 },
-  { name:'hook',  hand:0, s:[-0.50,1.52,0.14], e:[ 0.26,1.46,0.86], bend:[-0.95,-0.35,0.3], coil:0.5, follow:-0.72, lean:0.28 },
-  { name:'upper', hand:1, s:[ 0.28,1.04,0.40], e:[ 0.12,1.78,0.72], bend:[ 0.4,-0.9,0.5],  coil:0.42, follow:-0.55, lean:0.36 }
+  { name:'jab',   hand:0, s:[-0.22,1.42,0.28], e:[-0.05,1.56,1.02], bend:[-0.35,-0.45,0.5], coil:0.16, follow:-0.22, lean:0.18, drive:0.58 },
+  { name:'jab',   hand:1, s:[ 0.22,1.42,0.28], e:[ 0.05,1.56,1.02], bend:[ 0.35,-0.45,0.5], coil:-0.16, follow:0.22, lean:0.18, drive:0.58 },
+  { name:'hook',  hand:0, s:[-0.50,1.52,0.14], e:[ 0.26,1.46,0.86], bend:[-0.95,-0.35,0.3], coil:0.5, follow:-0.72, lean:0.28, drive:0.82 },
+  { name:'upper', hand:1, s:[ 0.28,1.04,0.40], e:[ 0.12,1.78,0.72], bend:[ 0.4,-0.9,0.5],  coil:0.42, follow:-0.55, lean:0.36, drive:0.78 }
 ];
 const PUNCH_FINISH=PUNCHES[3];   // heavy bare-hand = the uppercut
 const _tb=new V3(),_dirN=new V3(),_bnd=new V3(),_jnt=new V3(),_om=new V3(),_kt=new V3(),_knee=new V3();
@@ -1617,6 +1621,29 @@ function startAttack(atk){ // atk shared by player/enemy: {heavy}
   if(w.metal) {} // swing sound at hit
   return true;
 }
+/* kinetic-chain lunge: the signed forward speed (m/s) the body drives along its
+   facing across an attack -- the "step into the punch". Profile over the swing:
+   a brief COIL BACK loading the weight, a SURGE that peaks at the strike, then a
+   FOLLOW-THROUGH that carries the COM past contact before settling. Each combo
+   step commits deeper (the chain loads the finisher). This velocity feeds the
+   swept-hit momentum term in resolveHit, so a stepped-in blow lands harder. */
+function attackDrive(a){
+  const A=a.attack; if(!A) return 0;
+  const S=A.shape; const base=(S&&S.drive!=null)?S.drive:0.6;
+  const combo=1 + Math.min((a.comboStep||0),4)*0.11;   // later punches in the chain step in further
+  const denom=A.active+A.rec || 0.001;
+  let f;
+  if(A.t < A.wind){
+    const wk=A.t/A.wind;
+    f = wk<0.32 ? -0.30*(wk/0.32)                       // coil back onto the rear foot (anticipation)
+                : Math.pow((wk-0.32)/0.68, 1.4);        // surge forward, building to the strike
+  } else {
+    const rk=clamp((A.t-A.wind)/denom, 0, 1);
+    f = rk<0.45 ? (1 - rk*0.5)                          // follow through -- keep driving past contact
+                : Math.max(0, 1-rk)*0.7;                // then decelerate into recovery
+  }
+  return f * base * combo * (A.heavy?6.8:5.2);
+}
 function resolveHit(A, isPlayer){
   const w=WEAPONS[A.attack.wpn], heavy=A.attack.heavy;
   const reach=w.reach + (isPlayer?0.25:0.1);
@@ -1902,6 +1929,12 @@ function updatePlayer(dt, pad){
     const D=P.dodge; D.t+=dt; const k=1-D.t/D.dur;
     P.vel.x=D.dir.x*15*k; P.vel.z=D.dir.z*15*k;   // 15 (was 11): a fast pop that clears the swing
     if(D.t>=D.dur) P.dodge=null;
+  } else if(P.attack && P.stagger<=0){
+    // STEP INTO THE PUNCH: drive the COM forward along the strike line (plus a
+    // little residual steering) so the whole body commits and follows through
+    const lv=attackDrive(P), fx=Math.sin(P.facing), fz=Math.cos(P.facing);
+    P.vel.x=damp(P.vel.x, fx*lv + mv.x*spd, 13, dt);
+    P.vel.z=damp(P.vel.z, fz*lv + mv.z*spd, 13, dt);
   } else if(P.stagger<=0){
     P.vel.x=damp(P.vel.x, mv.x*spd, 10, dt);   // 10 (was 18): velocity ramps -- accel on press, slide on release; weightier, more committed
     P.vel.z=damp(P.vel.z, mv.z*spd, 10, dt);
@@ -2049,7 +2082,10 @@ function updateEnemy(e, dt){
     e.vel.x=damp(e.vel.x, move.x*e.spd, 8, dt);   // 8 (was 14): mobs carry momentum too
     e.vel.z=damp(e.vel.z, move.z*e.spd, 8, dt);
   } else {
-    e.vel.multiplyScalar(Math.exp(-8*dt));
+    // STEP INTO IT: the mob commits its weight forward through the strike too
+    const lv=attackDrive(e), fx=Math.sin(e.facing), fz=Math.cos(e.facing);
+    e.vel.x=damp(e.vel.x, fx*lv, 12, dt);
+    e.vel.z=damp(e.vel.z, fz*lv, 12, dt);
   }
   e.pos.addScaledVector(e.vel,dt);
   collide(e.pos,e.r);
@@ -2058,9 +2094,7 @@ function updateEnemy(e, dt){
   if(e.attack){
     const A=e.attack; A.t+=dt;
     e.facing=angLerp(e.facing, A.aim, Math.min(1,dt*12));
-    if(A.t<A.wind*0.6){ // step into it
-      e.vel.addScaledVector(dirP, 12*dt);
-    }
+    // (the step-into-it lunge is driven by attackDrive() in the velocity integrate above)
     if(!A.hit&&A.t>=A.hitAt){ A.hit=true; syncEnemyMesh(e,dt,e.facing); resolveHit(e,false); }
     if(A.t>=A.dur){ e.attack=null; e.state='recover'; e.stateT=WEAPONS[e.wpn].rec+rand(0.2,0.6); }
   } else {
