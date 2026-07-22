@@ -324,84 +324,156 @@ const stoveGlow = new THREE.PointLight(0xff6a1e, 0.9, 16, 2); stoveGlow.position
 const rim = new THREE.PointLight(0x8fc866, 0.5, 20, 2); rim.position.set(9,3,7); scene.add(rim);
 
 /* ================================================================ ARENA */
-const ARENA = { w:22, d:15 };       // interior half handled below
+// Chez Samoa, after hours — the same restaurant the daytime loop is served in
+// (culinary-dash-3d/src/preview/arena.js is the reference this is ported
+// from: the Vince boss fight already happens here, not a generic kitchen).
+// Sized generously beyond the daytime loop's footprint on purpose -- this is
+// the one place players actually stand still and look around (mid-service
+// they're too busy running the line to take in the room), so it gets the
+// establishing-shot treatment; nobody's checking whether it's the exact same
+// square-footage as the 2.5D layout.
+const ARENA = { w:34, d:24 };
 const HALFW = ARENA.w/2, HALFD = ARENA.d/2;
 const OBST = [];                     // {x,z,rx,rz} axis-aligned boxes for collision
 const arena = new THREE.Group(); scene.add(arena);
 
-function tileTex(){
+/* wood plank floor with seam lines (arena.js used a GridHelper; a canvas
+   texture instead, matching how this file already builds the tile floor,
+   so the floor keeps taking a shadow map correctly) */
+function plankTex(){
   const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
-  const a='#e9d7ad', b='#3a3f45';
-  for(let y=0;y<4;y++)for(let x=0;x<4;x++){ g.fillStyle=((x+y)&1)?a:b; g.fillRect(x*64,y*64,64,64); }
-  g.globalAlpha=.08; g.fillStyle='#000';
-  for(let i=0;i<400;i++){ g.fillRect(Math.random()*256,Math.random()*256,2,2); }
-  g.globalAlpha=1; g.strokeStyle='#00000033'; g.lineWidth=2;
-  for(let i=0;i<=256;i+=64){ g.beginPath();g.moveTo(i,0);g.lineTo(i,256);g.moveTo(0,i);g.lineTo(256,i);g.stroke(); }
-  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(6,4);
+  g.fillStyle='#4a331f'; g.fillRect(0,0,256,256);
+  g.globalAlpha=.15;
+  for(let i=0;i<256;i+=16){ g.fillStyle=Math.random()>0.5?'#5a4028':'#3a2a1a'; g.fillRect(0,i,256,16); }
+  g.globalAlpha=1; g.strokeStyle='#00000040'; g.lineWidth=1;
+  for(let y=0;y<=256;y+=16){ g.beginPath(); g.moveTo(0,y); g.lineTo(256,y); g.stroke(); }
+  for(let y=0;y<256;y+=16){ for(let x=0;x<256;x+=48){ const off=(y/16)%2?24:0;
+    g.beginPath(); g.moveTo(x+off,y); g.lineTo(x+off,y+16); g.stroke(); } }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(6,4.5);
   t.anisotropy=4; return t;
 }
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(ARENA.w,ARENA.d),
-  new THREE.MeshStandardMaterial({ map:tileTex(), roughness:.85, metalness:.05 }));
+  new THREE.MeshStandardMaterial({ map:plankTex(), roughness:.9, metalness:.0 }));
 floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; arena.add(floor);
 
-const wallMat = new THREE.MeshStandardMaterial({ color:0x2a1d12, roughness:.9 });
-const tileWallMat = new THREE.MeshStandardMaterial({ color:0xcdb492, roughness:.6 });
+/* warm plaster walls (the restaurant's own, not a generic kitchen's tile) */
+const wallMat = new THREE.MeshStandardMaterial({ color:0x2e2118, roughness:1 });
 function wall(x,z,w,h,d,mat){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat||wallMat);
   m.position.set(x,h/2,z); m.receiveShadow=true; m.castShadow=true; arena.add(m); return m; }
-wall(0,-HALFD,ARENA.w,4,0.5,tileWallMat);
-wall(0, HALFD,ARENA.w,4,0.5,tileWallMat);
-wall(-HALFW,0,0.5,4,ARENA.d,tileWallMat);
-wall( HALFW,0,0.5,4,ARENA.d,tileWallMat);
+wall(0,-HALFD,ARENA.w,4.5,0.5);
+wall(0, HALFD,ARENA.w,4.5,0.5);
+wall(-HALFW,0,0.5,4.5,ARENA.d);
+wall( HALFW,0,0.5,4.5,ARENA.d);
 
-/* a stainless counter island + stations, each an obstacle */
-function counter(x,z,w,d,top){
-  const g=new THREE.Group();
-  const body=new THREE.Mesh(new THREE.BoxGeometry(w,1.05,d),
-    new THREE.MeshStandardMaterial({color:0x8b9299,roughness:.35,metalness:.55,flatShading:true}));
-  body.position.y=0.52; body.castShadow=body.receiveShadow=true; g.add(body);
-  const tp=new THREE.Mesh(new THREE.BoxGeometry(w+0.1,0.1,d+0.1),
-    new THREE.MeshStandardMaterial({color:top||0xc3cbd1,roughness:.25,metalness:.7,flatShading:true}));
-  tp.position.y=1.08; tp.castShadow=tp.receiveShadow=true; g.add(tp);
-  g.position.set(x,0,z); arena.add(g);
-  OBST.push({x:x,z:z,rx:w/2+0.35,rz:d/2+0.35});
-  return g;
-}
-counter(0,0,4.4,1.5);                 // center island
-counter(-9.4,3.6,2.2,3.0);            // left prep
-counter(9.4,-3.4,2.2,3.0);            // right prep
-
-/* stove with glowing burners along the back-left wall */
-(function stove(){
-  const g=new THREE.Group();
-  const base=new THREE.Mesh(new THREE.BoxGeometry(4.4,1.05,1.4),
-    new THREE.MeshStandardMaterial({color:0x20252b,roughness:.5,metalness:.5,flatShading:true}));
-  base.position.y=0.52; base.castShadow=base.receiveShadow=true; g.add(base);
-  const top=new THREE.Mesh(new THREE.BoxGeometry(4.5,0.12,1.5),
-    new THREE.MeshStandardMaterial({color:0x14181d,roughness:.4,metalness:.6})); top.position.y=1.08; g.add(top);
-  for(let i=0;i<3;i++){
-    const bx=-1.4+i*1.4;
-    const burner=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.06,6,16),
-      new THREE.MeshStandardMaterial({color:0x0a0a0a,roughness:.7}));
-    burner.rotation.x=-Math.PI/2; burner.position.set(bx,1.16,0); g.add(burner);
-    const flame=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.34,10),
-      new THREE.MeshStandardMaterial({color:0xff7a1e,emissive:0xff5a10,emissiveIntensity:2.2,roughness:.4}));
-    flame.position.set(bx,1.3,0); g.add(flame);
-    flame.userData.b=bx;
+/* the restaurant's windows — moonlit ocean panes with a palm silhouette,
+   ported from arena.js's oceanWindow(); on the back wall, either side of
+   the bar. This IS "the windows" from the daytime loop, not a lookalike. */
+const winFrameMat=new THREE.MeshStandardMaterial({color:0x5a3f28,roughness:.8,flatShading:true});
+// Big panoramic window -- wide enough that a single center mullion reads as
+// undersized, so it's a row of panes (WIN_PANES) across the full width
+// instead of the original two-pane design.
+const WIN_W=7.2, WIN_H=2.8, WIN_PANES=4;
+function oceanWindow(x,z,ry,palm){
+  const w=new THREE.Group(); w.position.set(x,2.9,z); w.rotation.y=ry; arena.add(w);
+  const fr=new THREE.Mesh(new THREE.BoxGeometry(WIN_W,WIN_H,0.16),winFrameMat); fr.castShadow=true; w.add(fr);
+  const sea=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,WIN_H-0.3,0.06),
+    new THREE.MeshStandardMaterial({color:0x123240,emissive:0x16404e,emissiveIntensity:.55,roughness:.6})); sea.position.z=0.07; w.add(sea);
+  const horizon=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,0.08,0.08),new THREE.MeshStandardMaterial({color:0x0c2028,flatShading:true}));
+  horizon.position.set(0,0.4,0.11); w.add(horizon);
+  const moon=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.07,0.08),
+    new THREE.MeshStandardMaterial({color:0xcfe8ef,emissive:0xcfe8ef,emissiveIntensity:.8})); moon.position.set(WIN_W*0.28,1.0,0.11); w.add(moon);
+  // vertical mullions dividing the pane into WIN_PANES equal strips
+  for(let i=1;i<WIN_PANES;i++){
+    const mx=-WIN_W/2+0.15+(WIN_W-0.3)*(i/WIN_PANES);
+    const mullion=new THREE.Mesh(new THREE.BoxGeometry(0.1,WIN_H-0.3,0.09),winFrameMat); mullion.position.set(mx,0,0.1); w.add(mullion);
   }
-  g.position.set(-8.5,0,-HALFD+1.2); arena.add(g);
-  OBST.push({x:-8.5,z:-HALFD+1.2,rx:2.5,rz:1.1});
-  arena.userData.stoveFlames=g.children.filter(c=>c.geometry&&c.geometry.type==='ConeGeometry');
+  // a horizontal transom for the "big window" read (not just tall-and-narrow)
+  const transom=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,0.1,0.09),winFrameMat); transom.position.set(0,WIN_H*0.22,0.1); w.add(transom);
+  if(palm){
+    const trunk=new THREE.Mesh(new THREE.BoxGeometry(0.14,1.5,0.08),new THREE.MeshStandardMaterial({color:0x0a1a20,flatShading:true}));
+    trunk.position.set(-WIN_W*0.32,-0.5,0.11); trunk.rotation.z=0.22; w.add(trunk);
+    for(let i=0;i<5;i++){
+      const fr2=new THREE.Mesh(new THREE.BoxGeometry(1.0,0.08,0.06),new THREE.MeshStandardMaterial({color:0x0a1a20,flatShading:true}));
+      fr2.position.set(-WIN_W*0.24,0.35,0.12); fr2.rotation.z=0.55-i*0.42; w.add(fr2);
+    }
+  }
+}
+// z is well clear of the back wall's own thickness (0.5 deep, centered at
+// -HALFD -- its inner face is at -HALFD+0.25) so the window sits in front of
+// it, not embedded inside/behind the opaque wall mesh. A first version at
+// -HALFD+0.02 rendered invisible for exactly this reason -- found by walking
+// up to it and looking, not assumed from the numbers.
+// pushed out to HALFW*0.53 (was 0.42) so the now-much-wider WIN_W=7.2 frame
+// (half-width 3.6) doesn't overlap the bar (half-width 4) sitting between them
+oceanWindow(-HALFW*0.53,-HALFD+0.4,0,true);
+oceanWindow( HALFW*0.53,-HALFD+0.4,0,false);
+
+/* the bar — the back counter, dark wood, stocked bottles catching the light.
+   This IS the daytime loop's bar (see arena.js's back-counter block) --
+   THE drink-mechanic pickup spot, registered as a solid obstacle like every
+   other counter in this file. */
+const BAR={ x:0, z:-HALFD+1.1, w:8, d:1.5 };
+(function bar(){
+  const g=new THREE.Group(); g.position.set(BAR.x,0,BAR.z); arena.add(g);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(BAR.w,1.15,BAR.d),
+    new THREE.MeshStandardMaterial({color:0x5a4028,roughness:.85,flatShading:true}));
+  body.position.y=0.58; body.castShadow=body.receiveShadow=true; g.add(body);
+  const top=new THREE.Mesh(new THREE.BoxGeometry(BAR.w+0.2,0.12,BAR.d+0.1),
+    new THREE.MeshStandardMaterial({color:0xd8cbb0,roughness:.55})); top.position.y=1.2; top.castShadow=true; g.add(top);
+  for(let i=0;i<6;i++){
+    const bottle=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,0.36,8),
+      new THREE.MeshStandardMaterial({color:0x7a4e2e,roughness:.4,emissive:0x2a1408,emissiveIntensity:.5}));
+    bottle.position.set(-BAR.w/2+0.6+i*(BAR.w-1.2)/5,1.44,-0.25); bottle.castShadow=true; g.add(bottle);
+  }
+  const stovebox=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.5,0.7),
+    new THREE.MeshStandardMaterial({color:0x3a3f45,metalness:.4,roughness:.6})); stovebox.position.set(-BAR.w/2+0.9,1.5,0); g.add(stovebox);
+  const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.26,0.34,12),
+    new THREE.MeshStandardMaterial({color:0x2e3238,metalness:.5,roughness:.5})); pot.position.set(-BAR.w/2+0.9,1.9,0); g.add(pot);
+  const flame=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.26,10),
+    new THREE.MeshStandardMaterial({color:0xff7a1e,emissive:0xff5a10,emissiveIntensity:2.2,roughness:.4}));
+  flame.position.set(-BAR.w/2+0.9,1.72,0); g.add(flame);
+  arena.userData.stoveFlames=[flame];
+  OBST.push({x:BAR.x,z:BAR.z,rx:BAR.w/2+0.35,rz:BAR.d/2+0.35});
 })();
 
-/* hanging pot rack (decor) */
-(function rack(){
-  const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,6,8),
-    new THREE.MeshStandardMaterial({color:0x30240f,roughness:.6,metalness:.4}));
-  bar.rotation.z=Math.PI/2; bar.position.set(0,3.4,-HALFD+2.4); arena.add(bar);
-  for(let i=0;i<6;i++){
-    const p=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.24,0.34,12,1,true),
-      new THREE.MeshStandardMaterial({color:0xb0741f,roughness:.35,metalness:.7,side:THREE.DoubleSide,flatShading:true}));
-    p.position.set(-2.4+i*0.96,2.9,-HALFD+2.4); p.castShadow=true; arena.add(p);
+/* dining tables shoved to the walls, chairs stacked seat-down, one tipped
+   over — closing-time, matching arena.js's tableSpots. Out of the fighting
+   floor's way, but this is exactly where the room now gets a real look. */
+(function tables(){
+  const wood=new THREE.MeshStandardMaterial({color:0x5a4028,roughness:.7,flatShading:true});
+  const dark=new THREE.MeshStandardMaterial({color:0x2e2114,flatShading:true});
+  const spots=[
+    [-HALFW+1.6,-HALFD*0.35,0,false], [-HALFW+1.6,HALFD*0.3,0.3,false],
+    [ HALFW-1.6,-HALFD*0.35,0,false], [ HALFW-1.6,HALFD*0.3,-0.3,false],
+    [-HALFW+1.6,HALFD-1.8,0.5,true],  [ HALFW-1.6,HALFD-1.8,-0.5,false],
+  ];
+  for(const [x,z,ry,tipped] of spots){
+    const tb=new THREE.Group(); tb.position.set(x,0,z); tb.rotation.y=ry; arena.add(tb);
+    const body=new THREE.Group(); tb.add(body);
+    const leg=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.9,0.18),dark); leg.position.y=0.45; leg.castShadow=true; body.add(leg);
+    const top=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.1,16),wood); top.position.y=0.95; top.castShadow=true; body.add(top);
+    if(tipped){ body.rotation.z=1.35; body.position.set(0.5,0.35,0); }
+    else{
+      const seat=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.5),dark); seat.position.set(0.2,1.06,0.1); seat.castShadow=true; body.add(seat);
+      const back=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.5,0.5),dark); back.position.set(0.42,1.34,0.1); back.castShadow=true; body.add(back);
+    }
+    if(!tipped) OBST.push({x,z,rx:1.0,rz:1.0});
+  }
+})();
+
+/* potted palms, the restaurant's own greenery */
+(function palms(){
+  for(const sx of [-HALFW+2.6,HALFW-2.6]){
+    const p=new THREE.Group(); p.position.set(sx,0,-HALFD*0.15); arena.add(p);
+    const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.62,0.85,10),
+      new THREE.MeshStandardMaterial({color:0x6a3a24,flatShading:true,roughness:.9})); pot.position.y=0.42; pot.castShadow=true; p.add(pot);
+    const trunk=new THREE.Mesh(new THREE.BoxGeometry(0.18,2.4,0.18),new THREE.MeshStandardMaterial({color:0x54381e,flatShading:true,roughness:.9}));
+    trunk.position.y=2; trunk.rotation.z=sx>0?-0.12:0.12; trunk.castShadow=true; p.add(trunk);
+    for(let i=0;i<6;i++){
+      const fr=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.1,0.26),new THREE.MeshStandardMaterial({color:0x1e4a30,flatShading:true,roughness:.85}));
+      fr.position.y=3.2; fr.rotation.y=(i/6)*Math.PI*2; fr.rotation.z=0.42; fr.castShadow=true; p.add(fr);
+    }
+    OBST.push({x:sx,z:-HALFD*0.15,rx:0.7,rz:0.7});
   }
 })();
 

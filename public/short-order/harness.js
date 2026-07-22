@@ -139,7 +139,7 @@ if (SRC.endsWith('.html')) {
 } else {
   code = fs.readFileSync(SRC, 'utf8');
 }
-code+='\n;globalThis.__t={get player(){return player;},get enemies(){return enemies;},get GAME(){return GAME;},get FX(){return FX;},get tokensUsed(){return tokensUsed;},get PICKUPS(){return PICKUPS;},get nearPickup(){return nearPickup;},get ROT(){return ROT;},get STAGE(){return STAGE;},get CAM(){return CAM;},layout,clientToStage,tryPickup,spawnEnemy,startNight,tick,killChef,updateEnemy,buildRagdoll,equipEnemy,WEAPONS,SLICE};';
+code+='\n;globalThis.__t={get player(){return player;},get enemies(){return enemies;},get GAME(){return GAME;},get FX(){return FX;},get tokensUsed(){return tokensUsed;},get PICKUPS(){return PICKUPS;},get nearPickup(){return nearPickup;},get ROT(){return ROT;},get STAGE(){return STAGE;},get CAM(){return CAM;},get HALFW(){return HALFW;},get HALFD(){return HALFD;},layout,clientToStage,tryPickup,spawnEnemy,startNight,tick,killChef,updateEnemy,buildRagdoll,equipEnemy,WEAPONS,SLICE};';
 (0,eval)(code);
 const T=globalThis.__t;
 
@@ -198,7 +198,11 @@ try{
       if(!finite(A.tgt)||!Number.isFinite(A.up.scale.y)||!Number.isFinite(e.chef.userData.legs[0].thigh.scale.y)){ fail='enemy IK NaN at frame '+f; break; } }
     if(fail) break;
     if(T.tokensUsed<0||T.tokensUsed>3){ fail='token count out of range ('+T.tokensUsed+') at frame '+f; break; }
-    if(Math.abs(T.CAM.pos.x)>10.45||Math.abs(T.CAM.pos.z)>6.95){ fail='camera left arena at frame '+f+' pos '+T.CAM.pos.x.toFixed(2)+','+T.CAM.pos.z.toFixed(2); break; }
+    // margin matches the original tuning (arena half-extent minus ~0.55); scales
+    // with ARENA.w/d instead of a hardcoded number so a bigger/smaller room
+    // (e.g. the chez-samoa-3D restaurant swap, ARENA now 34x24) doesn't need
+    // this re-tuned by hand every time.
+    if(Math.abs(T.CAM.pos.x)>T.HALFW-0.55||Math.abs(T.CAM.pos.z)>T.HALFD-0.55){ fail='camera left arena at frame '+f+' pos '+T.CAM.pos.x.toFixed(2)+','+T.CAM.pos.z.toFixed(2); break; }
     // keep the fight alive: respawn if wiped so we exercise more paths
     if(T.enemies.filter(e=>!e.dead).length===0 && f<frames-400){ T.spawnEnemy(Math.random()<0.5?'weak':'tough'); }
     // deterministically exercise the ragdoll under the finiteness checks
