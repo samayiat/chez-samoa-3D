@@ -110,9 +110,30 @@ Smaller, independently mergeable/testable pieces, each with its own tests writte
    `npm run e2e` has 2 pre-existing, unrelated failures (customer-serve money, brawl knockouts) that
    never had a chance to run before this fix — flagged, not touched (mob/service combat, out of
    scope for this step).
-2. The sim/render split infrastructure for the ported combat. **Started** — `src/sim/weapons.js`
-   has Short Order's `WEAPONS` table ported as pure data (`test/weapons.test.js`), not yet wired
-   into gameplay. The rest of the split (combat resolution, IK) is still open.
+2. The sim/render split infrastructure for the ported combat. **In progress.** Landed so far, all
+   pure/tested, none of it wired into gameplay yet:
+   - `src/sim/weapons.js` — Short Order's `WEAPONS` table, pure data.
+   - `src/sim/attackShapes.js` — `SWINGS`/`PUNCHES`/`FINISH`/`PUNCH_FINISH` pose data.
+   - `src/sim/resolveHit.js` — the pure damage-resolution core (hit detection, damage, block,
+     knockback, the single `weight`). Generalized past Short Order's `isPlayer` branching to plain
+     attacker/target, since invariant 8 needs N chefs from the start.
+   - `src/sim/applyHit.js` — applies a `resolveHit` result to entity hp/vel/stagger, and to weapon
+     durability.
+   - `src/sim/startAttack.js` — eligibility check + attack-envelope construction (timing, combo-step
+     shape selection).
+   - `src/sim/tickAttack.js` — per-frame envelope advancement (`tickAttack`) + the recovery-cancel
+     chain window (`canChainAttack`).
+   - `src/sim/stepCombat.js` — the actual per-frame combat step wiring all of the above over a real
+     entity list (chefs + mobs, N of either, **3D world units** — matches `render/meshes.js`'s
+     `to3()` output, not the day-service loop's 2D pixel space). Emits hit events rather than
+     touching FX, mirroring `sim/combat.js`'s existing "sim only emits events" convention.
+
+   Still open: starting attacks (input for chefs / AI for mobs — neither exists), combo-streak
+   tracking (Short Order's `GAME.combo`/`comboT`; `resolveHit`'s `reachBonus`/`dmgMult`/
+   `comboWeight` opts are the hook for when it lands), a real mob roster/target selection, routing
+   any gameplay-affecting randomness through `sim/rng.js` (hasn't been needed yet — nothing landed
+   so far touches `Math.random()`), the chef rig/IK (step 3), and wiring any of this into
+   `state.js`/`stepSim`.
 3. The chef rig (re-rigging `chef.js`'s existing mesh onto the new IK).
 4. Mob combat (redesigned roster, wave escalation, reputation scaling).
 5. Vince, wired through the single damage door, with his grab reusing mash-to-escape.
