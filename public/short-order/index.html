@@ -861,7 +861,7 @@ const PREV={};
 function tapK(k){ const d=!!KEY[k]; const was=PREV['k_'+k]; PREV['k_'+k]=d; return d&&!was; }
 /* gamepad */
 const GP={ index:null, prev:[], axes:[0,0,0,0] };
-addEventListener('gamepadconnected',e=>{ GP.index=e.gamepad.index; toast('Controller ready'); });
+addEventListener('gamepadconnected',e=>{ GP.index=e.gamepad.index; toast('Controller ready. Wash your hands.'); });
 addEventListener('gamepaddisconnected',()=>{ GP.index=null; });
 function pollPad(){
   const pads=navigator.getGamepads?navigator.getGamepads():[];
@@ -1072,11 +1072,11 @@ function resolveHit(A, isPlayer){
 }
 function hitWord(pos,heavy,w){
   let txt,col,size;
-  if(w.key==='castiron'){ txt=pick(['TENDERIZED','SMASHED','CLOBBERED']); col='#ff6a1e'; size=heavy?40:32; }
-  else if(w.key==='knife'){ txt=pick(['SKEWERED','POKED','JABBED']); col='#dfe6ea'; size=heavy?34:26; }
-  else if(w.metal){ txt=heavy?pick(['BONK','CLANG','WHACK']):pick([' tink','PING','tap']); col='#f4e4c1'; size=heavy?36:24; }
-  else { txt=heavy?'CRACK':'pop'; col='#f4e4c1'; size=heavy?32:22; }
-  if(GAME.combo>=6) { txt=GAME.combo+' HIT!'; col='#8fc866'; size=40; }
+  if(w.key==='castiron'){ txt=pick(['TENDERIZED','SMASHED','CLOBBERED','SEASONED']); col='#ff6a1e'; size=heavy?40:32; }
+  else if(w.key==='knife'){ txt=pick(['SKEWERED','POKED','JABBED','JULIENNED']); col='#dfe6ea'; size=heavy?34:26; }
+  else if(w.metal){ txt=heavy?pick(['BONK','CLANG','WHACK','SERVED']):pick([' tink','PING','tap','ding']); col='#f4e4c1'; size=heavy?36:24; }
+  else { txt=heavy?pick(['CRACK','SMACK','SLAP']):pick(['pop','tap','boop']); col='#f4e4c1'; size=heavy?32:22; }
+  if(GAME.combo>=6) { txt=GAME.combo+' HIT COMBO!'; col='#8fc866'; size=40; }
   popWord(pos,txt,col,size);
 }
 function addCombo(){ GAME.combo++; GAME.comboT=1.4; if(GAME.combo>GAME.maxCombo)GAME.maxCombo=GAME.combo;
@@ -1087,7 +1087,7 @@ function breakWeapon(A){
   const w=WEAPONS[A.wpn];
   const hpos=new V3(); A.chef.userData.armR.hand.getWorldPosition(hpos);
   burst(hpos,20,w.metal?0xd8d8d8:0x9a6a3a,1.6); ring(hpos,COL.tomato,1.6); shake(0.6); sfx.break();
-  toast(w.name.toUpperCase()+' SHATTERED');
+  toast(w.name.toUpperCase()+pick([' SHATTERED',' GAVE ITS LIFE FOR THE BIT',' IS NOW GARNISH',' RAGE QUIT',' FILED A COMPLAINT']));
   popWord(hpos,'BROKE!','#ff3b30',30);
   A.wpn='fists'; A.dur=Infinity; equip(A.chef,'fists'); updateHUDWeapon();
 }
@@ -1100,7 +1100,7 @@ function killChef(T, ang){
   buildRagdoll(T); if(T.rag) ragImpulse(T, _rp1.set(Math.sin(ang),0.15,Math.cos(ang)).normalize(), 1.0);
   const p=T.pos.clone(); p.y=1.2; burst(p,16,0xff3b30,1.3); shake(0.5); sfx.down();
   impactFrames(4, 0xff6a1e, 0x140c07); hitPost(0.8, 0xff6a1e); kitchenBump(0.6); haptic(0.7,0.5,140);
-  popWord(p,'DOWN',T.kind==='tough'?'#ff6a1e':'#f4e4c1',34);
+  popWord(p,pick(['DOWN','SENT HOME','COMPED','NO TIP FOR YOU','WALKED']),T.kind==='tough'?'#ff6a1e':'#f4e4c1',34);
   GAME.kills++;
   // drop their weapon as a pickup if it wasn't fists (worse-tier flavour: only spatula/pan survive)
   if(T.wpn!=='fists' && Math.random()<0.6){ spawnPickup(T.wpn, T.pos.x, T.pos.z); }
@@ -1756,14 +1756,14 @@ function tryPickup(){
   }
   player.wpn=p.key; player.dur=WEAPONS[p.key].dur; equip(player.chef,p.key);
   p.taken=true; scene.remove(p.g);
-  sfx.pickup(); updateHUDWeapon(); toast('Picked up '+WEAPONS[p.key].name.toUpperCase());
+  sfx.pickup(); updateHUDWeapon(); toast(pick(['Armed with ','Now wielding ','Upgraded to '])+WEAPONS[p.key].name.toUpperCase());
   const hpos=player.pos.clone(); hpos.y=1.3; ring(hpos,COL.herb,1.2); burst(hpos,8,COL.herb,0.8);
 }
 
 /* ================================================================ LOCK-ON */
 function toggleLock(){
-  if(player.lockOn){ player.lockOn=null; toast('Lock-on off'); }
-  else { const t=nearestEnemy(player.pos,player.facing,null); if(t){ player.lockOn=t; toast('Locked on'); } }
+  if(player.lockOn){ player.lockOn=null; toast('Lock-on off. Let \u2019em roam.'); }
+  else { const t=nearestEnemy(player.pos,player.facing,null); if(t){ player.lockOn=t; toast('Locked on. Order up.'); } }
 }
 function switchTarget(dir){
   const alive=enemies.filter(e=>!e.dead); if(alive.length<2||!player.lockOn)return;
@@ -1800,7 +1800,7 @@ function tackleEnemy(P,e){
   if(player.grabbed && player.grabbed.by===e){ player.grabbed=null; hideMashUI(); }
   const cp=e.pos.clone(); cp.y=1.2;
   shake(0.7); hitstop(0.06); impactFrames(3,0xffe03d,0x140c07); hitPost(0.72,0xff8a3a);
-  burst(cp,16,0xffe03d,1.3); ring(cp,COL.flame,1.3); popWord(cp,'TACKLE!','#ffe03d',34);
+  burst(cp,16,0xffe03d,1.3); ring(cp,COL.flame,1.3); popWord(cp,pick(['TACKLE!','NO SUBSTITUTIONS!','SEND IT BACK!','86 THAT GUY!']),'#ffe03d',34);
   sfx.thud(1); haptic(0.7,0.6,150); kitchenBump(0.4); applyImpact(e,ang,1.5); punchScale(e.chef,0.35);
   addCombo();
   if(e.hp<=0) killChef(e, ang);
@@ -1922,9 +1922,16 @@ function spawnWaveChunk(delay){
     if(WAVE.spawned>=WAVE.total) WAVE.waveDone=true;
     updateHUDCooks(enemies.filter(e=>!e.dead).length); }, delay+i*350); }
 }
+const WAVE_FLAVOR=[null,
+  'THEY BROUGHT FRIENDS',
+  'SOMEONE CALLED FOR BACKUP',
+  'MANAGEMENT IS HERE',
+  'THE HEALTH INSPECTOR TOO'
+];
 function startNextWave(){
   WAVE.resting=true; updateHUDWave();
-  toast('WAVE '+(WAVE.wave+2)+' / '+WAVE.chunks.length);
+  const nextWave=WAVE.wave+2, flavor=WAVE_FLAVOR[nextWave-1];
+  toast('WAVE '+nextWave+' / '+WAVE.chunks.length+(flavor?' \u2014 '+flavor:''));
   setTimeout(()=>{
     WAVE.resting=false; WAVE.wave++;
     WAVE.queue=WAVE.chunks[WAVE.wave]; WAVE.total=WAVE.queue.length;
@@ -2005,11 +2012,11 @@ function endNight(survived){
 function showTitle(){
   GAME.mode='title';
   document.getElementById('card').innerHTML =
-    '<div class="kick">AFTER HOURS · THE PATRONS CAME BACK</div>'+
+    '<div class="kick">AFTER HOURS · THE PATRONS CAME BACK, AND THEY WANT A REFUND</div>'+
     '<div class="title">SHORT<br><span class="b">ORDER</span></div>'+
     '<div class="sub">The dinner rush is over. They\u2019re not. Grab whatever\u2019s on the pass \u2014 '+
-    'a spatula, a nonstick, the cast iron if you can swing it \u2014 and clear the line. '+
-    'Everything breaks. Everything is heavy in its own way.</div>'+
+    'a spatula, a nonstick, the cast iron if HR isn\u2019t around \u2014 and clear the line. '+
+    'Everything breaks. Everything is heavy in its own way. Tips are not guaranteed.</div>'+
     '<button class="btn" id="playBtn">STEP TO THE PASS</button>'+
     '<div id="ctrls">'+ctrlRows()+'</div>';
   document.getElementById('playBtn').onclick=()=>{ audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startNight(SLICE, onNightEnd); };
@@ -2038,7 +2045,7 @@ function showEnd(res){
   touchEl.classList.remove('on');
   const win=res.survived;
   c.innerHTML='<div class="card end '+(win?'win':'lose')+'">'+
-    '<div class="kick">'+(win?'THE LINE IS CLEAN':'YOU WENT DOWN')+'</div>'+
+    '<div class="kick">'+(win?pick(['THE LINE IS CLEAN','FIVE STARS ON YELP','THE HEALTH INSPECTOR IS IMPRESSED','MICHELIN CALLED']):pick(['YOU WENT DOWN','ONE STAR: "FOOD WAS FINE, STAFF ATTACKED US"','THE CUSTOMER WAS RIGHT THIS TIME','SENT HOME EARLY']))+'</div>'+
     '<div class="title">'+(win?'KITCHEN<br>CLEARED':'86\u2019D')+'</div>'+
     '<div class="stat">Cooks put down <b>'+res.kills+'</b> &nbsp;·&nbsp; Best combo <b>'+res.maxCombo+'</b>'+
     (win?'':'<br>Last weapon in hand: <b>'+WEAPONS[res.wpn].name+'</b>')+'</div>'+
