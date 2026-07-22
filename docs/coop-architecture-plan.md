@@ -92,6 +92,18 @@ below locked in scope and decisions for when work actually begins.
 - **Reputation keeps scaling wave/mob size.** The 2D game's `brawlSizeMult` (worse rating = bigger,
   harder mobs) stays in effect on top of the new `waveSizes` escalation (3,4,5,6,7) — not replaced
   by fixed numbers.
+- **Quality/performance scaling is not a concern yet.** The ported effects (post-processing,
+  ragdoll) don't need to plug into culinary-dash-3d's existing `quality.js` scaling for this pass —
+  get them working correctly first.
+- **Character roster stays at exactly two** ("her" + the male swap) for now. A broader roster for
+  the larger friend group is a later concern, not something to build room for preemptively.
+- **Tests get written alongside each piece as it's ported**, not backfilled after — matches both
+  projects' existing house style (culinary-dash-3d's Vitest suite, Short Order's harness scenarios,
+  `HANDOFF_CLAUDE_CODE.md`'s "never trust a green test" culture).
+- **"One damage door" is a hard, tested invariant, not just a guideline.** Short Order's
+  `resolveHit` becomes the single path all damage flows through (mobs, Vince, anything added later),
+  and this gets an actual test asserting nothing deals damage outside it — mutation-tested, in the
+  same style as the invariant's origin.
 
 ## The two tracks
 
