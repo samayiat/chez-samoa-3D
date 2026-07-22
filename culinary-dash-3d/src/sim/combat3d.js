@@ -70,6 +70,8 @@ function makePunchingBag(id, chefPos, facing, distance) {
  */
 export function startBrawl3D(state, count = 1) {
   state.phase = 'brawl3d';
+  state.customers = []; // matches the old startBrawl()'s own clear -- otherwise
+                         // stale customer meshes keep rendering through the fight
   const chefEntity = makeChefEntity(state.chef);
   const mobs = [];
   for (let i = 0; i < count; i++) {

@@ -8,6 +8,7 @@ import { startLoop } from './engine/loop.js';
 import { createCamera, updateCamera, resizeCamera } from './engine/camera.js';
 import { buildWorld, buildChef, addLights } from './render/meshes.js';
 import { syncScene, commitPrev, attachScene } from './render/scene.js';
+import { buildCombat3DRefs, syncCombat3D } from './render/combat3dScene.js';
 import { createSparks } from './render/sparks.js';
 import { createAudio } from './fx/audio.js';
 import { createImpactBus, decayImpact, impact } from './fx/impact.js';
@@ -33,6 +34,7 @@ addLights(scene);
 attachScene(scene);
 const refs = buildWorld(scene);
 refs.chef = buildChef(scene);
+const combat3dRefs = buildCombat3DRefs(scene);
 
 const state = createState();
 const bus = createImpactBus();
@@ -84,11 +86,18 @@ startLoop({
     decayImpact(bus, rdt);
     sparks.update(bus, rdt);
     syncScene(refs, state, bus.hitstop > 0 ? 1 : alpha);
+    syncCombat3D(combat3dRefs, state);
+    refs.chef.visible = state.phase !== 'brawl3d'; // the IK rig stands in for her during brawl3d
     updateCamera(camera, bus, t);
     renderer.render(scene, camera);
 
     let text;
-    if (state.phase === 'brawl') {
+    if (state.phase === 'brawl3d') {
+      const chef = state.combat3d.entities[0];
+      const mobsLeft = state.combat3d.entities.slice(1).filter((e) => !e.dead).length;
+      text = `BRAWL   HP ${Math.max(0, Math.round(chef.hp))}/${chef.maxHp}   mobs ${mobsLeft}`
+        + '   · hold E to charge a heavy punch, tap for light';
+    } else if (state.phase === 'brawl') {
       const hp = '❤'.repeat(Math.max(0, state.chef.hp)) + '·'.repeat(Math.max(0, state.chef.maxHp - state.chef.hp));
       text = `BRAWL   HP ${hp}   enemies ${state.enemies.length}`
         + (state.msg ? `   —   ${state.msg}` : '   · E to punch');
