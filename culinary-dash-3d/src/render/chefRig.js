@@ -68,6 +68,7 @@ const UPPER_LEN = 0.28, FORE_LEN = 0.26;
 const SHOULDER = { L: new THREE.Vector3(-0.34, 1.16, 0), R: new THREE.Vector3(0.34, 1.16, 0) };
 const GUARD_TARGET = { L: new THREE.Vector3(-0.4, 0.68, 0.15), R: new THREE.Vector3(0.4, 0.68, 0.15) };
 const BEND_DIR = new THREE.Vector3(0, 0, 1); // elbow breaks forward
+const FWD = new THREE.Vector3(0, 0, 1); // the hand's/weapon's own "business end" axis
 
 // Short Order's own shoulder anchors (makeChef's `sh` values) and total arm
 // reach, for retargeting its shape data onto her differently-proportioned
@@ -222,9 +223,21 @@ export function poseChefRig(rig, attack, weaponKey = 'fists') {
       const e = retarget(attack.shape.e, handIdx);
       target = s.lerp(e, k);
     }
-    solveTwoBone(arm.upper, arm.fore, shoulder, target, UPPER_LEN, FORE_LEN, BEND_DIR);
-    const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(arm.fore.quaternion);
-    arm.hand.position.copy(arm.fore.position).addScaledVector(dir, arm.fore.scale.y * 0.5);
-    arm.hand.quaternion.copy(arm.fore.quaternion);
+    const elbow = new THREE.Vector3();
+    solveTwoBone(arm.upper, arm.fore, shoulder, target, UPPER_LEN, FORE_LEN, BEND_DIR, elbow);
+    // Ported from Short Order's own hand posing (poseChef): the hand sits AT
+    // the target directly (not at the forearm bone's true, possibly-short-of-
+    // target endpoint), facing elbow->target. Its local +Z ("business end",
+    // matching weaponMesh.js's own convention) aligns to that direction --
+    // NOT a copy of the forearm bone's quaternion, which aligns local +Y and
+    // leaves the roll around it undefined. Using the bone's quaternion here
+    // was tried first and produced a twisted, "backhanded" grip once a
+    // weapon mesh made the wrong roll visible; this is the actual fix.
+    arm.hand.position.copy(target);
+    const dir = target.clone().sub(elbow);
+    if (dir.lengthSq() > 1e-6) {
+      dir.normalize();
+      arm.hand.quaternion.setFromUnitVectors(FWD, dir);
+    }
   }
 }
