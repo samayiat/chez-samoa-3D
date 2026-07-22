@@ -147,7 +147,7 @@ if (SRC.endsWith('.html')) {
 } else {
   code = fs.readFileSync(SRC, 'utf8');
 }
-code+='\n;globalThis.__t={get player(){return player;},get enemies(){return enemies;},get GAME(){return GAME;},get FX(){return FX;},get tokensUsed(){return tokensUsed;},get PICKUPS(){return PICKUPS;},get nearPickup(){return nearPickup;},get ROT(){return ROT;},get STAGE(){return STAGE;},get CAM(){return CAM;},get HALFW(){return HALFW;},get HALFD(){return HALFD;},layout,clientToStage,tryPickup,spawnEnemy,startNight,tick,killChef,updateEnemy,buildRagdoll,equipEnemy,applyImpact,WEAPONS,SLICE};';
+code+='\n;globalThis.__t={get player(){return player;},get enemies(){return enemies;},get GAME(){return GAME;},get FX(){return FX;},get tokensUsed(){return tokensUsed;},get PICKUPS(){return PICKUPS;},get nearPickup(){return nearPickup;},get ROT(){return ROT;},get STAGE(){return STAGE;},get CAM(){return CAM;},get HALFW(){return HALFW;},get HALFD(){return HALFD;},layout,clientToStage,tryPickup,spawnEnemy,startNight,tick,killChef,updateEnemy,buildRagdoll,equipEnemy,applyImpact,resolveHit,WEAPONS,SLICE};';
 (0,eval)(code);
 const T=globalThis.__t;
 
