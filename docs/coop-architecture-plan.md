@@ -73,6 +73,18 @@ below locked in scope and decisions for when work actually begins.
   combat consistency with everything else. This is distinct from the mob roster above, which is
   being freely redesigned — the chef is not part of that redesign in any visual sense, only in how
   she moves.
+- **Chef rig implementation:** keep `culinary-dash-3d/src/preview/chef.js`'s existing mesh-building
+  code (it already produces her correct look) and re-rig it onto Short Order's IK targets/bone
+  conventions, rather than rebuilding her model from scratch in the new system. Lowest risk of
+  drifting from her established appearance.
+- **Weapon durability carries over** — kitchen implements break down with use exactly like in Short
+  Order (forcing a switch back to bare hands), not made unbreakable for this port.
+- **Vince's `grab` attack reuses Short Order's existing mash-to-escape grapple mechanic** rather than
+  a separate bespoke implementation — his `BOSS_DEFS` entry already has `grab: true`, and the two
+  systems are clearly the same idea.
+- **Audio is out of scope for this pass.** culinary-dash-3d's existing audio code stays as-is;
+  unifying with Short Order's procedural sfx (or the 2D game's room-tone approach) is a separate,
+  later pass.
 
 ## The two tracks
 
