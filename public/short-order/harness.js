@@ -89,7 +89,7 @@ const THREE={
 
 /* ---------- DOM ---------- */
 const fakeGradient={addColorStop(){}};
-const ctx={fillStyle:'',strokeStyle:'',lineWidth:1,globalAlpha:1,fillRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},
+const ctx={fillStyle:'',strokeStyle:'',lineWidth:1,lineCap:'',globalAlpha:1,fillRect(){},clearRect(){},beginPath(){},moveTo(){},lineTo(){},quadraticCurveTo(){},stroke(){},
   createLinearGradient(){return fakeGradient;},createRadialGradient(){return fakeGradient;},
   arc(){},ellipse(){},save(){},restore(){},clip(){},closePath(){},fill(){}};
 function el(){return {style:{setProperty(){}},className:'',dataset:{},classList:{add(){},remove(){},toggle(){},contains(){return false;}},
