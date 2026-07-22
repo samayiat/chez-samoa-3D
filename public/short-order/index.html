@@ -1591,7 +1591,20 @@ function updatePlayer(dt, pad){
   if(KEY['w'])iz-=1; if(KEY['s'])iz+=1; if(KEY['a'])ix-=1; if(KEY['d'])ix+=1;
   ix+=pad.move.x; iz+=pad.move.y;
   ix+=TOUCH.moveX; iz+=TOUCH.moveY;
-  const mv=new V3(); mv.addScaledVector(camRight, ix); mv.addScaledVector(camFwd, -iz);
+  // movement axes: camera-relative when free, but TARGET-relative when locked
+  // on -- holding a direction then circle-strafes the target (A/D orbit around
+  // them, W/S close in / back off) with your facing and the camera pinned on
+  // them, instead of the movement frame drifting as the camera trails. This is
+  // the "permanent strafe toward what you're looking at" lock-on feel.
+  const mv=new V3();
+  if(P.lockOn && !P.lockOn.dead){
+    const rx=P.lockOn.pos.x-P.pos.x, rz=P.lockOn.pos.z-P.pos.z, rl=Math.hypot(rx,rz)||1;
+    const rdx=rx/rl, rdz=rz/rl;              // radial unit vector: toward the target
+    mv.x = -rdz*ix + rdx*(-iz);              // tangent(perp)*ix  +  radial*(-iz)
+    mv.z =  rdx*ix + rdz*(-iz);
+  } else {
+    mv.addScaledVector(camRight, ix); mv.addScaledVector(camFwd, -iz);
+  }
   if(mv.lengthSq()>1) mv.normalize();
   const moving=mv.lengthSq()>0.02;
 
@@ -1767,8 +1780,11 @@ function updateEnemy(e, dt){
     if(e.wpn==='fists' && dist<1.05 && !player.grabbed && grabCD<=0 && player.iframe<=0 && !player.dead && Math.random()<0.6){
       startGrab(e);
     } else {
-    // keep pressing inward while strafing
-    let radial=(dist - e.standoff) + 0.9;             // hard inward pressure
+    // hover near standoff and CIRCLE, rather than constantly crowding inward.
+    // The old +0.9 inward bias meant they never settled -- they'd bee-line and
+    // pile onto the player (and each other). +0.25 lets them hold their spacing
+    // at range and orbit, closing only when they commit to an attack (below).
+    let radial=(dist - e.standoff) + 0.25;
     if(player.attack && !player.attack.hit && dist < reach+1.4){
       const toE=Math.atan2(e.pos.x-player.pos.x, e.pos.z-player.pos.z);
       const aim=(player.attack.aim!=null?player.attack.aim:player.facing);
@@ -1777,7 +1793,10 @@ function updateEnemy(e, dt){
     }
     if(dist < reach*0.7) radial -= 0.6;
     if(Math.abs(radial)<0.2) radial=0;
-    move.copy(_tang).multiplyScalar(e.circleDir*0.42).addScaledVector(dirP, clamp(radial,-1.1,2.0));
+    // stronger tangential drive (0.72, was 0.42) so the circling actually reads
+    // as walking around you -- and armed ones show their weapon flourish while
+    // they do, instead of standing still in your face.
+    move.copy(_tang).multiplyScalar(e.circleDir*0.72).addScaledVector(dirP, clamp(radial,-1.1,2.0));
     // in range: commit now. otherwise roll for a dart-in on the beat.
     if(dist < reach+0.5 && tryToken(e)){ e.state='press'; e.stateT=rand(...e.aggr); }
     else if(e.stateT<=0){
@@ -1798,11 +1817,13 @@ function updateEnemy(e, dt){
     if(e.stateT<=0){ if(e.hasToken){ e.hasToken=false; tokensUsed--; } e.state='engage'; e.stateT=rand(0.25,0.6); }
   }
 
-  // separation from other enemies
+  // separation from other enemies -- wider radius (1.5, was 0.9) and stronger
+  // push (0.95, was 0.7) so the mob spreads out around you and takes the room
+  // instead of stacking into one clump on the player's face
   const sep=new V3();
   for(const o of enemies){ if(o===e||o.dead)continue; const dx=e.pos.x-o.pos.x,dz=e.pos.z-o.pos.z,d=Math.hypot(dx,dz);
-    if(d<0.9&&d>0.001){ sep.x+=dx/d*(0.9-d); sep.z+=dz/d*(0.9-d); } }
-  move.addScaledVector(sep,0.7);
+    if(d<1.5&&d>0.001){ sep.x+=dx/d*(1.5-d); sep.z+=dz/d*(1.5-d); } }
+  move.addScaledVector(sep,0.95);
 
   // integrate
   if(!e.attack){
