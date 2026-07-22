@@ -1878,8 +1878,8 @@ function updatePlayer(dt, pad){
     P.vel.x=D.dir.x*15*k; P.vel.z=D.dir.z*15*k;   // 15 (was 11): a fast pop that clears the swing
     if(D.t>=D.dur) P.dodge=null;
   } else if(P.stagger<=0){
-    P.vel.x=damp(P.vel.x, mv.x*spd, 18, dt);
-    P.vel.z=damp(P.vel.z, mv.z*spd, 18, dt);
+    P.vel.x=damp(P.vel.x, mv.x*spd, 10, dt);   // 10 (was 18): velocity ramps -- accel on press, slide on release; weightier, more committed
+    P.vel.z=damp(P.vel.z, mv.z*spd, 10, dt);
   } else {
     P.vel.multiplyScalar(Math.exp(-6*dt));
   }
@@ -2021,8 +2021,8 @@ function updateEnemy(e, dt){
   // integrate
   if(!e.attack){
     if(move.lengthSq()>1) move.normalize();
-    e.vel.x=damp(e.vel.x, move.x*e.spd, 14, dt);
-    e.vel.z=damp(e.vel.z, move.z*e.spd, 14, dt);
+    e.vel.x=damp(e.vel.x, move.x*e.spd, 8, dt);   // 8 (was 14): mobs carry momentum too
+    e.vel.z=damp(e.vel.z, move.z*e.spd, 8, dt);
   } else {
     e.vel.multiplyScalar(Math.exp(-8*dt));
   }
@@ -2077,8 +2077,9 @@ function poseChef(a, isPlayer, dt){
   c.position.copy(a.pos); c.rotation.y=a.facing;
   if(!a._an) a._an={ idle:Math.random()*10, twist:0, sway:0, toqueX:0,toqueXv:0, toqueZ:0,toqueZv:0, rx:0,rxv:0, rz:0,rzv:0, prevPh:a.movePhase||0 };
   const AN=a._an, t=GAME.t+AN.idle, spd=a.speed||0, moving=spd>0.6, ph=a.movePhase;
-  // full-body RUN blend — player only, when moving fast and not busy
-  const rk=((isPlayer||a._fetching) && !a.attack && !a.guard && !a.dodge && !a.tackle) ? clamp((spd-2.3)/3.4,0,1) : 0;
+  // full-body RUN blend — anyone moving fast and not busy (enemies included,
+  // so the mob takes real strides instead of shuffling stiff)
+  const rk=(!a.attack && !a.guard && !a.dodge && !a.tackle) ? clamp((spd-2.3)/3.4,0,1) : 0;
   a._runK = rk*rk*(3-2*rk);
   a._idleK = (!a.attack && !a.guard && !a.dodge && !a.dead) ? clamp(1-spd/0.9,0,1) : 0;
 
@@ -2107,12 +2108,24 @@ function poseChef(a, isPlayer, dt){
   AN.rxv += (-95*AN.rx - cR*AN.rxv)*dt; AN.rx += AN.rxv*dt;
   AN.rzv += (-95*AN.rz - cR*AN.rzv)*dt; AN.rz += AN.rzv*dt;
 
+  // ---- momentum lean: the body tips INTO acceleration (lean back off a hard
+  // stop, into a turn) -- read the velocity delta, rotate it into actor-local ----
+  const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0;
+  if(a._pvx==null){ a._pvx=vx; a._pvz=vz; }
+  const ax=(vx-a._pvx)/Math.max(dt,1e-4), az=(vz-a._pvz)/Math.max(dt,1e-4);
+  a._pvx=vx; a._pvz=vz;
+  const fc=Math.cos(a.facing), fs=Math.sin(a.facing);
+  const af=ax*fs + az*fc;      // accel along facing (forward+/back-)
+  const al=ax*fc - az*fs;      // accel lateral (right+/left-)
+  const leanAf=clamp(af*0.02,-0.25,0.25), leanAl=clamp(-al*0.02,-0.25,0.25);
+
   // ---- weight shift: lean onto the planted foot; bob with the step ----
   const idleK=a._idleK||0;
   AN.sway = damp(AN.sway, (a._swayTarget||0) + idleK*Math.sin(t*1.5)*0.045, 10, dt);
   const bob = (moving? Math.abs(Math.sin(ph))*0.05*Math.min(1,spd/4.5):0)
               + Math.sin(t*2.1)*0.011 - (a._stepDip||0)
-              + idleK*Math.sin(t*3.3)*0.02;   // a boxer's light square-up bounce
+              + idleK*Math.sin(t*3.3)*0.02   // a boxer's light square-up bounce
+              + (a._flight>=0 ? Math.sin(a._flight*Math.PI)*0.06*Math.min(1,spd/5) : 0);  // ballistic hop at a run (capped <=0.06 so feet still reach)
 
   // ---- body: gross tilt (weave/stagger/dodge/recoil); waist bend goes on the spine ----
   let leanX=0, leanZ=0;
@@ -2121,6 +2134,7 @@ function poseChef(a, isPlayer, dt){
   if(a._weaveT>0) leanZ += a._weave*Math.sin((a._weaveT/0.32)*Math.PI)*0.72;  // hard lean/duck (matches the 0.32s weave window)
   if(a.stagger>0) leanZ += Math.sin(GAME.t*30)*0.15*clamp(a.stagger,0,1);
   leanX += clamp(AN.rx,-0.9,0.9); leanZ += clamp(AN.rz,-0.85,0.85) + AN.sway*0.4;   // raised so the hit reaction reads
+  leanX += leanAf; leanZ += leanAl;                                                  // tip into accel (momentum read)
   b.position.set(AN.sway, bob, 0);
   b.rotation.x = damp(b.rotation.x, leanX, 17, dt);
   b.rotation.z = damp(b.rotation.z, leanZ, 17, dt);
@@ -2188,7 +2202,7 @@ function updateFeet(a, dt, moving){
   const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0, vm=Math.hypot(vx,vz)||1;
   const lead=Math.min(0.5, spd*0.13) + run*0.2;          // reach further ahead
   const stepDur = moving ? clamp(0.17 - spd*0.01, 0.08, 0.17) : 0.2;
-  const stepLen = 0.36 + run*0.22;                        // ACTUAL steps (was 0.19) -- pick a foot up and plant it ahead
+  const stepLen = clamp(0.30 + spd*0.11, 0.30, 0.95);    // stride strictly proportional to speed -- a faster body picks its foot up sooner (anti-skate)
   const fast = spd>3.2;                                  // running: let both feet catch up
   let anyStepping=false; for(const L of legs) if(L.stepT<1) anyStepping=true;
   let stepPhase=-1, whichFoot=0;
@@ -2211,6 +2225,10 @@ function updateFeet(a, dt, moving){
   }
   a._swayTarget = stepPhase>=0 ? (whichFoot===0? 0.09 : -0.09) : 0;   // weight shifts onto the planted foot
   a._stepDip = stepPhase>=0 ? Math.sin(stepPhase*Math.PI)*0.05 : 0;    // body bobs down as the foot swings (gravity read)
+  // FLIGHT PHASE: at a run, both feet leave the ground between plants -- track it
+  // for the ballistic hop in poseChef (phase 0..1 across the airborne window)
+  const airborne = legs[0].stepT<1 && legs[1].stepT<1;
+  a._flight = airborne ? (legs[0].stepT+legs[1].stepT)*0.5 : -1;
 }
 const _hipV=new V3(), _footV=new V3();
 function solveLegsIK(a, b){
@@ -2256,12 +2274,13 @@ function solveArmsIK(a, dt, atk){
     if(run>0.01 && !atk){
       // RUN: tight, bent arms pumping fore/aft, opposite the legs
       const swing=Math.sin(ph + (i===0?0:Math.PI));
+      const amp=0.30 + Math.min(0.28, spd*0.05);   // pump grows with stride (faster = bigger arm swing)
       const rtx=A.sh.x*0.55 + sign*0.04;      // tuck the hands in toward the chest
-      const rty=1.46 + swing*0.13;            // rise on the forward drive
-      const rtz=0.14 + swing*0.42;            // the pump
+      const rty=1.46 + swing*(0.11+amp*0.10); // rise on the forward drive, scaled by pace
+      const rtz=0.14 + swing*amp;             // the pump
       tx=lerp(tx,rtx,run); ty=lerp(ty,rty,run); tz=lerp(tz,rtz,run);
     } else if(spd>0.6 && !atk && g<0.1){ const sw=Math.min(1,spd/4);
-      tz += Math.sin(ph + (i===0?0:Math.PI))*0.12*sw; ty += Math.abs(Math.sin(ph))*0.03*sw; }
+      tz += Math.sin(ph + (i===0?0:Math.PI))*(0.12+sw*0.10)*sw; ty += Math.abs(Math.sin(ph))*0.03*sw; }
     if(g>0.02){ tx=lerp(tx, sign*0.17, g); ty=lerp(ty,1.62,g); tz=lerp(tz,0.36,g); }
     if(atk){
       const A2=atk.A, windK=atk.windK, strikeK=atk.strikeK, side=A2.side;
