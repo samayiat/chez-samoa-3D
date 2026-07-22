@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#241811" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🍳</text></svg>" />
+  <title>Chez Samoa — the floor (2.5D service loop)</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #160e09; overflow: hidden; font-family: system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    /* top HUD */
+    #hud { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px;
+      padding: 8px 16px; border-radius: 12px; background: rgba(30,20,13,.66); border: 1px solid #3a2c1e; pointer-events: none;
+      color: #ffe9c7; font-weight: 800; font-size: 15px; letter-spacing: .02em; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+    #hud #money { color: #ffd76a; }
+    #hud #served { color: #ffdca6; }
+    #hud .lbl { font-weight: 600; font-size: 10px; letter-spacing: .16em; color: #b79974; margin-right: 2px; }
+    #hud #day { color: #ffe9c7; font-variant-numeric: tabular-nums; }
+    #danger { display: inline-flex; gap: 4px; }
+    #danger .pip { width: 10px; height: 10px; border-radius: 50%; background: #4a3a2a; box-shadow: inset 0 0 0 1px #6a5238; }
+    #danger .pip.on { background: #e0553a; box-shadow: 0 0 7px rgba(224,85,58,.7); }
+
+    #msg { position: fixed; top: 58px; left: 0; right: 0; text-align: center; pointer-events: none;
+      color: #ffdca6; font-weight: 700; font-size: 14px; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .2s; }
+    #prompt { position: fixed; bottom: 74px; left: 0; right: 0; text-align: center; pointer-events: none;
+      color: #ffe0a6; font-weight: 800; font-size: 15px; letter-spacing: .02em; text-shadow: 0 2px 5px #000; opacity: 0; transition: opacity .15s; }
+    #hint { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; pointer-events: none; font-size: 11px; color: #a98f6c; }
+    #hint b { color: #e7cfa4; }
+
+    /* forced landscape: in portrait the whole page rotates 90° instead of asking
+       the player to turn the device (sizing/input mapped in engine/orient.js) */
+    @media (orientation: portrait) {
+      body { position: fixed; top: 0; left: 0; width: 100vh; height: 100vw;
+        transform: rotate(90deg) translate(0, -100%); transform-origin: top left; }
+    }
+
+    /* day-end overlay */
+    #dayend { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; text-align: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity .5s ease;
+      background: radial-gradient(120% 90% at 50% 45%, rgba(40,28,20,.55), rgba(11,7,5,.9)); }
+    #dayend.show { opacity: 1; pointer-events: auto; }
+    #dayend h2 { margin: 0; font-size: clamp(32px, 8vw, 66px); font-weight: 900;
+      background: linear-gradient(180deg, #ffe0a6, #e0553a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    #dayend p { margin: 0; color: #d3bf98; font-size: 15px; } #dayend p b { color: #ffdca6; }
+    #dayend a { margin-top: 8px; text-decoration: none; color: #1a1018; font-weight: 800; letter-spacing: .04em; font-size: 15px;
+      border-radius: 10px; padding: 13px 26px; background: linear-gradient(180deg, #ff8a3a, #d83a1a); box-shadow: 0 8px 24px rgba(216,58,26,.32); }
+    #dayend #payBtn { margin-top: 8px; cursor: pointer; border: 0; color: #12240f; font-weight: 800; letter-spacing: .04em;
+      font-size: 15px; border-radius: 10px; padding: 13px 26px; background: linear-gradient(180deg, #a6e28a, #4f9a3e);
+      box-shadow: 0 8px 24px rgba(79,154,62,.32); }
+    #hud #rent { color: #ffab7a; } #hud #rent.ok { color: #8be27a; }
+
+    /* the back office — between-days shop, shown after the rent is paid */
+    #office { position: fixed; inset: 0; z-index: 21; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; text-align: center; padding: 18px; opacity: 0; pointer-events: none; transition: opacity .4s ease;
+      background: radial-gradient(120% 90% at 50% 45%, rgba(34,26,18,.72), rgba(11,7,5,.94)); }
+    #office.show { opacity: 1; pointer-events: auto; }
+    #office h2 { margin: 0; font-size: clamp(24px, 5vw, 44px); font-weight: 900;
+      background: linear-gradient(180deg, #ffe0a6, #e0a53a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    #office #obank { margin: 0; color: #ffd76a; font-weight: 800; font-size: 15px; }
+    #oitems { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 7px; width: min(680px, 94vw); }
+    .orow { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left;
+      background: rgba(42,30,20,.8); border: 1px solid #3a2c1e; border-radius: 10px; padding: 8px 8px 8px 12px; }
+    .orow .nm { color: #ffe9c7; font-weight: 800; font-size: 13px; }
+    .orow .nm em { font-style: normal; color: #d8b46a; font-size: 11px; letter-spacing: .06em; margin-left: 5px; }
+    .orow .ds { color: #b79974; font-size: 11px; }
+    .orow button { cursor: pointer; border: 0; border-radius: 8px; padding: 8px 12px; font-weight: 800; font-size: 12px;
+      color: #241811; background: linear-gradient(180deg, #ffe0a6, #f0a83a); white-space: nowrap; }
+    .orow button:disabled { cursor: default; opacity: .45; background: #4a3a2a; color: #b79974; }
+    .orow button.owned { background: #2f4a2a; color: #8be27a; opacity: 1; }
+    #office #openBtn { margin-top: 6px; cursor: pointer; border: 0; color: #12240f; font-weight: 800; letter-spacing: .04em;
+      font-size: 15px; border-radius: 10px; padding: 12px 26px; background: linear-gradient(180deg, #a6e28a, #4f9a3e);
+      box-shadow: 0 8px 24px rgba(79,154,62,.32); }
+
+    #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; text-align: center; padding: 24px; transition: opacity .4s ease;
+      background: radial-gradient(120% 90% at 50% 20%, #3a2a1c 0%, #241811 60%, #160e09 100%); color: #ffe9c7; }
+    #start.gone { opacity: 0; pointer-events: none; }
+    #start .kicker { letter-spacing: .32em; font-size: 11px; color: #c79a6a; font-weight: 700; }
+    #start h1 { margin: 0; font-size: clamp(36px, 9vw, 80px); font-weight: 900; letter-spacing: .01em; line-height: .95;
+      background: linear-gradient(180deg, #ffe0a6, #e08a3a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    #start p { margin: 0; max-width: 33rem; line-height: 1.5; color: #d3bf98; font-size: 14px; }
+    #start .keys { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 2px; }
+    #start .keys span { font: 600 12px/1 ui-monospace, monospace; color: #ffe9c7; border: 1px solid #5a4632; border-radius: 7px; padding: 8px 11px; background: #2a1e14; }
+    #start button { margin-top: 8px; cursor: pointer; color: #241811; font-weight: 800; letter-spacing: .04em; font-size: 15px;
+      border: 0; border-radius: 10px; padding: 14px 30px; background: linear-gradient(180deg, #ffe0a6, #f0a83a); box-shadow: 0 8px 26px rgba(240,150,58,.34); }
+    #start .note { font-size: 12px; color: #8a7a64; }
+    #start .who { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+    #start .who span { font-size: 10px; letter-spacing: .18em; color: #b79974; font-weight: 700; }
+    #start .chefopt { cursor: pointer; font-weight: 800; font-size: 13px; letter-spacing: .04em; color: #c9ab7c;
+      border: 1px solid #5a4632; border-radius: 9px; padding: 9px 16px; background: #2a1e14; transition: all .15s; }
+    #start .chefopt.on { color: #241811; background: linear-gradient(180deg, #ffe0a6, #f0a83a); border-color: transparent;
+      box-shadow: 0 4px 14px rgba(240,150,58,.3); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="hud">
+    <span id="money">$0</span>
+    <span id="served">★ 0</span>
+    <span><span class="lbl">DAY</span><span id="day">80s</span></span>
+    <span><span class="lbl">RENT</span><span id="rent">$40</span></span>
+    <span id="danger"></span>
+  </div>
+  <div id="msg"></div>
+  <div id="prompt"></div>
+  <div id="hint"><b>Move</b> WASD / stick &nbsp;·&nbsp; <b>Action</b> E / the ACTION button — cook at a station, then carry &amp; serve</div>
+
+  <div id="dayend"><h2>—</h2><p>—</p>
+    <button id="payBtn" type="button">Pay the rent</button>
+    <a href="../vince/">Face him →</a>
+  </div>
+
+  <div id="office">
+    <h2>The back office</h2>
+    <p id="obank">$0 in the bank</p>
+    <div id="oitems"></div>
+    <button id="openBtn" type="button">Open →</button>
+  </div>
+
+  <div id="start">
+    <div class="kicker">2.5D SERVICE LOOP</div>
+    <h1>Chez Samoa</h1>
+    <p>Run the floor. Customers sit and order; walk to the right station to <strong>cook or plate</strong>
+       the dish (lobster starts raw at the ice box), then carry it over and <strong>serve before their
+       patience runs out</strong>. Faster serves tip more. Let too many walk out and the mob comes
+       back <strong>swinging</strong>.</p>
+    <div class="keys">
+      <span>WASD / Arrows — move</span>
+      <span>E / Space — cook &amp; serve</span>
+    </div>
+    <div class="who">
+      <span>WHO'S COOKING TONIGHT?</span>
+      <button type="button" class="chefopt" data-chef="f">HER</button>
+      <button type="button" class="chefopt" data-chef="m">HIM</button>
+    </div>
+    <button id="startBtn" type="button">Open the kitchen</button>
+    <p class="note">Best in landscape · touch, keyboard, or gamepad</p>
+  </div>
+
+  <script type="module" src="/src/preview/kitchen-main.js"></script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+// Game data + tunables, ported from the 2D Culinary Dash source
+// (culinary-dash/culinary-dash_src.html). Values are kept faithful to the
+// original so the feel carries over; only the coordinate space is remapped.
+//
+// The 2D game lives in a 320x180 pixel room. We map that to a 3D floor on the
+// XZ plane, 1 world unit = 10 px, centred on the origin:
+//     x3 = (x2 - 160) / PX,   z3 = (y2 - 90) / PX
+// so the floor spans x:[-16,16], z:[-9,9]. Y is up.
+
+export const PX = 10;
+// 2.5D lifts the old 320x180 ceiling — the diner floor can breathe now, with room
+// for a real prep line (chopping) and more tables. Grown 1.5x again so the floor
+// has actual walking space between the line, the pass, and the tables.
+export const WORLD = { w: 600, h: 360 };
+
+export const to3 = (x2, y2) => ({ x: (x2 - WORLD.w / 2) / PX, z: (y2 - WORLD.h / 2) / PX });
+export const len2 = (x2) => x2 / PX; // scalar length px -> units
+
+// --- Dishes (ported from DISHES, src line 137) -----------------------------
+// make: "assemble" (combine ingredients), "timing" (cook with a green window),
+// "source" (fetch a raw ingredient that `starts` another dish).
+export const DISHES = {
+  // salad is a multi-step dish now: chop the veg at the cutting board, carry the
+  // chopped veg to the salad bar, then plate. (make:'prep' = needs a prepped ingredient.)
+  salad:          { label: 'garden salad', make: 'prep', station: 'salad', prepAt: 'cutboard', pts: { perfect: 14 }, recipe: ['lettuce', 'tomato'] },
+  karaage:        { label: 'karaage',      make: 'timing',   station: 'fryer', pts: { perfect: 20, burnt: 8 }, recipe: ['chicken'] },
+  lobster:        { label: 'lobster',      make: 'timing',   station: 'pot',   pts: { perfect: 24, burnt: 10 }, recipe: ['rawlobster'] },
+  'whiskey-sour': { label: 'whiskey sour', make: 'assemble', station: 'bar',   pts: { perfect: 16 }, recipe: ['whiskey', 'sourmix'] },
+  'gin-sour':     { label: 'gin sour',     make: 'assemble', station: 'bar',   pts: { perfect: 16 }, recipe: ['gin', 'sourmix'] },
+};
+export const MENU = Object.keys(DISHES);
+
+// --- Stations (ported from STATIONS, src line 218) -------------------------
+// Positions are original 2D px; render maps them to 3D via to3().
+// Stations run along the back counter (y=52). The prep line: cutboard (chop) sits
+// beside the salad bar; the ice box sits beside the pot (raw lobster -> boil).
+export const STATIONS = [
+  { id: 'fryer',    x: 95,  y: 60, kind: 'timing',   dish: 'karaage', verb: 'fry',  cook: 2.6, green: 1.6 },
+  { id: 'cutboard', x: 190, y: 60, kind: 'prep',     dish: 'salad',   verb: 'chop', cut: 1.4 },
+  { id: 'salad',    x: 280, y: 60, kind: 'assemble', dish: 'salad' },
+  { id: 'icebox',   x: 375, y: 60, kind: 'source',   starts: 'lobster' },
+  { id: 'pot',      x: 465, y: 60, kind: 'timing',   dish: 'lobster', verb: 'boil', cook: 3.4, green: 1.9 },
+  { id: 'bar',      x: 545, y: 60, kind: 'assemble', dishes: ['whiskey-sour', 'gin-sour'] },
+  // the pass: a counter between the line and the floor (the 2D layout's divider)
+  { id: 'pass',     x: 300, y: 150, kind: 'pass', slots: 3 },
+];
+
+// Dining tables — spread across the floor with real walking space between them.
+export const TABLES = [
+  { id: 't0', x: 120, y: 240 },
+  { id: 't1', x: 265, y: 268 },
+  { id: 't2', x: 410, y: 240 },
+  { id: 't3', x: 520, y: 232 },
+  { id: 't4', x: 185, y: 316 },
+  { id: 't5', x: 380, y: 320 },
+];
+export const TABLE_R = 8;   // solid radius, px (src line 578)
+
+// --- Chef movement ---------------------------------------------------------
+export const CHEF = {
+  r: 6,               // collision radius, px
+  speed: 156,         // px/s — doubled: the bigger floor needs a chef who MOVES
+};
+
+// --- Service timing (ported: src lines 1348-1354) --------------------------
+export const HEARTS_MAX = 3;
+export const PATIENCE_DRAIN = 0.10;      // hearts/sec
+export const SPEED_TIP_MAX = 0.5;        // +50% tip for an instant serve
+export const SPEED_TIP_WINDOW = 12;      // decays over 12s
+export const ORDER_INTERVAL = [3.0, 6.0]; // seconds between new arrivals (slice)
+// Day escalation: later days spawn faster and drain patience harder, clamped so
+// the game stays winnable. Day 1 is exactly the classic tuning (k = 1).
+export const DAY_SPAWN_K = (day) => Math.max(0.55, Math.pow(0.93, ((day || 1) - 1)));
+export const DAY_DRAIN_K = (day) => Math.min(1.8, 1 + 0.07 * ((day || 1) - 1));
+// The rent — due at every close, climbing day over day. Pay it and sleep safe,
+// or refuse and settle it with Vince in the alley.
+export const RENT_DUE = (day) => 40 + 15 * ((day || 1) - 1);
+
+// --- The till + the door (sim px) ------------------------------------------
+// The register lives by the bar; the front door is where everyone walks in —
+// and where the brawl's thieves run OUT. (2D port: REGISTER / DOOR / STEAL_*.)
+export const TILL = { x: 545, y: 78 };
+export const DOOR = { x: 592, y: 256 };
+export const STEAL = {
+  LOSS: 25,       // cash a thief runs off with (scaled from the 2D STEAL_LOSS)
+  BOUNTY: 8,      // coins you recover by catching him mid-flee (2D STEAL_BOUNTY)
+  GRAB_R: 14,     // reach to snatch the till
+  EXIT_R: 14,     // close enough to the door counts as gone
+};
+
+// --- Wrecking + weapons (2D raid system, ported + armed) ---------------------
+export const STATION_HP = 3;       // chips a raider needs to wreck a station
+export const REPAIR_COST = (id) => (id === 'bar' ? 40 : 25);   // office repairs (2D 300/500, scaled)
+// Real kitchen appliances = real weapons. Walk past the right station in a
+// brawl with empty hands and it's yours; each has a feel and a lifespan.
+export const WEAPONS = {
+  pan:     { station: 'pot',   label: 'frying pan', dmg: 1, knock: 1.5, reach: 0,  band: 0, hits: 8 },
+  spatula: { station: 'fryer', label: 'spatula',    dmg: 0, knock: 1.1, reach: 10, band: 5, hits: 12 },
+};
+
+// --- Combat / impact spine (ported: src lines 835-2321) --------------------
+export const COMBAT = {
+  // impact weights, ordered scuff < jab < hurt < heavy < stumble
+  W: { scuff: 0.35, jab: 0.6, hurt: 1.0, heavy: 1.7, stumble: 2.4 },
+  HIT_KO: 0.50,          // added on a knockdown
+  HIT_BODY: 0.16,        // per extra body the swing clips (sub-linear)
+
+  SHAKE_PER_W: 5.5, SHAKE_MAX: 15.0, SHAKE_DECAY: 22,
+  STOP_PER_W: 0.11, STOP_MAX: 0.42,    // hitstop seconds
+
+  FIGHT_FRAME_MS: 90,    // jab 270ms, cross 540ms, roundhouse 630ms
+  PUNCH_BUFFER: 0.16,    // input buffered, not accelerated
+
+  // punch hitbox: a square-cornered box in front of the chef (px)
+  PUNCH_REACH: 24,       // forward along facing
+  PUNCH_BACK: 5,         // behind
+  PUNCH_YBAND: 30,       // lateral half-width (must stay > forward, locked)
+
+  // knockback: KNOCKBACK*12 settles ~5px; per-move multiplier (src 2282-2294)
+  KNOCKBACK: 5,
+  get BRAWL_KNOCK() { return this.KNOCKBACK * 12; },
+  BRAWL_REEL: 0.1,
+  MOVE_KNOCK: { jab: 1, cross: 1.8, roundhouse: 3.4, uppercut: 3.0 },
+
+  ATK_REACH: 13,         // enemy radial reach (px)
+  ENEMY_HP: 3,
+  CHEF_HP: 5,
+  BRAWL_TRIGGER: 4,      // >4 bad orders in a day starts the brawl
+};
+
+// Three-hit combo (jab-jab-hook style). frames feed FIGHT_FRAME_MS cadence.
+export const COMBO = [
+  { move: 'jab',        frames: 3, weight: 'jab' },
+  { move: 'cross',      frames: 6, weight: 'hurt' },
+  { move: 'roundhouse', frames: 7, weight: 'heavy' },
+];
