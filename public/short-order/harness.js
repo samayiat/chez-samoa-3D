@@ -150,8 +150,9 @@ let fail=null;
 if(process.env.SCENARIO==='weapon'){
   try{
     T.startNight(T.SLICE, ()=>{});
-    // stand next to the cast-iron pickup (now on open floor) and grab it
-    T.player.pos.set(-6.2,0,3.6);
+    // stand next to the cast-iron pickup (dead center of the pass, per
+    // PASS_LOADOUT) and grab it
+    T.player.pos.set(0,0,0.5);
     NOWMS+=16; T.tick();                 // updatePrompt registers nearPickup
     console.log('DEBUG pickups:',T.PICKUPS.length,'nearPickup:',T.nearPickup?T.nearPickup.key:null,'mode:',T.GAME.mode);
     key('f',true); NOWMS+=16; T.tick(); key('f',false);
@@ -163,7 +164,7 @@ if(process.env.SCENARIO==='weapon'){
     for(let f=0; f<400 && !broke; f++){
       NOWMS+=16;
       if(f%14===0) key('k',true); if(f%14===3) key('k',false);   // spam heavy
-      e.pos.set(-6.2,0,4.9); e.stagger=0; e.hp=99999;             // keep bag in reach & upright
+      e.pos.set(0,0,1.8); e.stagger=0; e.hp=99999;                // keep bag in reach & upright
       T.tick();
       if(!finite(T.player.pos)){fail='NaN in weapon scenario';break;}
       if(T.player.wpn==='fists' && startWpn!=='fists'){ broke=true; console.log('weapon broke at frame',f,'-> reverted to fists'); }
