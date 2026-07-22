@@ -1,0 +1,2186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>SHORT ORDER — kitchen brawl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --grease:#1a120b; --char:#0d0906; --cream:#f4e4c1; --flame:#ff6a1e;
+    --copper:#c77b3b; --steel:#7fb2d6; --herb:#8fc866; --tomato:#ff3b30; --ink:#2a1c10;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:var(--char);color:var(--cream);
+    font-family:"DM Mono",ui-monospace,monospace;-webkit-user-select:none;user-select:none;touch-action:none}
+  #app{position:fixed;inset:0}
+  canvas{display:block;width:100%;height:100%}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10;
+    font-family:"DM Mono",monospace;opacity:0;transition:opacity .4s}
+  #hud.on{opacity:1}
+  .disp{font-family:"Anton",Impact,sans-serif;letter-spacing:.02em}
+
+  /* player plate: health + weapon */
+  #plate{position:absolute;left:22px;top:20px;width:min(42%,340px)}
+  #hpwrap{height:20px;background:#00000066;border:2px solid #00000088;border-radius:2px;
+    box-shadow:0 3px 0 #0007, inset 0 0 0 1px #ffffff14;overflow:hidden;position:relative}
+  #hpfill{position:absolute;inset:0;transform-origin:left;transform:scaleX(1);
+    background:linear-gradient(90deg,var(--tomato),var(--flame));transition:transform .18s cubic-bezier(.2,.8,.2,1)}
+  #hpfill.low{animation:hppanic .35s infinite}
+  @keyframes hppanic{50%{filter:brightness(1.9)}}
+  #hpghost{position:absolute;inset:0;transform-origin:left;transform:scaleX(1);
+    background:#ffffff33;transition:transform .55s .12s ease-out}
+  #hplabel{position:absolute;left:8px;top:1px;font-size:12px;line-height:18px;color:#fff;
+    text-shadow:0 1px 1px #000;letter-spacing:.14em}
+  #wpnrow{display:flex;align-items:center;gap:8px;margin-top:8px}
+  #wpnname{font-family:"Anton",sans-serif;font-size:19px;color:var(--cream);
+    text-shadow:0 2px 0 #0009;letter-spacing:.03em;white-space:nowrap}
+  #pips{display:flex;gap:3px;flex-wrap:wrap;max-width:200px}
+  .pip{width:9px;height:9px;background:var(--herb);box-shadow:0 0 6px #8fc86688, inset 0 0 0 1px #0004;
+    transform:rotate(45deg);border-radius:1px}
+  .pip.low{background:var(--flame);box-shadow:0 0 6px #ff6a1e88}
+  .pip.crit{background:var(--tomato);box-shadow:0 0 8px #ff3b30aa}
+  .pip.spent{background:#3a2a1a;box-shadow:none;opacity:.5}
+
+  /* cooks-left counter */
+  #cooks{position:absolute;right:22px;top:18px;text-align:right}
+  #cooksN{font-family:"Anton",sans-serif;font-size:52px;line-height:.9;color:var(--cream);
+    text-shadow:0 3px 0 #0009,0 0 22px #ff6a1e55}
+  #cooksL{font-size:11px;letter-spacing:.35em;color:#c9a978;margin-top:2px}
+  #waveL{font-size:10px;letter-spacing:.3em;color:#8a7250;margin-top:5px}
+
+  /* combo */
+  #combo{position:absolute;left:50%;bottom:60px;transform:translateX(-50%) scale(.6);
+    text-align:center;opacity:0;transition:opacity .12s}
+  #combo.on{opacity:1}
+  #comboN{font-family:"Anton",sans-serif;font-size:60px;line-height:.85;color:var(--flame);
+    text-shadow:0 3px 0 #0009,0 0 26px #ff6a1eaa}
+  #comboL{font-size:12px;letter-spacing:.3em;color:#f4e4c1cc}
+
+  /* prompt (pick up weapon) */
+  #prompt{position:absolute;left:50%;bottom:32%;transform:translateX(-50%) translateY(10px);
+    background:#120b06e0;border:2px solid var(--flame);border-radius:4px;padding:8px 14px;
+    box-shadow:0 6px 0 #0008;opacity:0;transition:opacity .15s,transform .15s;text-align:center}
+  #prompt.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  #prompt b{font-family:"Anton",sans-serif;color:var(--flame);font-size:15px}
+  #prompt .k{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 5px;margin:0 2px;
+    background:var(--cream);color:var(--ink);border-radius:4px;font-weight:700;font-size:12px;
+    box-shadow:0 2px 0 #0007;vertical-align:middle}
+
+  /* floating hit words layer */
+  #words{position:absolute;inset:0;overflow:hidden}
+  .word{position:absolute;font-family:"Anton",sans-serif;transform:translate(-50%,-50%) skewX(-7deg);
+    text-shadow:5px 5px 0 #0009;will-change:transform,opacity;white-space:nowrap;
+    -webkit-text-stroke:5px #140c07;paint-order:stroke fill;letter-spacing:.01em}
+
+  /* toast */
+  #toast{position:absolute;left:50%;top:76px;transform:translateX(-50%) translateY(-8px);
+    background:#120b06e0;border-left:4px solid var(--copper);padding:7px 14px;font-size:13px;
+    letter-spacing:.08em;color:var(--cream);opacity:0;transition:opacity .2s,transform .2s;box-shadow:0 4px 0 #0007}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ---------- cards / overlays ---------- */
+  #veil{position:fixed;inset:0;z-index:20;display:grid;place-items:center;
+    background:radial-gradient(120% 90% at 50% 30%, #2a1a0c 0%, #0d0906 70%);
+    transition:opacity .5s}
+  #veil.hide{opacity:0;pointer-events:none}
+  .card{text-align:center;max-width:min(92%,640px);padding:24px}
+  .kick{font-size:12px;letter-spacing:.5em;color:var(--flame);margin-bottom:10px}
+  .title{font-family:"Anton",sans-serif;font-size:clamp(52px,calc(var(--u,6.4px)*15),150px);line-height:.82;
+    color:var(--cream);text-shadow:0 6px 0 #000a, 0 0 44px #ff6a1e44;letter-spacing:.01em}
+  .title .b{color:var(--flame)}
+  .sub{margin:14px auto 0;max-width:440px;color:#d9c4a0;font-size:14px;line-height:1.6}
+  .btn{pointer-events:auto;cursor:pointer;margin-top:26px;display:inline-block;
+    font-family:"Anton",sans-serif;font-size:24px;letter-spacing:.06em;color:var(--ink);
+    background:var(--flame);padding:12px 34px;border:0;border-radius:5px;
+    box-shadow:0 6px 0 #7a2d06, 0 10px 22px #0007;transition:transform .08s, box-shadow .08s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn:active{transform:translateY(4px);box-shadow:0 2px 0 #7a2d06}
+  .end .title{font-size:clamp(40px,calc(var(--u,6.4px)*12),120px)}
+  .end.win .title{color:var(--herb);text-shadow:0 6px 0 #000a,0 0 44px #8fc86655}
+  .end.lose .title{color:var(--tomato);text-shadow:0 6px 0 #000a,0 0 44px #ff3b3055}
+  .stat{margin-top:16px;font-size:14px;color:#d9c4a0;letter-spacing:.06em}
+  .stat b{color:var(--cream)}
+
+  /* controls sheet */
+  #ctrls{margin:22px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:6px 22px;
+    max-width:520px;text-align:left;font-size:12.5px;color:#cbb28c}
+  #ctrls .r{display:flex;justify-content:space-between;gap:12px;
+    border-bottom:1px dotted #ffffff1a;padding:4px 0}
+  #ctrls .r b{color:var(--cream);font-weight:500}
+  #ctrls .pad{color:var(--steel)}
+  @media (max-width:560px){ #ctrls{grid-template-columns:1fr} #plate{top:14px;left:14px} #cooks{top:12px;right:14px} }
+
+  .hint{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:10;
+    font-size:11px;letter-spacing:.18em;color:#7a6647;opacity:0;transition:opacity .5s}
+  .hint.on{opacity:1}
+  #vign{position:fixed;inset:0;pointer-events:none;z-index:9;
+    box-shadow:inset 0 0 200px 40px #000000aa;opacity:.32}
+  #grabui{position:absolute;left:50%;top:56%;transform:translateX(-50%);text-align:center;opacity:0;pointer-events:none;transition:opacity .08s;z-index:8}
+  #grabui.on{opacity:1}
+  #grabui .gmsg{font-family:"Anton",sans-serif;font-size:calc(var(--u)*5);color:#ff8a3a;
+    -webkit-text-stroke:4px #140c07;paint-order:stroke fill;transform:skewX(-6deg);animation:mashpulse .28s infinite}
+  @keyframes mashpulse{50%{transform:skewX(-6deg) scale(1.09)}}
+  #grabui .gbarwrap{width:calc(var(--u)*42);height:calc(var(--u)*2.6);margin:calc(var(--u)*2) auto 0;
+    background:#0009;border:2px solid #ff8a3a;transform:skewX(-10deg);overflow:hidden}
+  #grabui #grabfill{display:block;height:100%;width:100%;transform-origin:left;transform:scaleX(0);
+    background:linear-gradient(90deg,#ff8a3a,#ffe03d)}
+  #dmgflash{position:fixed;inset:0;pointer-events:none;z-index:8;background:var(--tomato);opacity:0}
+
+  /* ---------- stage: always-landscape rotation ---------- */
+  html,body{background:#000;overscroll-behavior:none}
+  #stage{position:fixed;top:0;left:0;overflow:hidden;transform-origin:top left;background:var(--char)}
+  #app,#dmgflash,#vign,#hud,#veil,#touch,.hint{position:absolute}
+
+  /* ---------- touch controls ---------- */
+  #touch{inset:0;z-index:15;pointer-events:none;display:none;font-family:"DM Mono",monospace}
+  #touch.on{display:block}
+  .tzone{pointer-events:auto;touch-action:none}
+  .b{pointer-events:auto;touch-action:none;border:0;background:none;color:var(--cream);
+    font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+  #tstick{position:absolute;left:calc(var(--u)*5);bottom:calc(var(--u)*8);
+    width:calc(var(--u)*30);height:calc(var(--u)*30);border-radius:50%;
+    background:radial-gradient(circle,#ffffff12,#ffffff05);border:2px solid #ffffff2e;box-shadow:inset 0 0 22px #0007}
+  #tnub{position:absolute;left:50%;top:50%;width:44%;height:44%;margin:-22% 0 0 -22%;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%,#ffe9c8,#c77b3b);border:2px solid #ffffff88;
+    box-shadow:0 4px 12px #0009;will-change:transform}
+  #tface{position:absolute;right:calc(var(--u)*4);bottom:calc(var(--u)*5);
+    width:calc(var(--u)*42);height:calc(var(--u)*42);display:grid;
+    grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);place-items:center;pointer-events:none}
+  .bg{width:calc(var(--u)*13.5);height:calc(var(--u)*13.5);border-radius:50%;display:grid;place-items:center;
+    background:#160f08cc;border:2px solid #ffffff30;box-shadow:0 5px 0 #0007,inset 0 0 12px #0006;transition:transform .05s}
+  .bg .g{font-size:calc(var(--u)*6.4);line-height:1;transform:translateY(-1px)}
+  .bg .lab{font-size:calc(var(--u)*3);font-weight:700;letter-spacing:.04em}
+  .bg.press{transform:translateY(3px);box-shadow:0 2px 0 #0007,inset 0 0 12px #0008;filter:brightness(1.35)}
+  .cross{grid-column:2;grid-row:3;border-color:#7fb2d6;color:#bfe0f5}
+  .square{grid-column:1;grid-row:2;border-color:#ff6a9a;color:#ffc2d6}
+  .tri{grid-column:2;grid-row:1;border-color:#8fc866;color:#cdebb4}
+  .roll{grid-column:3;grid-row:2;border-color:#f4e4c1;color:#f4e4c1}
+  .pill{position:absolute;right:calc(var(--u)*49);bottom:calc(var(--u)*9);
+    width:calc(var(--u)*13);height:calc(var(--u)*23);border-radius:calc(var(--u)*7);
+    background:#160f08cc;border:2px solid var(--copper);box-shadow:0 5px 0 #0007;
+    font-size:calc(var(--u)*3.4);letter-spacing:.14em;writing-mode:vertical-rl;text-orientation:mixed;display:grid;place-items:center}
+  .pill.press{transform:translateY(3px);filter:brightness(1.35)}
+  .mini{width:calc(var(--u)*11);height:calc(var(--u)*11);border-radius:50%;display:grid;place-items:center;
+    background:#160f08cc;border:2px solid #ffffff30;box-shadow:0 4px 0 #0007;font-size:calc(var(--u)*3);letter-spacing:.06em}
+  .mini.press{transform:translateY(2px);filter:brightness(1.35)}
+  #bLock{position:absolute;right:calc(var(--u)*4);top:calc(var(--u)*4)}
+  #tcam{position:absolute;left:calc(var(--u)*4);top:calc(var(--u)*4);display:flex;gap:calc(var(--u)*2.5)}
+</style>
+</head>
+<body>
+<div id="stage">
+<div id="app"></div>
+<div id="dmgflash"></div>
+<div id="vign"></div>
+
+<div id="hud">
+  <div id="plate">
+    <div id="hpwrap">
+      <div id="hpghost"></div><div id="hpfill"></div>
+      <div id="hplabel">HEALTH</div>
+    </div>
+    <div id="wpnrow"><div id="wpnname">BARE HANDS</div><div id="pips"></div></div>
+  </div>
+  <div id="cooks"><div id="cooksN">0</div><div id="cooksL">COOKS ON THE LINE</div><div id="waveL"></div></div>
+  <div id="combo"><div id="comboN">0</div><div id="comboL">HIT COMBO</div></div>
+  <div id="prompt"></div>
+  <div id="toast"></div>
+  <div id="grabui"><div class="gmsg">MASH TO BREAK FREE!</div><div class="gbarwrap"><i id="grabfill"></i></div></div>
+  <div id="words"></div>
+</div>
+<div class="hint" id="hint"></div>
+
+<div id="touch">
+  <div id="tstick" class="tzone"><div id="tnub"></div></div>
+  <div id="tface">
+    <button class="b bg square" data-b="heavy"><span class="lab">HEAVY</span></button>
+    <button class="b bg tri" data-b="pickup"><span class="lab">GRAB</span></button>
+    <button class="b bg roll" data-b="dodge"><span class="lab">DASH</span></button>
+    <button class="b bg cross" data-b="light"><span class="lab">HIT</span></button>
+  </div>
+  <button id="bGuard" class="b pill" data-hold="guard">GUARD</button>
+  <button id="bLock" class="b mini" data-b="lock">LOCK</button>
+  <div id="tcam">
+    <button class="b mini" data-hold="camL">&#9668;</button>
+    <button class="b mini" data-hold="camR">&#9658;</button>
+  </div>
+</div>
+
+<div id="veil">
+  <div class="card" id="card"></div>
+</div>
+</div><!--/stage-->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+/* =========================================================================
+   SHORT ORDER — a 3D kitchen beat-'em-up vertical slice.
+   Free roam, soft auto-aim, weight-driven weapons that break.
+   Built crowd-first; carries the "chunky flat-shaded + juice" DNA of Glass Jaw.
+   The whole night is wrapped in startNight(cfg,onEnd) so a cooking-loop layer
+   can feed it a config and read a result later without touching the innards.
+   ========================================================================= */
+const V3 = THREE.Vector3;
+const TAU = Math.PI*2;
+const clamp = (v,a,b)=>v<a?a:v>b?b:v;
+const lerp  = (a,b,t)=>a+(b-a)*t;
+const rand  = (a,b)=>a+Math.random()*(b-a);
+const damp  = (cur,tgt,l,dt)=>cur+(tgt-cur)*(1-Math.exp(-l*dt));
+const angLerp=(a,b,t)=>{let d=((b-a+Math.PI)%TAU)-Math.PI; if(d<-Math.PI)d+=TAU; return a+d*t;};
+
+/* palette */
+const COL = { cream:0xf4e4c1, flame:0xff6a1e, copper:0xc77b3b, steel:0x7fb2d6,
+  herb:0x8fc866, tomato:0xff3b30, ink:0x2a1c10, steelmat:0xb9c4cc, dark:0x0d0906 };
+
+/* ---------------------------------------------------------------- renderer */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x140d07);
+scene.fog = new THREE.Fog(0x140d07, 14, 30);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 120);
+camera.position.set(0,6,9);
+
+/* ---------------------------------------------------------- post-processing */
+const DPR = Math.min(devicePixelRatio,2);
+const rt = new THREE.WebGLRenderTarget(2,2,{ minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, format:THREE.RGBAFormat });
+const postScene = new THREE.Scene();
+const postCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const POST = new THREE.ShaderMaterial({
+  uniforms:{
+    tDiffuse:{value:rt.texture},
+    uAber:{value:0}, uZoom:{value:0}, uFlash:{value:0}, uGlitch:{value:0},
+    uShock:{value:0}, uSat:{value:1}, uTime:{value:0}, uImpact:{value:0},
+    uFlashCol:{value:new THREE.Color(0xffffff)},
+    uImpA:{value:new THREE.Color(0xFFE03D)}, uImpB:{value:new THREE.Color(0x140c07)}
+  },
+  vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }',
+  fragmentShader:[
+  'uniform sampler2D tDiffuse;',
+  'uniform float uAber,uZoom,uFlash,uGlitch,uShock,uSat,uTime,uImpact;',
+  'uniform vec3 uFlashCol, uImpA, uImpB;',
+  'varying vec2 vUv;',
+  'float hash(float n){ return fract(sin(n)*43758.5453); }',
+  'void main(){',
+  '  vec2 uv=vUv; vec2 c=uv-0.5; float r=length(c); vec2 dir=c/max(r,0.0001);',
+  '  if(uShock>0.001){ float d=abs(r-uShock*0.85); float w=smoothstep(0.10,0.0,d)*(1.0-uShock); uv+=dir*w*0.075; }',
+  '  if(uGlitch>0.001){ float band=floor(uv.y*22.0); float n=hash(band*13.13+floor(uTime*46.0)); uv.x+=(n-0.5)*uGlitch*0.14*step(0.55,n); }',
+  '  float ab=uAber*(0.18+r*1.4); vec3 sum=vec3(0.0); float tot=0.0;',
+  '  for(int i=0;i<6;i++){ float t=float(i)/5.0; vec2 s=uv-c*uZoom*t; float w=1.0-t*0.55;',
+  '    sum.r+=texture2D(tDiffuse,s+dir*ab).r*w; sum.g+=texture2D(tDiffuse,s).g*w; sum.b+=texture2D(tDiffuse,s-dir*ab).b*w; tot+=w; }',
+  '  vec3 col=sum/tot;',
+  '  float l=dot(col,vec3(0.299,0.587,0.114)); col=mix(vec3(l),col,uSat);',
+  '  col+=uFlashCol*uFlash;',
+  '  if(uImpact>0.5){ float li=dot(col,vec3(0.299,0.587,0.114)); float e=smoothstep(0.30,0.46,li); col=mix(uImpB,uImpA,step(0.5,e)); }',
+  '  col*=1.0-0.05*step(0.5,fract(gl_FragCoord.y*0.5));',
+  '  col*=smoothstep(1.12,0.30,r);',
+  '  gl_FragColor=vec4(col,1.0);',
+  '}'].join('\n')
+});
+postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), POST));
+const IMP={ frames:0 };
+function impactFrames(n,a,b){ IMP.frames=Math.max(IMP.frames,n);
+  POST.uniforms.uImpA.value.setHex(a===undefined?0xFFE03D:a);
+  POST.uniforms.uImpB.value.setHex(b===undefined?0x140c07:b); }
+function postTick(raw){
+  const U=POST.uniforms, k=1-Math.min(1,raw*9);
+  U.uAber.value*=k; U.uZoom.value*=k; U.uFlash.value*=k; U.uGlitch.value*=k; U.uShock.value*=k;
+  U.uSat.value += (1-U.uSat.value)*Math.min(1,raw*6);
+  if(U.uShock.value>0.001) U.uShock.value=Math.min(1, U.uShock.value+raw*3.2); // expanding ring
+  U.uTime.value=GAME.t;
+  U.uImpact.value = IMP.frames>0 ? 1 : 0; if(IMP.frames>0) IMP.frames--;
+}
+function hitPost(power,col){ const U=POST.uniforms;
+  U.uAber.value=0.004+power*0.012; U.uZoom.value=0.03+power*0.075;
+  U.uFlash.value=0.10+power*0.28; U.uFlashCol.value.setHex(col); U.uShock.value=0.001;
+  if(power>0.7) U.uGlitch.value=0.6; }
+
+/* ---------------------------------------------------------------- lights */
+const hemi = new THREE.HemisphereLight(0xffdcae, 0x1a0e06, 0.55); scene.add(hemi);
+const key = new THREE.DirectionalLight(0xffe3b0, 1.5);
+key.position.set(6,12,4); key.castShadow = true;
+key.shadow.mapSize.set(2048,2048);
+key.shadow.camera.near=1; key.shadow.camera.far=44;
+key.shadow.camera.left=-16; key.shadow.camera.right=16; key.shadow.camera.top=16; key.shadow.camera.bottom=-16;
+key.shadow.bias=-0.0007; key.shadow.radius=3;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0x6f9fd0, 0.5); fill.position.set(-8,6,-6); scene.add(fill);
+const stoveGlow = new THREE.PointLight(0xff6a1e, 0.9, 16, 2); stoveGlow.position.set(-8.5,1.4,-4); scene.add(stoveGlow);
+const rim = new THREE.PointLight(0x8fc866, 0.5, 20, 2); rim.position.set(9,3,7); scene.add(rim);
+
+/* ================================================================ ARENA */
+const ARENA = { w:22, d:15 };       // interior half handled below
+const HALFW = ARENA.w/2, HALFD = ARENA.d/2;
+const OBST = [];                     // {x,z,rx,rz} axis-aligned boxes for collision
+const arena = new THREE.Group(); scene.add(arena);
+
+function tileTex(){
+  const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
+  const a='#e9d7ad', b='#3a3f45';
+  for(let y=0;y<4;y++)for(let x=0;x<4;x++){ g.fillStyle=((x+y)&1)?a:b; g.fillRect(x*64,y*64,64,64); }
+  g.globalAlpha=.08; g.fillStyle='#000';
+  for(let i=0;i<400;i++){ g.fillRect(Math.random()*256,Math.random()*256,2,2); }
+  g.globalAlpha=1; g.strokeStyle='#00000033'; g.lineWidth=2;
+  for(let i=0;i<=256;i+=64){ g.beginPath();g.moveTo(i,0);g.lineTo(i,256);g.moveTo(0,i);g.lineTo(256,i);g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(6,4);
+  t.anisotropy=4; return t;
+}
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(ARENA.w,ARENA.d),
+  new THREE.MeshStandardMaterial({ map:tileTex(), roughness:.85, metalness:.05 }));
+floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; arena.add(floor);
+
+const wallMat = new THREE.MeshStandardMaterial({ color:0x2a1d12, roughness:.9 });
+const tileWallMat = new THREE.MeshStandardMaterial({ color:0xcdb492, roughness:.6 });
+function wall(x,z,w,h,d,mat){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat||wallMat);
+  m.position.set(x,h/2,z); m.receiveShadow=true; m.castShadow=true; arena.add(m); return m; }
+wall(0,-HALFD,ARENA.w,4,0.5,tileWallMat);
+wall(0, HALFD,ARENA.w,4,0.5,tileWallMat);
+wall(-HALFW,0,0.5,4,ARENA.d,tileWallMat);
+wall( HALFW,0,0.5,4,ARENA.d,tileWallMat);
+
+/* a stainless counter island + stations, each an obstacle */
+function counter(x,z,w,d,top){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(w,1.05,d),
+    new THREE.MeshStandardMaterial({color:0x8b9299,roughness:.35,metalness:.55,flatShading:true}));
+  body.position.y=0.52; body.castShadow=body.receiveShadow=true; g.add(body);
+  const tp=new THREE.Mesh(new THREE.BoxGeometry(w+0.1,0.1,d+0.1),
+    new THREE.MeshStandardMaterial({color:top||0xc3cbd1,roughness:.25,metalness:.7,flatShading:true}));
+  tp.position.y=1.08; tp.castShadow=tp.receiveShadow=true; g.add(tp);
+  g.position.set(x,0,z); arena.add(g);
+  OBST.push({x:x,z:z,rx:w/2+0.35,rz:d/2+0.35});
+  return g;
+}
+counter(0,0,4.4,1.5);                 // center island
+counter(-9.4,3.6,2.2,3.0);            // left prep
+counter(9.4,-3.4,2.2,3.0);            // right prep
+
+/* stove with glowing burners along the back-left wall */
+(function stove(){
+  const g=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.BoxGeometry(4.4,1.05,1.4),
+    new THREE.MeshStandardMaterial({color:0x20252b,roughness:.5,metalness:.5,flatShading:true}));
+  base.position.y=0.52; base.castShadow=base.receiveShadow=true; g.add(base);
+  const top=new THREE.Mesh(new THREE.BoxGeometry(4.5,0.12,1.5),
+    new THREE.MeshStandardMaterial({color:0x14181d,roughness:.4,metalness:.6})); top.position.y=1.08; g.add(top);
+  for(let i=0;i<3;i++){
+    const bx=-1.4+i*1.4;
+    const burner=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.06,6,16),
+      new THREE.MeshStandardMaterial({color:0x0a0a0a,roughness:.7}));
+    burner.rotation.x=-Math.PI/2; burner.position.set(bx,1.16,0); g.add(burner);
+    const flame=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.34,10),
+      new THREE.MeshStandardMaterial({color:0xff7a1e,emissive:0xff5a10,emissiveIntensity:2.2,roughness:.4}));
+    flame.position.set(bx,1.3,0); g.add(flame);
+    flame.userData.b=bx;
+  }
+  g.position.set(-8.5,0,-HALFD+1.2); arena.add(g);
+  OBST.push({x:-8.5,z:-HALFD+1.2,rx:2.5,rz:1.1});
+  arena.userData.stoveFlames=g.children.filter(c=>c.geometry&&c.geometry.type==='ConeGeometry');
+})();
+
+/* hanging pot rack (decor) */
+(function rack(){
+  const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,6,8),
+    new THREE.MeshStandardMaterial({color:0x30240f,roughness:.6,metalness:.4}));
+  bar.rotation.z=Math.PI/2; bar.position.set(0,3.4,-HALFD+2.4); arena.add(bar);
+  for(let i=0;i<6;i++){
+    const p=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.24,0.34,12,1,true),
+      new THREE.MeshStandardMaterial({color:0xb0741f,roughness:.35,metalness:.7,side:THREE.DoubleSide,flatShading:true}));
+    p.position.set(-2.4+i*0.96,2.9,-HALFD+2.4); p.castShadow=true; arena.add(p);
+  }
+})();
+
+/* =============================================================== WEAPONS */
+/* data: reach in metres, dmg, wind/rec seconds (weight!), stagger, durability in "hits".
+   heavy attacks cost 2 durability, guarding costs 1. class drives the *feel*. */
+const WEAPONS = {
+  fists:    { key:'fists',    name:'Bare Hands',   cls:'light',  reach:1.05, light:5,  heavy:9,  wind:0.11, rec:0.15, stagger:0.30, gbreak:false, knock:false, dur:Infinity, shake:0.20, heft:0.12, metal:false, tint:0xd8b38a },
+  spatula:  { key:'spatula',  name:'Spatula',      cls:'light',  reach:1.65, light:6,  heavy:11, wind:0.10, rec:0.14, stagger:0.35, gbreak:false, knock:false, dur:24, shake:0.24, heft:0.20, metal:true,  tint:0xd7d2c4 },
+  nonstick: { key:'nonstick', name:'Nonstick Pan', cls:'medium', reach:1.6,  light:9,  heavy:18, wind:0.17, rec:0.24, stagger:0.65, gbreak:false, knock:false, dur:18, shake:0.5,  heft:0.58, metal:true,  tint:0x2b2b2f },
+  castiron: { key:'castiron', name:'Cast Iron',    cls:'heavy',  reach:1.7,  light:16, heavy:32, wind:0.34, rec:0.44, stagger:1.25, gbreak:true,  knock:true,  dur:12, shake:1.0,  heft:1.0,  metal:true,  tint:0x1a1a1c },
+  knife:    { key:'knife',    name:"Chef's Knife", cls:'light',  reach:1.85, light:8,  heavy:15, wind:0.10, rec:0.13, stagger:0.30, gbreak:false, knock:false, dur:14, shake:0.28, heft:0.24, metal:true, thrust:true, tint:0xdfe6ea },
+  potlid:   { key:'potlid',   name:'Pot Lid',      cls:'shield', reach:1.1,  light:4,  heavy:7,  wind:0.15, rec:0.20, stagger:0.30, gbreak:false, knock:false, dur:30, shake:0.20, heft:0.30, metal:true, shield:true, tint:0xb9c4cc }
+};
+/* build a weapon mesh, business-end pointing +Z out of the hand */
+function makeWeaponMesh(key){
+  const g=new THREE.Group(); if(key==='fists') return g;
+  const w=WEAPONS[key];
+  const M=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m,flatShading:true});
+  const handle=(len,rad,col)=>{ const h=new THREE.Mesh(new THREE.CylinderGeometry(rad,rad*0.9,len,8),M(col||0x5a3a1c,.6,.1));
+    h.rotation.x=Math.PI/2; h.position.z=len/2; h.castShadow=true; g.add(h); return h; };
+  if(key==='spatula'){
+    handle(0.42,0.045,0x6a4a22);
+    const neck=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.02,0.22),M(0xb8bcc2,.4,.7)); neck.position.z=0.55; g.add(neck);
+    const head=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.03,0.34),M(w.tint,.4,.6)); head.position.z=0.82; head.castShadow=true;
+    for(let i=-1;i<2;i++){const s=new THREE.Mesh(new THREE.BoxGeometry(0.03,0.035,0.34),M(0x2a2a2a,.6,.3));s.position.set(i*0.08,0,0.82);g.add(s);}
+    g.add(head);
+  } else if(key==='nonstick'||key==='castiron'){
+    handle(0.5,0.05, key==='castiron'?0x141416:0x24140a);
+    const pan=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.3,0.12,20),M(w.tint,.3,key==='castiron'?.35:.5));
+    pan.position.z=0.86; pan.castShadow=true; g.add(pan);
+    const inner=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.24,0.02,20),M(key==='castiron'?0x0f0f10:0x3a3a40,.5,.3));
+    inner.position.set(0,0.06,0.86); g.add(inner);
+  } else if(key==='knife'){
+    handle(0.24,0.045,0x1c1c22);
+    const bolster=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.07,0.06),M(0x9aa0a6,.3,.8)); bolster.position.z=0.32; g.add(bolster);
+    const blade=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.02,0.5),M(w.tint,.15,.9)); blade.position.z=0.62; blade.castShadow=true;
+    blade.geometry.translate(0,0,0); g.add(blade);
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(0.055,0.16,4),M(w.tint,.15,.9));
+    tip.rotation.x=Math.PI/2; tip.position.z=0.94; g.add(tip);
+  } else if(key==='potlid'){
+    const dome=new THREE.Mesh(new THREE.SphereGeometry(0.42,18,10,0,TAU,0,Math.PI/2.4),M(w.tint,.28,.65));
+    dome.rotation.x=Math.PI/2; dome.position.z=0.35; dome.castShadow=true; g.add(dome);
+    const knob=new THREE.Mesh(new THREE.SphereGeometry(0.07,10,8),M(0x2a2a2a,.5,.3)); knob.position.z=0.5; g.add(knob);
+  }
+  return g;
+}
+
+/* ================================================================ CHEFS */
+const M = (c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m||0,flatShading:true});
+function seg(r1,r2,mat){ // a limb bone, oriented so length runs down -Y from its pivot
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,1,7),mat); m.castShadow=true; return m; }
+
+/* ---- 2-bone IK + world-space footwork (ported from Glass Jaw) ---- */
+const UP=new V3(0,1,0), FWD=new V3(0,0,1);
+const THIGH=0.44, SHIN=0.44, ARM_U=0.40, ARM_F=0.40;
+const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
+const KNEE_FWD=new V3(0,0,1);                        // knees break forward
+/* combo cycle: distinct swing shapes so a chain reads as jab->cross->hook, not
+   the same swing on repeat. each is a windup point s and a strike point e in
+   upper-local space (weapon hand), an elbow pole `bend`, body coil/follow twist,
+   and a forward lean. */
+const SWINGS=[
+  { name:'forehand', s:[0.55,1.62,-0.10], e:[-0.46,1.36,0.92], bend:[0.95,-0.55,0.4], coil:0.50, follow:-0.72, lean:0.26 },
+  { name:'backhand', s:[-0.50,1.54,-0.05], e:[0.56,1.38,0.92], bend:[-0.95,-0.55,0.4], coil:-0.50, follow:0.72, lean:0.26 },
+  { name:'chop',     s:[0.28,2.05,-0.12], e:[-0.10,1.04,0.86], bend:[0.5,-1,0.5],   coil:0.32, follow:-0.46, lean:0.34 }
+];
+const FINISH={ name:'smash', s:[0.12,2.20,-0.28], e:[0.00,0.92,0.96], bend:[0.35,-1,0.5], coil:0.42, follow:-0.86, lean:0.44 };
+/* bare-hands: a jab, jab, hook, uppercut cycle. `hand` = which fist throws (0=L,1=R);
+   the other stays up in guard. straight punches fire out from the shoulder. */
+const PUNCHES=[
+  { name:'jab',   hand:0, s:[-0.22,1.42,0.28], e:[-0.05,1.56,1.02], bend:[-0.35,-0.45,0.5], coil:0.16, follow:-0.22, lean:0.18 },
+  { name:'jab',   hand:1, s:[ 0.22,1.42,0.28], e:[ 0.05,1.56,1.02], bend:[ 0.35,-0.45,0.5], coil:-0.16, follow:0.22, lean:0.18 },
+  { name:'hook',  hand:0, s:[-0.50,1.52,0.14], e:[ 0.26,1.46,0.86], bend:[-0.95,-0.35,0.3], coil:0.5, follow:-0.72, lean:0.28 },
+  { name:'upper', hand:1, s:[ 0.28,1.04,0.40], e:[ 0.12,1.78,0.72], bend:[ 0.4,-0.9,0.5],  coil:0.42, follow:-0.55, lean:0.36 }
+];
+const PUNCH_FINISH=PUNCHES[3];   // heavy bare-hand = the uppercut
+const _tb=new V3(),_dirN=new V3(),_bnd=new V3(),_jnt=new V3(),_om=new V3(),_kt=new V3(),_knee=new V3();
+function orientBone(mesh,a,b){
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  _om.subVectors(b,a); const len=Math.max(_om.length(),0.01);
+  mesh.scale.set(1,len,1); mesh.quaternion.setFromUnitVectors(UP,_om.normalize());
+}
+/* length-LOCKED bone: always exactly `L` long, anchored at a, pointing at b.
+   a bone can never stretch — if the target's out of reach the limb falls short. */
+function orientFixed(mesh,a,b,L){
+  _om.subVectors(b,a); const d=_om.length(); if(d<1e-5) _om.set(0,-1,0); else _om.divideScalar(d);
+  mesh.position.copy(a).addScaledVector(_om, L*0.5);
+  mesh.scale.set(1, L, 1); mesh.quaternion.setFromUnitVectors(UP, _om);
+}
+function solveTwoBone(b1,b2,root,tip,L1,L2,bendDir,outJoint){
+  _tb.subVectors(tip,root); let d=_tb.length(); if(d<1e-4){ _tb.set(0,-1,0); d=1e-4; }
+  _dirN.copy(_tb).divideScalar(d);
+  if(d>=L1+L2){ _jnt.copy(root).addScaledVector(_dirN, d*(L1/(L1+L2))); }
+  else{
+    _bnd.copy(bendDir); _bnd.addScaledVector(_dirN,-_bnd.dot(_dirN));
+    if(_bnd.lengthSq()<1e-5){ _bnd.set(0,-1,0).addScaledVector(_dirN,_dirN.y); }
+    _bnd.normalize();
+    const a=(L1*L1-L2*L2+d*d)/(2*d); const h=Math.sqrt(Math.max(0,L1*L1-a*a));
+    _jnt.copy(root).addScaledVector(_dirN,a).addScaledVector(_bnd,h);
+  }
+  // lock the knee to exactly L1 from the root along the bend direction, then
+  // draw both bones at fixed length — reachable poses are unchanged, over-reach
+  // just leaves the foot short instead of stretching the leg.
+  _kt.subVectors(_jnt,root); const kl=_kt.length(); if(kl>1e-5) _kt.divideScalar(kl); else _kt.set(0,-1,0);
+  _knee.copy(root).addScaledVector(_kt, L1);
+  orientFixed(b1, root, _knee, L1);
+  orientFixed(b2, _knee, tip, L2);
+  if(outJoint) outJoint.copy(_knee);
+}
+function boneIK(r1,r2,mat){ const m=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,1,8),mat); m.castShadow=true; return m; }
+// ground-plane local<->world (a chef only ever yaws)
+function toGround(a,lx,lz,out){ const c=Math.cos(a.facing),s=Math.sin(a.facing);
+  out.set(a.pos.x+lx*c+lz*s, 0, a.pos.z - lx*s + lz*c); return out; }
+function toRootLocal(a,w,out){ const dx=w.x-a.pos.x, dz=w.z-a.pos.z, c=Math.cos(a.facing), s=Math.sin(a.facing);
+  out.set(dx*c - dz*s, w.y, dx*s + dz*c); return out; }
+
+/* ---- squish: flesh dents on contact via an injected vertex-shader push ---- */
+const SQUISH={ headMax:0.14, radius:0.30, stiff:380, damp:9, rebound:0.70 };
+function dentify(mat, radius){
+  const u={ uDentP:{value:new V3(0,99,0)}, uDentN:{value:new V3(0,0,1)}, uDentA:{value:0}, uDentR:{value:radius||SQUISH.radius} };
+  mat.userData.u=u;
+  mat.onBeforeCompile=function(sh){
+    sh.uniforms.uDentP=u.uDentP; sh.uniforms.uDentN=u.uDentN; sh.uniforms.uDentA=u.uDentA; sh.uniforms.uDentR=u.uDentR;
+    sh.vertexShader='uniform vec3 uDentP; uniform vec3 uDentN; uniform float uDentA; uniform float uDentR;\n'
+      + sh.vertexShader.replace('#include <begin_vertex>',
+        '#include <begin_vertex>\nfloat dD=distance(transformed,uDentP);\nfloat dW=smoothstep(uDentR,0.0,dD);\ndW=dW*dW*(3.0-2.0*dW);\ntransformed+=uDentN*(uDentA*dW);\n');
+  };
+  mat.customProgramCacheKey=function(){ return 'dent'; };
+  return mat;
+}
+function deform(max){ return { a:0, v:0, t:0, max:max, p:new V3(0,99,0), n:new V3(0,0,1) }; }
+const _lp=new V3();
+function springDeform(d, raw){
+  d.v += ((d.t-d.a)*SQUISH.stiff - d.v*SQUISH.damp)*raw;
+  d.a += d.v*raw;
+  d.a = clamp(d.a, -d.max*SQUISH.rebound, d.max);
+  d.t = 0;
+}
+function applyDeform(mesh, d, scale){
+  const u=mesh.material.userData.u; if(!u) return;
+  u.uDentA.value = d.a/(scale||1); u.uDentP.value.copy(d.p); u.uDentN.value.copy(d.n);
+}
+
+function makeChef(o){
+  const skin=M(o.skin,.7), apronMat=M(o.apron,.6), toqueMat=M(0xf7f2e8,.85), bootMat=M(o.boot||0x241a12,.6);
+  const root=new THREE.Group();
+  const body=new THREE.Group(); root.add(body);       // bob/lean/squash lives here
+  const WAIST=1.06;
+  const spine=new THREE.Group(); spine.position.y=WAIST; body.add(spine);   // waist joint — upper body flexes here
+  const upper=new THREE.Group(); upper.position.y=-WAIST; spine.add(upper);  // offset back so children keep their coords; twists for gait & swings
+
+  const hips=new THREE.Mesh(new THREE.CylinderGeometry(0.30,0.32,0.34,8),apronMat);
+  hips.position.y=0.82; hips.castShadow=true; body.add(hips);
+  const jacketMat=M(o.jacket||0xece5d6,.72);
+  // lower abdomen (belly) — stays planted below the waist joint
+  const abMesh=new THREE.Mesh(new THREE.CylinderGeometry(0.315,0.335,0.46,10), jacketMat);
+  abMesh.position.y=0.99; abMesh.castShadow=true; body.add(abMesh);
+  // upper chest — broad at the shoulders, pinched to the waist; flexes on the spine
+  const torso=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.30,0.62,10), jacketMat);
+  torso.position.y=1.44; torso.castShadow=true; upper.add(torso);
+  const cos=[];   // fiddly bits hidden during a ragdoll death
+  cos.push(abMesh);
+  // double-breasted jacket buttons
+  for(let i=0;i<3;i++){ for(const sx of [-1,1]){ const b=new THREE.Mesh(new THREE.SphereGeometry(0.028,6,5),M(0x2a2a2a,.6));
+    b.position.set(sx*0.09,1.16+i*0.16,0.34); upper.add(b); cos.push(b);} }
+  const apron=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.7,0.06),apronMat);
+  apron.position.set(0,1.14,0.33); apron.castShadow=true; upper.add(apron); cos.push(apron);
+  let scarf=null;
+  if(o.scarf){
+    scarf=new THREE.Mesh(new THREE.TorusGeometry(0.2,0.06,6,14,Math.PI*1.2),M(o.scarf,.6));
+    scarf.rotation.x=Math.PI/2; scarf.rotation.z=Math.PI*0.4; scarf.position.set(0,1.6,0.14); upper.add(scarf); cos.push(scarf);
+  }
+
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.235,18,14), dentify(skin.clone()));
+  head.position.set(0,1.86,0.02); head.castShadow=true; upper.add(head);
+  const brow=new THREE.Mesh(new THREE.BoxGeometry(0.32,0.06,0.08),M(0x1a120a,.9)); brow.position.set(0,1.9,0.22); upper.add(brow); cos.push(brow);
+  for(const sx of [-1,1]){ const eye=new THREE.Mesh(new THREE.SphereGeometry(0.03,6,6),M(0x120a06,.5));
+    eye.position.set(sx*0.09,1.86,0.22); upper.add(eye); cos.push(eye); }
+  // headwear: the player's a chef (toque); enemies are customers (hair, no hat)
+  const toque=new THREE.Group();
+  if(o.customer){
+    const hairMat=M(o.hair||0x2a1c12,.92);
+    const hair=new THREE.Mesh(new THREE.SphereGeometry(0.245,12,9,0,TAU,0,Math.PI*0.6),hairMat);
+    hair.scale.set(1.02,0.92,1.05); toque.add(hair);
+    toque.position.set(0,1.9,0.0);
+  } else {
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.24,0.16,14),toqueMat); band.position.y=0.08; toque.add(band);
+    const puff=new THREE.Mesh(new THREE.SphereGeometry(0.27,14,10),toqueMat); puff.position.y=0.28; puff.scale.y=1.15; toque.add(puff);
+    toque.position.set(0,2.02,0.02);
+  }
+  toque.children.forEach(c=>c.castShadow=true); upper.add(toque);
+
+  // arms: IK bones under `upper` so the shoulder rides the torso twist.
+  // each hand is a world-target the arm reaches for (guard pose / punch / swing).
+  const arms=[];
+  for(let i=0;i<2;i++){
+    const uArm=boneIK(0.10,0.088,skin), fArm=boneIK(0.09,0.078,skin);
+    const hand=new THREE.Group();
+    const fist=new THREE.Mesh(new THREE.SphereGeometry(0.1,10,8),skin); fist.castShadow=true; hand.add(fist);
+    upper.add(uArm); upper.add(fArm); upper.add(hand);
+    arms.push({ up:uArm, fore:fArm, hand, fist,
+      sh:new V3((i===0?-0.4:0.4),1.54,0),
+      tgt:new V3((i===0?-0.32:0.34),1.34,0.36), elb:new V3() });
+  }
+  const armL=arms[0], armR=arms[1];
+  // legs: IK bones under `root`; feet plant in world space (footwork)
+  const legs=[];
+  for(let i=0;i<2;i++){
+    const th=boneIK(0.13,0.1,apronMat), sh=boneIK(0.1,0.085,skin);
+    const boot=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.1,0.3),bootMat); boot.castShadow=true;
+    root.add(th); root.add(sh); root.add(boot);
+    legs.push({ thigh:th, shin:sh, boot,
+      hip:new V3((i===0?-0.16:0.16),0.8,0), knee:new V3(),
+      world:new V3(), from:new V3(), to:new V3(), stepT:1, lift:0 });
+  }
+
+  root.userData = {
+    body, spine, upper, torso, abMesh, head, hips, toque, arms, legs, armL, armR, cos,
+    dHead: deform(SQUISH.headMax),
+    mats:{ skin, jacket:torso.material, apron:apronMat, scarf:scarf?scarf.material:null },
+    weaponGroup:null, weaponKey:'fists',
+    rest:{ torso:{p:torso.position.clone(),q:torso.quaternion.clone(),s:torso.scale.clone()},
+           head:head.position.clone(), hips:hips.position.clone(), toque:toque.position.clone() }
+  };
+  scene.add(root);
+  return root;
+}
+/* restore the standing pose after a ragdoll (the ragdoll leaves torso/head/hips posed) */
+function resetRagPose(a){
+  const u=a.chef.userData, R=u.rest; if(!R) return;
+  a.rag=null;
+  u.torso.position.copy(R.torso.p); u.torso.quaternion.copy(R.torso.q); u.torso.scale.copy(R.torso.s);
+  u.head.position.copy(R.head); u.head.rotation.set(0,0,0);
+  u.hips.position.copy(R.hips); u.hips.rotation.set(0,0,0);
+  u.toque.position.copy(R.toque); u.toque.rotation.set(0,0,0);
+  u.spine.rotation.set(0,0,0); u.upper.rotation.set(0,0,0); u.abMesh.rotation.set(0,0,0);
+  u.body.position.set(0,0,0); u.body.rotation.set(0,0,0); u.body.scale.set(1,1,1);
+  a.chef.scale.setScalar(a.kind==='tough'?1.12:1);
+  u.dHead.a=0; u.dHead.v=0; u.dHead.t=0;
+  for(const m of u.cos) m.visible=true;
+}
+/* give a chef a weapon in the right hand */
+function equip(chef, key){
+  const u=chef.userData;
+  if(u.weaponGroup){ u.armR.hand.remove(u.weaponGroup); }
+  const g=makeWeaponMesh(key);
+  g.position.set(0.02,0,0.04); g.rotation.x=0.15;   // slight grip tilt; hand orients along the forearm
+  u.armR.hand.add(g); u.weaponGroup=g; u.weaponKey=key;
+}
+
+/* ================================================================ FX */
+/* spark pool */
+const SPARKS=[]; const sparkGeo=new THREE.TetrahedronGeometry(0.06);
+for(let i=0;i<160;i++){
+  const m=new THREE.Mesh(sparkGeo,new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xffffff,emissiveIntensity:2,flatShading:true}));
+  m.visible=false; scene.add(m); SPARKS.push({m,v:new V3(),life:0,max:1});
+}
+function burst(pos,n,col,power){
+  for(let i=0;i<n;i++){ const s=SPARKS.find(s=>s.life<=0); if(!s)break;
+    s.m.visible=true; s.m.position.copy(pos); s.m.material.color.setHex(col); s.m.material.emissive.setHex(col);
+    const a=Math.random()*TAU, up=rand(2,6)*power, sp=rand(2,5)*power;
+    s.v.set(Math.cos(a)*sp,up,Math.sin(a)*sp); s.life=s.max=rand(0.3,0.6);
+    s.m.scale.setScalar(rand(0.6,1.4)); }
+}
+function sparkTick(dt){
+  for(const s of SPARKS){ if(s.life<=0)continue; s.life-=dt;
+    s.v.y-=22*dt; s.m.position.addScaledVector(s.v,dt);
+    if(s.m.position.y<0.05){ s.m.position.y=0.05; s.v.y*=-0.4; s.v.x*=0.6; s.v.z*=0.6; }
+    const k=clamp(s.life/s.max,0,1); s.m.scale.setScalar(k*1.1); s.m.rotation.x+=dt*8; s.m.rotation.y+=dt*10;
+    if(s.life<=0)s.m.visible=false; }
+}
+/* impact ring */
+const RINGS=[];
+for(let i=0;i<10;i++){ const m=new THREE.Mesh(new THREE.RingGeometry(0.3,0.42,20),
+  new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,side:THREE.DoubleSide,depthWrite:false}));
+  m.rotation.x=-Math.PI/2; m.visible=false; scene.add(m); RINGS.push({m,life:0,max:1}); }
+function ring(pos,col,scale){ const r=RINGS.find(r=>r.life<=0); if(!r)return;
+  r.m.visible=true; r.m.position.copy(pos); r.m.position.y=0.06; r.m.material.color.setHex(col);
+  r.m.scale.setScalar(scale*0.4); r.life=r.max=0.35; r.s0=scale; }
+function ringTick(dt){ for(const r of RINGS){ if(r.life<=0)continue; r.life-=dt;
+  const k=1-r.life/r.max; r.m.scale.setScalar(r.s0*(0.4+k*1.4)); r.m.material.opacity=(1-k)*0.7;
+  if(r.life<=0)r.m.visible=false; } }
+
+/* floating words (DOM) */
+const wordsEl=document.getElementById('words');
+const wproj=new V3();
+function popWord(worldPos, txt, col, size){
+  wproj.copy(worldPos); wproj.project(camera);
+  if(wproj.z>1) return;
+  const x=(wproj.x*0.5+0.5)*STAGE.w, y=(-wproj.y*0.5+0.5)*STAGE.h;
+  const e=document.createElement('div'); e.className='word'; e.textContent=txt;
+  e.style.left=x+'px'; e.style.top=y+'px'; e.style.color=col; e.style.fontSize=(size||28)+'px';
+  e.style.transition='transform .7s cubic-bezier(.2,.8,.2,1), opacity .7s'; wordsEl.appendChild(e);
+  requestAnimationFrame(()=>{ e.style.transform='translate(-50%,-150%) scale(1) skewX(-7deg)'; });
+  requestAnimationFrame(()=>{ e.style.opacity='0'; });
+  setTimeout(()=>e.remove(),720);
+}
+/* screen shake + hitstop */
+const FX={ trauma:0, hitstop:0 };
+function shake(a){ FX.trauma=Math.min(1.85,FX.trauma+a); }
+const _shl=new V3();
+function hitstop(t){ FX.hitstop=Math.max(FX.hitstop,t); }
+/* squash-punch on a chef */
+function punchScale(chef,amt){ chef.userData._sq=amt; }
+
+/* ================================================================ AUDIO */
+let AC=null, master=null;
+function audioInit(){ if(AC)return; const A=window.AudioContext||window.webkitAudioContext; if(!A)return;
+  AC=new A(); master=AC.createGain(); master.gain.value=0.5; master.connect(AC.destination); kitchenInit(); }
+
+/* ---- room tone: pink noise (a kitchen breathes), lowpass vent murmur + a
+   bandpass "sizzle" band that opens up when the action does (à la Glass Jaw) ---- */
+const ROOM={ on:false, level:0, spike:0, murmurG:null, sizzleG:null, sizzleF:null };
+function pinkBuffer(seconds){
+  const sr=AC.sampleRate, n=(sr*seconds)|0, buf=AC.createBuffer(2,n,sr);
+  for(let ch=0;ch<2;ch++){ const d=buf.getChannelData(ch);
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for(let i=0;i<n;i++){ const w=Math.random()*2-1;
+      b0=0.99886*b0+w*0.0555179; b1=0.99332*b1+w*0.0750759; b2=0.96900*b2+w*0.1538520;
+      b3=0.86650*b3+w*0.3104856; b4=0.55000*b4+w*0.5329522; b5=-0.7616*b5-w*0.0168980;
+      const pink=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11; b6=w*0.115926;
+      const t=i/sr, ph=ch*1.7, wob=0.72+0.28*Math.sin(t*0.5+ph)*Math.sin(t*0.19+ph*0.5);
+      d[i]=pink*wob; } }
+  return buf;
+}
+function kitchenInit(){ if(!AC||ROOM.on)return;
+  const buf=pinkBuffer(6);
+  const layer=(type,freq,q,gain)=>{ const s=AC.createBufferSource(); s.buffer=buf; s.loop=true;
+    const f=AC.createBiquadFilter(); f.type=type; f.frequency.value=freq; if(q)f.Q.value=q;
+    const g=AC.createGain(); g.gain.value=gain; s.connect(f).connect(g).connect(master);
+    s.start(Math.random()*3); return {g,f}; };
+  const murmur=layer('lowpass',480,0.7,0);
+  const sizzle=layer('bandpass',2600,0.6,0);
+  ROOM.murmurG=murmur.g; ROOM.sizzleG=sizzle.g; ROOM.sizzleF=sizzle.f; ROOM.on=true;
+}
+function kitchenBump(v){ ROOM.spike=Math.min(1.5, ROOM.spike+v); }
+function kitchenTick(raw){ if(!ROOM.on)return;
+  ROOM.spike=Math.max(0, ROOM.spike-raw*0.85);
+  let base = GAME.mode==='play' ? 0.22 + Math.min(0.25, GAME.combo*0.02) : 0.12;
+  const want=Math.min(1.4, base+ROOM.spike);
+  ROOM.level += (want-ROOM.level)*Math.min(1, raw*(want>ROOM.level?6:1.6));
+  const L=ROOM.level;
+  ROOM.murmurG.gain.value = 0.05 + L*0.06;
+  ROOM.sizzleG.gain.value = Math.max(0, L-0.25)*0.10;
+  ROOM.sizzleF.frequency.value = 2200 + L*1400;   // busier kitchen gets brighter/hotter
+}
+/* one call site for buzz: the phone and any pad motors */
+function haptic(strong, weak, ms){
+  if(navigator.vibrate){ try{ navigator.vibrate(Math.round(ms*0.5)); }catch(e){} }
+  const gp=GP._pad;
+  if(gp && gp.vibrationActuator){ try{
+    gp.vibrationActuator.playEffect('dual-rumble',{duration:ms,strongMagnitude:strong,weakMagnitude:weak});
+  }catch(e){} }
+}
+function env(node,g,dur,a){ const t=AC.currentTime; const gg=AC.createGain(); gg.gain.setValueAtTime(0,t);
+  gg.gain.linearRampToValueAtTime(g,t+(a||0.005)); gg.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  node.connect(gg); gg.connect(master); node.start(t); node.stop(t+dur+0.02); }
+function tone(f0,f1,dur,type,g){ if(!AC)return; const o=AC.createOscillator(); o.type=type||'sine';
+  o.frequency.setValueAtTime(f0,AC.currentTime); o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),AC.currentTime+dur); env(o,g,dur); }
+function noise(dur,g,freq,q){ if(!AC)return; const n=AC.createBufferSource();
+  const b=AC.createBuffer(1,AC.sampleRate*dur,AC.sampleRate); const d=b.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1; n.buffer=b;
+  const f=AC.createBiquadFilter(); f.type='bandpass'; f.frequency.value=freq; f.Q.value=q||1;
+  n.connect(f); const gg=AC.createGain(); gg.gain.setValueAtTime(g,AC.currentTime);
+  gg.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+dur); f.connect(gg); gg.connect(master); n.start(); n.stop(AC.currentTime+dur); }
+const sfx={
+  thud(p){ tone(150-p*30,45,0.14+p*0.08,'sine',0.28); noise(0.09,0.16,700+p*300,1.1); },
+  clang(p){ // metallic — a few inharmonic partials
+    [1,1.63,2.11,2.71].forEach((r,i)=>tone(320*r,300*r,0.28+p*0.12,i?'triangle':'square',0.09/(i+1)*(1+p)));
+    noise(0.06,0.14,4200,7); },
+  heavy(p){ // deep weighty thunk under the clang — sells the mass
+    tone(95-p*35, 28, 0.4+p*0.25, 'sine', 0.24+p*0.14);
+    tone(150, 44, 0.22, 'sawtooth', 0.09*p);
+    noise(0.22, 0.12*p, 160, 0.6); },
+  whiff(){ noise(0.16,0.06,2200,2.4); },
+  block(){ noise(0.09,0.13,3200,6); tone(380,160,0.09,'square',0.05); },
+  break(){ noise(0.4,0.22,1400,2); tone(500,60,0.4,'sawtooth',0.14); },
+  pickup(){ tone(600,1200,0.1,'triangle',0.14); tone(900,1600,0.09,'sine',0.08); },
+  step(){ noise(0.04,0.03,240,1.4); },
+  hurt(){ noise(0.12,0.09,500,1.6); tone(200,90,0.12,'sawtooth',0.06); },
+  down(){ tone(120,40,0.5,'sine',0.24); noise(0.3,0.14,300,0.8); }
+};
+
+/* ================================================================ STATE */
+const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null };
+const enemies=[];
+let player=null;
+
+/* --- player object --- */
+function makePlayer(){
+  const chef=makeChef({ skin:0xc98b63, jacket:0xf2ead9, apron:0x3a2c55, scarf:COL.tomato, boot:0x241326 });
+  chef.userData.isPlayer=true;
+  equip(chef,'fists');
+  return {
+    chef, pos:new V3(0,0,4), vel:new V3(), yaw:Math.PI, hp:100, hpMax:100,
+    facing:Math.PI, movePhase:0, speed:0,
+    wpn:'fists', dur:Infinity,
+    attack:null, combo:0, comboStep:0, chainT:0,
+    guard:false, guardV:0,
+    iframe:0, weaveCD:0, dodgeCD:0, dodge:null, tackle:null, tackleCD:0,
+    stagger:0, hurt:0, dead:false, _sq:0,
+    lockOn:null, r:0.34,
+    _an:{ idle:Math.random()*10, twist:0, sway:0, toqueX:0, toqueXv:0, toqueZ:0, toqueZv:0, rx:0, rxv:0, rz:0, rzv:0, prevPh:0 }
+  };
+}
+/* --- enemy factory --- */
+function makeEnemy(kind, spawnPos){
+  const styles={
+    weak:{ skin:0x8a5a3a, jacket:pick([0x8a3b2f,0x35506b,0x4a5a34,0x6b4a6b]), apron:0x2a2018, scarf:0, hair:pick([0x2a1c12,0x1a1208,0x3a2a1a,0x120a06]), hp:24, scale:1.0, speed:3.6, wind:1.0, aggr:[0.7,1.6], weapon:pick(['fists','fists','spatula']) },
+    tough:{ skin:0x6b4a34, jacket:pick([0x7a2a22,0x2a3550,0x3a4028]), apron:0x241a12, scarf:0, hair:pick([0x1a1208,0x2a1c12,0x0a0805]), hp:60, scale:1.12, speed:3.2, wind:0.72, aggr:[0.5,1.1], weapon:pick(['fists','fists','nonstick']) }
+  };
+  const s=styles[kind];
+  const chef=makeChef({ skin:s.skin, jacket:s.jacket, apron:s.apron, scarf:s.scarf, hair:s.hair, customer:true, boot:0x1c130a });
+  chef.scale.setScalar(s.scale);
+  equip(chef, s.weapon);
+  const e={
+    chef, kind, pos:spawnPos.clone(), vel:new V3(), yaw:0, facing:0,
+    hp:s.hp, hpMax:s.hp, wpn:s.weapon, spd:s.speed, wind:s.wind, aggr:s.aggr,
+    state:'spawn', stateT:rand(0.2,0.8), movePhase:Math.random()*TAU, speed:0,
+    attack:null, hasToken:false, stagger:0, hurt:0, dead:false, deadT:0, _sq:0,
+    standoff:WEAPONS[s.weapon].reach + rand(0.25,0.7),
+    commit:(kind==='weak'?0.75:0.6), circleDir:Math.random()<0.5?1:-1, r:0.34*s.scale,
+    _an:{ idle:Math.random()*10, twist:0, sway:0, toqueX:0, toqueXv:0, toqueZ:0, toqueZv:0, rx:0, rxv:0, rz:0, rzv:0, prevPh:0 }
+  };
+  chef.position.copy(spawnPos);
+  return e;
+}
+function pick(a){ return a[(Math.random()*a.length)|0]; }
+
+/* ---- weapon pickups on the ground ---- */
+const PICKUPS=[];
+function spawnPickup(key,x,z){
+  const g=new THREE.Group();
+  const w=makeWeaponMesh(key); w.rotation.x=-Math.PI/2+0.2; w.position.y=0.02; g.add(w);
+  // glow disc
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(0.5,20),
+    new THREE.MeshBasicMaterial({color:COL.flame,transparent:true,opacity:0.25,depthWrite:false}));
+  disc.rotation.x=-Math.PI/2; disc.position.y=0.02; g.add(disc);
+  g.position.set(x,1.12,z); scene.add(g);
+  const p={ g, key, x, z, disc, taken:false, y0:1.12 };
+  PICKUPS.push(p); return p;
+}
+
+/* ================================================================ INPUT */
+const KEY={};
+addEventListener('keydown',e=>{ if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();
+  KEY[e.key.toLowerCase()]=true; audioInit(); if(AC&&AC.state==='suspended')AC.resume(); });
+addEventListener('keyup',e=>{ KEY[e.key.toLowerCase()]=false; });
+const MOUSE={l:false,r:false};
+renderer.domElement.addEventListener('mousedown',e=>{ if(e.button===0)MOUSE.l=true; if(e.button===2)MOUSE.r=true; audioInit(); if(AC&&AC.state==='suspended')AC.resume(); });
+addEventListener('mouseup',e=>{ if(e.button===0)MOUSE.l=false; if(e.button===2)MOUSE.r=false; });
+renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* edge-trigger tracking for taps */
+const PREV={};
+function tapK(k){ const d=!!KEY[k]; const was=PREV['k_'+k]; PREV['k_'+k]=d; return d&&!was; }
+/* gamepad */
+const GP={ index:null, prev:[], axes:[0,0,0,0] };
+addEventListener('gamepadconnected',e=>{ GP.index=e.gamepad.index; toast('Controller ready'); });
+addEventListener('gamepaddisconnected',()=>{ GP.index=null; });
+function pollPad(){
+  const pads=navigator.getGamepads?navigator.getGamepads():[];
+  const gp=GP.index!=null?pads[GP.index]:(pads[0]||null);
+  GP._pad=gp;
+  const out={ move:new THREE.Vector2(), rstick:new THREE.Vector2(),
+    light:false,heavy:false,pickup:false,grab:false, guard:false,dodge:false,
+    camL:false,camR:false, lock:false, start:false };
+  if(!gp){ return out; }
+  const a=gp.axes, b=gp.buttons;
+  const radial=(x,y,dead)=>{ const m=Math.hypot(x,y); if(m<dead) return [0,0];
+    const s=((m-dead)/(1-dead))/m; return [x*s,y*s]; };
+  const mv=radial(a[0]||0, a[1]||0, 0.20); out.move.set(mv[0], mv[1]);
+  const rs=radial(a[2]||0, a[3]||0, 0.22); out.rstick.set(rs[0], rs[1]);
+  const dz=v=>Math.abs(v)<0.18?0:v;
+  const pressed=i=>b[i]&&b[i].pressed;
+  const tap=i=>{ const p=pressed(i); const was=GP.prev[i]; GP.prev[i]=p; return p&&!was; };
+  out.light=tap(0);         // cross
+  out.heavy=tap(2);         // square
+  out.pickup=tap(3);        // triangle
+  out.grab=tap(1);          // circle
+  out.guard=(b[6]&&b[6].value>0.4)||pressed(6); // L2 held
+  out.dodge=(b[7]&&b[7].value>0.4)||pressed(7); // R2 held (with stick = dodge)
+  out.camL=pressed(4); out.camR=pressed(5);     // L1/R1
+  out.lock=tap(10)||tap(11);                     // stick click
+  out.start=tap(9);
+  GP.axes=[a[0]||0,a[1]||0,a[2]||0,a[3]||0];
+  return out;
+}
+
+/* ============================================ FORCED-LANDSCAPE STAGE + TOUCH */
+const STAGE={ w:innerWidth, h:innerHeight };
+let ROT=0; // 0 or 90 degrees
+const stageEl=document.getElementById('stage');
+function layout(){
+  const w=window.innerWidth, h=window.innerHeight, portrait=h>w;
+  let sw,sh;
+  if(portrait){ ROT=90; sw=h; sh=w;
+    stageEl.style.width=sw+'px'; stageEl.style.height=sh+'px';
+    stageEl.style.transform='translate('+w+'px,0px) rotate(90deg)'; }
+  else { ROT=0; sw=w; sh=h;
+    stageEl.style.width=sw+'px'; stageEl.style.height=sh+'px';
+    stageEl.style.transform='none'; }
+  stageEl.style.setProperty('--u',(sh/100)+'px');
+  STAGE.w=sw; STAGE.h=sh;
+  camera.aspect=sw/sh; camera.updateProjectionMatrix();
+  renderer.setSize(sw,sh);
+  rt.setSize(Math.max(2,Math.floor(sw*DPR)), Math.max(2,Math.floor(sh*DPR)));
+}
+/* convert a client-space delta into stage space (undo the rotation) */
+function clientToStage(dx,dy){ return ROT===90 ? {x:dy,y:-dx} : {x:dx,y:dy}; }
+
+/* touch input state, merged into the same controls the pad/keyboard feed */
+const TOUCH={ moveX:0, moveY:0, guard:false, camL:false, camR:false,
+  lightEdge:false, heavyEdge:false, pickupEdge:false, dodgeEdge:false, lockEdge:false,
+  camLedge:false, camRedge:false };
+function consume(k){ const v=TOUCH[k]; TOUCH[k]=false; return v; }
+const TOUCHCAP = (window.matchMedia&&matchMedia('(pointer:coarse)').matches) || ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
+const touchEl=document.getElementById('touch');
+
+/* analog stick */
+const stickBase=document.getElementById('tstick'), stickNub=document.getElementById('tnub');
+const stick={ id:null, ox:0, oy:0, R:1 };
+function stickMove(ev){ const dx=ev.clientX-stick.ox, dy=ev.clientY-stick.oy; const s=clientToStage(dx,dy);
+  let nx=s.x/stick.R, ny=s.y/stick.R; const m=Math.hypot(nx,ny); if(m>1){ nx/=m; ny/=m; }
+  TOUCH.moveX=nx; TOUCH.moveY=ny;
+  if(stickNub) stickNub.style.transform='translate('+(nx*stick.R)+'px,'+(ny*stick.R)+'px)'; }
+function stickEnd(){ stick.id=null; TOUCH.moveX=0; TOUCH.moveY=0; if(stickNub) stickNub.style.transform='translate(0,0)'; }
+if(stickBase){
+  stickBase.addEventListener('pointerdown',ev=>{ ev.preventDefault(); audioInit(); if(AC&&AC.state==='suspended')AC.resume();
+    stick.id=ev.pointerId; const r=stickBase.getBoundingClientRect();
+    stick.ox=r.left+r.width/2; stick.oy=r.top+r.height/2; stick.R=r.width*0.5; stickMove(ev); });
+  addEventListener('pointermove',ev=>{ if(stick.id===ev.pointerId) stickMove(ev); },{passive:false});
+  addEventListener('pointerup',ev=>{ if(stick.id===ev.pointerId) stickEnd(); });
+  addEventListener('pointercancel',ev=>{ if(stick.id===ev.pointerId) stickEnd(); });
+}
+/* buttons: data-b = tap (edge), data-hold = held */
+(document.querySelectorAll('#touch [data-b]')||[]).forEach(el=>{
+  el.addEventListener('pointerdown',ev=>{ ev.preventDefault(); audioInit(); if(AC&&AC.state==='suspended')AC.resume();
+    TOUCH[el.dataset.b+'Edge']=true; el.classList.add('press'); });
+  const up=()=>el.classList.remove('press');
+  el.addEventListener('pointerup',ev=>{ ev.preventDefault(); up(); });
+  el.addEventListener('pointercancel',up); el.addEventListener('pointerleave',up);
+});
+(document.querySelectorAll('#touch [data-hold]')||[]).forEach(el=>{
+  const n=el.dataset.hold;
+  el.addEventListener('pointerdown',ev=>{ ev.preventDefault(); TOUCH[n]=true;
+    if(n==='camL')TOUCH.camLedge=true; if(n==='camR')TOUCH.camRedge=true; el.classList.add('press'); });
+  const up=()=>{ TOUCH[n]=false; el.classList.remove('press'); };
+  el.addEventListener('pointerup',ev=>{ ev.preventDefault(); up(); });
+  el.addEventListener('pointercancel',up); el.addEventListener('pointerleave',up);
+});
+
+/* ================================================================ CAMERA */
+const CAM={ yaw:Math.PI, dist:5.8, height:3.2, lockK:0, look:new V3(), pos:new V3() };
+const camFwd=new V3(), camRight=new V3();
+function updateCameraVectors(){ camFwd.set(Math.sin(CAM.yaw),0,Math.cos(CAM.yaw)); camRight.set(-camFwd.z,0,camFwd.x); }
+
+/* ================================================================ HELPERS */
+function collide(pos,r){
+  pos.x=clamp(pos.x,-HALFW+r+0.3,HALFW-r-0.3);
+  pos.z=clamp(pos.z,-HALFD+r+0.3,HALFD-r-0.3);
+  for(const o of OBST){
+    const dx=pos.x-o.x, dz=pos.z-o.z;
+    const px=(o.rx+r)-Math.abs(dx), pz=(o.rz+r)-Math.abs(dz);
+    if(px>0&&pz>0){ if(px<pz){ pos.x+=(dx<0?-px:px); } else { pos.z+=(dz<0?-pz:pz); } }
+  }
+}
+function nearestEnemy(fromPos, facingYaw, cone){
+  let best=null,bd=1e9;
+  for(const e of enemies){ if(e.dead)continue;
+    const dx=e.pos.x-fromPos.x, dz=e.pos.z-fromPos.z, d=Math.hypot(dx,dz);
+    if(cone!=null){ const ang=Math.atan2(dx,dz); let da=((ang-facingYaw+Math.PI)%TAU)-Math.PI;
+      if(Math.abs(da)>cone) continue; }
+    if(d<bd){ bd=d; best=e; } }
+  return best;
+}
+
+/* ================================================================ COMBAT */
+function startAttack(atk){ // atk shared by player/enemy: {heavy}
+  const A=atk.actor, w=WEAPONS[atk.wpn];
+  if(A.attack||A.stagger>0||A.dead||(A.dodge)) return false;
+  if(atk.heavy && w.dur!==Infinity && A.dur<2 && A.wpn!=='fists'){ /* not enough for heavy; allow but will break */ }
+  const wind=w.wind*(atk.heavy?1.5:1), active=0.09, rec=w.rec*(atk.heavy?1.3:1);
+  A.attack={ wpn:atk.wpn, heavy:atk.heavy, t:0, wind, active, rec, dur:wind+active+rec,
+    hitAt:wind, hit:false, side:(A.comboStep%2===0)?1:-1,
+    shape:(A.wpn==='fists'
+      ? (atk.heavy?PUNCH_FINISH:PUNCHES[(A.comboStep||0)%PUNCHES.length])
+      : (atk.heavy?FINISH:SWINGS[(A.comboStep||0)%SWINGS.length])), target:atk.target||null };
+  if(w.metal) {} // swing sound at hit
+  return true;
+}
+function resolveHit(A, isPlayer){
+  const w=WEAPONS[A.attack.wpn], heavy=A.attack.heavy;
+  const reach=w.reach + (isPlayer?0.25:0.1);
+  const dmg=(heavy?w.heavy:w.light) * (isPlayer? (1+Math.min(GAME.combo,8)*0.03) : 1);
+  const facing=A.facing;
+  const origin=A.pos;
+  let landed=false;
+  const targets = isPlayer? enemies : [player];
+  for(const T of targets){
+    if(T.dead) continue;
+    const dx=T.pos.x-origin.x, dz=T.pos.z-origin.z, d=Math.hypot(dx,dz);
+    if(d>reach+T.r) continue;
+    const ang=Math.atan2(dx,dz); let da=((ang-facing+Math.PI)%TAU)-Math.PI;
+    const arc = w.thrust?0.5:0.95;
+    if(Math.abs(da)>arc) continue;
+    // hit!
+    landed=true;
+    const cpos=new V3(lerp(origin.x,T.pos.x,0.6),1.4,lerp(origin.z,T.pos.z,0.6));
+    let taken=dmg, blocked=false;
+    if(!isPlayer && player.guard && player.guardV>0.5){
+      const gAng=Math.abs(((facing+Math.PI-player.facing+Math.PI)%TAU)-Math.PI);
+      // block if player roughly faces the incoming hit
+      const toAtt=Math.atan2(origin.x-player.pos.x,origin.z-player.pos.z);
+      let fa=((toAtt-player.facing+Math.PI)%TAU)-Math.PI;
+      if(Math.abs(fa)<1.2){ blocked=true; taken*=w.gbreak?0.55:0.12; }
+    }
+    if(!isPlayer && (player.iframe>0)) { taken=0; blocked=false; continue; }
+    T.hp-=taken;
+    T.hurt=1;
+    // knockback
+    const kb=(heavy?0.9:0.5)*(w.knock?1.7:1)*(blocked?0.3:1);
+    T.vel.x+=Math.sin(ang)*kb*6; T.vel.z+=Math.cos(ang)*kb*6;
+    T.stagger=Math.max(T.stagger, (blocked?0.15:w.stagger*(heavy?1.2:0.8)) );
+    punchScale(T.chef, heavy?0.3:0.18);
+    applyImpact(T, ang, (heavy?1.4:0.85)*(blocked?0.4:1));
+    // ---- JUICE, scaled by how heavy the weapon is ----
+    const heft = w.heft==null?0.3:w.heft;
+    const weight = clamp(heft*(heavy?1.0:0.6) + Math.min(GAME.combo,10)*0.015, 0, 1.3);  // felt weight of the blow
+    const bw = blocked?0.4:1;
+    const col = blocked?0xffffff : (w.metal?0xffe6a0:0xff9a4a);
+    burst(cpos, Math.round(((blocked?6:11) + weight*30)*bw + 2), col, (0.9 + weight*2.4)*bw);
+    ring(cpos, w.metal?COL.cream:COL.flame, (1.0 + weight*1.7)*bw);
+    if(weight>0.55 && !blocked){ ring(cpos, 0xffffff, 1.5+weight); burst(cpos, 8, 0xffffff, 1.6+weight); }
+    shake((0.16 + weight*1.4) * bw);
+    hitstop((0.03 + weight*0.17) * (blocked?0.5:1));
+    const power=Math.min(1, weight*1.15) * bw;
+    impactFrames(weight>0.75?4:(weight>0.45?3:(weight>0.2?2:1)), blocked?0x7fb2d6:(power>0.6?0xFFE03D:0xFFF6E3), 0x140c07);
+    hitPost(power, blocked?0x7fb2d6:(w.metal?0xffe6a0:0xff6a1e));
+    POST.uniforms.uZoom.value = Math.max(POST.uniforms.uZoom.value, (0.03 + weight*0.12)*bw);
+    if(!blocked && T.chef.userData.dHead){
+      const rel=ang - T.facing; _lp.set(Math.sin(rel),0,Math.cos(rel));  // local push (inward)
+      const dh=T.chef.userData.dHead;
+      dh.t=Math.max(dh.t, Math.min(1,power)*dh.max);
+      dh.p.set(-_lp.x*0.235, 0, -_lp.z*0.235);   // contact point: attacker-facing side
+      dh.n.set(_lp.x, 0, _lp.z);                  // push inward
+    }
+    if(blocked){ sfx.block(); popWord(cpos,'BLOCK',COL.steel|0? '#7fb2d6':'#fff',22); }
+    else {
+      w.metal? sfx.clang(0.4+weight) : sfx.thud(0.4+weight);
+      if(weight>0.45) sfx.heavy(clamp(weight,0,1));
+      if(isPlayer){ hitWord(cpos, heavy, w);
+        haptic(0.25 + weight*0.75, 0.35 + weight*0.45, Math.round(55 + weight*280));
+        kitchenBump(0.12 + weight*0.4); }
+    }
+    if(isPlayer){ if(T.hp<=0){ killChef(T, ang); } }
+    else { playerHurtFlash(taken); break; } // enemy hits the player once
+  }
+  // durability
+  if(isPlayer && landed && A.wpn!=='fists' && w.dur!==Infinity){
+    A.dur -= heavy?2:1;
+    if(A.dur<=0){ breakWeapon(A); }
+    else updateHUDWeapon();
+  }
+  if(landed && isPlayer){ addCombo(); GAME.hitsLanded++; }
+  if(!landed && isPlayer){ sfx.whiff(); }
+}
+function hitWord(pos,heavy,w){
+  let txt,col,size;
+  if(w.key==='castiron'){ txt=pick(['TENDERIZED','SMASHED','CLOBBERED']); col='#ff6a1e'; size=heavy?40:32; }
+  else if(w.key==='knife'){ txt=pick(['SKEWERED','POKED','JABBED']); col='#dfe6ea'; size=heavy?34:26; }
+  else if(w.metal){ txt=heavy?pick(['BONK','CLANG','WHACK']):pick([' tink','PING','tap']); col='#f4e4c1'; size=heavy?36:24; }
+  else { txt=heavy?'CRACK':'pop'; col='#f4e4c1'; size=heavy?32:22; }
+  if(GAME.combo>=6) { txt=GAME.combo+' HIT!'; col='#8fc866'; size=40; }
+  popWord(pos,txt,col,size);
+}
+function addCombo(){ GAME.combo++; GAME.comboT=1.4; if(GAME.combo>GAME.maxCombo)GAME.maxCombo=GAME.combo;
+  const c=document.getElementById('combo'); const n=document.getElementById('comboN');
+  if(GAME.combo>=2){ c.classList.add('on'); n.textContent=GAME.combo;
+    n.animate([{transform:'scale(1.4)'},{transform:'scale(1)'}],{duration:180}); } }
+function breakWeapon(A){
+  const w=WEAPONS[A.wpn];
+  const hpos=new V3(); A.chef.userData.armR.hand.getWorldPosition(hpos);
+  burst(hpos,20,w.metal?0xd8d8d8:0x9a6a3a,1.6); ring(hpos,COL.tomato,1.6); shake(0.6); sfx.break();
+  toast(w.name.toUpperCase()+' SHATTERED');
+  popWord(hpos,'BROKE!','#ff3b30',30);
+  A.wpn='fists'; A.dur=Infinity; equip(A.chef,'fists'); updateHUDWeapon();
+}
+function killChef(T, ang){
+  if(T.dead)return; T.dead=true; T.deadT=0; T.hp=0;
+  if(player.grabbed && player.grabbed.by===T){ player.grabbed=null; hideMashUI(); player.iframe=0.4; }
+  if(T.hasToken){ T.hasToken=false; tokensUsed--; }
+  T.vel.x+=Math.sin(ang)*5; T.vel.z+=Math.cos(ang)*5;
+  T._toppleZ=rand(-0.5,0.5);
+  buildRagdoll(T); if(T.rag) ragImpulse(T, _rp1.set(Math.sin(ang),0.15,Math.cos(ang)).normalize(), 1.0);
+  const p=T.pos.clone(); p.y=1.2; burst(p,16,0xff3b30,1.3); shake(0.5); sfx.down();
+  impactFrames(4, 0xff6a1e, 0x140c07); hitPost(0.8, 0xff6a1e); kitchenBump(0.6); haptic(0.7,0.5,140);
+  popWord(p,'DOWN',T.kind==='tough'?'#ff6a1e':'#f4e4c1',34);
+  GAME.kills++;
+  // drop their weapon as a pickup if it wasn't fists (worse-tier flavour: only spatula/pan survive)
+  if(T.wpn!=='fists' && Math.random()<0.6){ spawnPickup(T.wpn, T.pos.x, T.pos.z); }
+  const alive=enemies.filter(e=>!e.dead).length;
+  updateHUDCooks(alive);
+  maybeSpawnWave();
+}
+
+/* ================================================================ PLAYER */
+function updatePlayer(dt, pad){
+  const P=player; if(!P) return;
+  if(P.dead){ poseChef(P,true,dt); return; }
+  if(P.grabbed){ handleGrab(P,dt,pad); poseChef(P,true,dt); return; }
+  // ----- squash decay -----
+  P._sq=damp(P._sq,0,14,dt);
+  // ----- timers -----
+  P.comboT=GAME.comboT; if(GAME.comboT>0){ GAME.comboT-=dt; if(GAME.comboT<=0){ GAME.combo=0;
+    document.getElementById('combo').classList.remove('on'); } }
+  P.weaveCD=Math.max(0,P.weaveCD-dt); P.dodgeCD=Math.max(0,P.dodgeCD-dt); P.chainT=Math.max(0,P.chainT-dt); P.tackleCD=Math.max(0,P.tackleCD-dt);
+  P.iframe=Math.max(0,P.iframe-dt); P.stagger=Math.max(0,P.stagger-dt); P.hurt=damp(P.hurt,0,8,dt);
+
+  updateCameraVectors();
+
+  // ----- read input -----
+  let ix=0,iz=0;
+  if(KEY['w'])iz-=1; if(KEY['s'])iz+=1; if(KEY['a'])ix-=1; if(KEY['d'])ix+=1;
+  ix+=pad.move.x; iz+=pad.move.y;
+  ix+=TOUCH.moveX; iz+=TOUCH.moveY;
+  const mv=new V3(); mv.addScaledVector(camRight, ix); mv.addScaledVector(camFwd, -iz);
+  if(mv.lengthSq()>1) mv.normalize();
+  const moving=mv.lengthSq()>0.02;
+
+  // camera rotate (L1/R1 unlocked)  |  target switch (locked). keyboard: [ ]
+  if((KEY['[']||pad.camL||TOUCH.camL)&&!P.lockOn) CAM.yaw+=2.4*dt;
+  if((KEY[']']||pad.camR||TOUCH.camR)&&!P.lockOn) CAM.yaw-=2.4*dt;
+  if(P.lockOn){ if(tapK('[')||pad.camL||consume('camLedge')) switchTarget(-1);
+                if(tapK(']')||pad.camR||consume('camRedge')) switchTarget(1); }
+
+  // lock-on toggle: R3 / L key / LOCK button
+  if(pad.lock||tapK('l')||consume('lockEdge')){ toggleLock(); }
+  if(P.lockOn&&(P.lockOn.dead)) P.lockOn=nearestEnemy(P.pos,P.facing,null);
+
+  // ----- guard (hold L2 / hold space / GUARD button) -----
+  P.guard = (pad.guard||KEY[' ']||TOUCH.guard) && P.stagger<=0 && !P.attack && !P.dodge;
+  P.guardV=damp(P.guardV, P.guard?1:0, 16, dt);
+
+  // ----- weave (right stick / Q,E) -----
+  const rs=pad.rstick;
+  let weaveDir=0;
+  if(Math.abs(rs.x)>0.5) weaveDir=rs.x>0?1:-1;
+  if(tapK('e')) weaveDir=1; if(tapK('q')) weaveDir=-1;
+  if(weaveDir!==0 && P.weaveCD<=0 && !P.attack && P.stagger<=0 && !P.dodge){
+    P.weaveCD=0.45; P.iframe=Math.max(P.iframe,0.22); P._weave=weaveDir; P._weaveT=0.22;
+    const side=camRight.clone().multiplyScalar(weaveDir*0.6); P.vel.addScaledVector(side,4);
+    sfx.whiff();
+  }
+  if(P._weaveT>0) P._weaveT-=dt;
+
+  // ----- dodge (dir + R2 / Shift) -----
+  const wantDodge=(pad.dodge&&(Math.abs(pad.move.x)+Math.abs(pad.move.y)>0.3))||tapK('shift')||consume('dodgeEdge');
+  if(wantDodge && P.dodgeCD<=0 && P.stagger<=0){
+    let ddir=mv.clone(); if(ddir.lengthSq()<0.02){ ddir.copy(camFwd).multiplyScalar(-1); }
+    ddir.normalize();
+    P.dodge={ t:0, dur:0.34, dir:ddir }; P.dodgeCD=0.6; P.iframe=0.3; P.attack=null;
+    sfx.step();
+  }
+
+  // ----- GRAB: pick up a utensil you're standing on, else tackle-charge a person -----
+  if(pad.pickup||tapK('f')||consume('pickupEdge')){
+    if(nearPickup && Math.hypot(nearPickup.x-P.pos.x, nearPickup.z-P.pos.z)<1.0) tryPickup();
+    else startTackle(P);
+  }
+
+  // ----- attacks (Cross light / Square heavy / touch) -----
+  const wantLight=pad.light||tapK('j')||MOUSE.l||consume('lightEdge'); MOUSE.l=false;
+  const wantHeavy=pad.heavy||tapK('k')||MOUSE.r||consume('heavyEdge'); MOUSE.r=false;
+  if((wantLight||wantHeavy) && !P.dodge && !P.tackle && P.stagger<=0){
+    // recovery-cancel: once a swing has connected you can chain straight into the next
+    const canStart = !P.attack || (P.attack.hit && P.attack.t >= P.attack.hitAt + 0.03);
+    if(canStart){
+      let tgt=P.lockOn||nearestEnemy(P.pos,P.facing,1.1)||nearestEnemy(P.pos,P.facing,null);
+      if(tgt){ const dx=tgt.pos.x-P.pos.x,dz=tgt.pos.z-P.pos.z; P.attackAim=Math.atan2(dx,dz); }
+      else P.attackAim=P.facing;
+      P.comboStep=(P.chainT>0)?(P.comboStep+1):0;   // cycle the swing shape
+      P.attack=null;                                 // clear the one we're canceling
+      startAttack({ actor:P, wpn:P.wpn, heavy:wantHeavy, target:tgt, isPlayer:true });
+      if(P.attack){ P.attack.aim=P.attackAim; P.chainT=P.attack.dur+0.4; }
+    }
+  }
+
+  // ----- integrate attack -----
+  if(P.attack){
+    const A=P.attack; A.t+=dt;
+    // snap facing to aim
+    P.facing=angLerp(P.facing, A.aim!=null?A.aim:P.facing, Math.min(1,dt*18));
+    if(!A.hit && A.t>=A.hitAt){ A.hit=true; P.facing=A.aim!=null?A.aim:P.facing;
+      P.actorSync(); resolveHit(P,true); }
+    if(A.t>=A.dur){ P.attack=null; }
+  }
+
+  // ----- movement integrate -----
+  let spd=6.7;
+  if(P.guard) spd*=0.42;
+  if(P.attack) spd*=0.14;
+  if(P.tackle){
+    const T=P.tackle; T.t+=dt; const k=1-T.t/T.dur;
+    P.vel.x=T.dir.x*13*(0.5+k*0.5); P.vel.z=T.dir.z*13*(0.5+k*0.5);
+    if(!T.hit){                                 // slam the first person we plow into
+      for(const e of enemies){ if(e.dead)continue;
+        if(Math.hypot(e.pos.x-P.pos.x,e.pos.z-P.pos.z) < e.r+P.r+0.35){ tackleEnemy(P,e); T.hit=true; break; } }
+    }
+    if(T.t>=T.dur) P.tackle=null;
+  } else if(P.dodge){
+    const D=P.dodge; D.t+=dt; const k=1-D.t/D.dur;
+    P.vel.x=D.dir.x*11*k; P.vel.z=D.dir.z*11*k;
+    if(D.t>=D.dur) P.dodge=null;
+  } else if(P.stagger<=0){
+    P.vel.x=damp(P.vel.x, mv.x*spd, 18, dt);
+    P.vel.z=damp(P.vel.z, mv.z*spd, 18, dt);
+  } else {
+    P.vel.multiplyScalar(Math.exp(-6*dt));
+  }
+  P.pos.addScaledVector(P.vel,dt);
+  collide(P.pos,P.r);
+
+  // facing while roaming
+  if(!P.attack && !P.lockOn && moving && !P.dodge && !P.tackle) P.facing=angLerp(P.facing, Math.atan2(mv.x,mv.z), Math.min(1,dt*12));
+  if(P.lockOn && !P.dead){ const dx=P.lockOn.pos.x-P.pos.x,dz=P.lockOn.pos.z-P.pos.z;
+    if(!P.attack) P.facing=angLerp(P.facing, Math.atan2(dx,dz), Math.min(1,dt*10)); }
+  if(P.dodge) { /* keep facing */ }
+
+  P.speed=Math.hypot(P.vel.x,P.vel.z);
+  P.movePhase+=dt*P.speed*2.4;
+
+  poseChef(P, true, dt);
+  // prompt for nearby pickup
+  updatePrompt();
+}
+
+/* ================================================================ ENEMY AI */
+const ATTACK_TOKENS=3; let tokensUsed=0;
+function updateEnemy(e, dt){
+  e._sq=damp(e._sq,0,14,dt);
+  if(e.dead){ // ragdoll (or spring-topple fallback) + fade/remove
+    e.deadT+=dt;
+    e.chef.position.copy(e.pos); e.chef.rotation.y=e.facing;   // frame for world<->local
+    if(e.deadT<1.6) updateDead(e, dt);
+    if(e.deadT>1.6){ const s=clamp(1-(e.deadT-1.6)/0.7,0,1); e.chef.scale.setScalar(s*(e.kind==='tough'?1.12:1)); }
+    if(e.deadT>2.3){ scene.remove(e.chef); e._remove=true; }
+    return;
+  }
+  e.hurt=damp(e.hurt,0,8,dt);
+  e.stagger=Math.max(0,e.stagger-dt);
+
+  const toP=new V3(player.pos.x-e.pos.x,0,player.pos.z-e.pos.z);
+  const dist=toP.length(); const dirP=toP.clone().normalize();
+  let wantYaw=Math.atan2(dirP.x,dirP.z);
+  e._fetching=false;
+
+  if(e.stagger>0){
+    e.vel.multiplyScalar(Math.exp(-5*dt));
+    e.pos.addScaledVector(e.vel,dt); collide(e.pos,e.r);
+    if(e.hasToken){ e.hasToken=false; tokensUsed--; } e.attack=null;
+    if(player.grabbed && player.grabbed.by===e){ player.grabbed=null; hideMashUI(); }
+    e.state='engage'; e.stateT=Math.max(e.stateT, e.stagger+0.05);   // re-engage once we shake it off
+    syncEnemyMesh(e,dt,wantYaw); return;
+  }
+
+  e.stateT-=dt;
+  let move=new V3();
+  const reach=WEAPONS[e.wpn].reach;
+  const _tang=new V3(-dirP.z,0,dirP.x);   // strafe axis (perp to player)
+  if(e.state==='spawn'){ if(e.stateT<=0){
+    if(e.wpn==='fists' && Math.random()<0.8){ const p=nearestFreePickup(e); if(p){ e.grabTarget=p; e.state='fetch'; } else e.state='engage'; }
+    else e.state='engage';
+  } }
+  else if(e.state==='fetch'){                            // run for a utensil on the floor
+    const p=e.grabTarget;
+    if(!p || p.taken){ e.grabTarget=null; e.state='engage'; e.stateT=0.2; }
+    else {
+      const dx=p.x-e.pos.x, dz=p.z-e.pos.z, d=Math.hypot(dx,dz);
+      e._fetching=true; wantYaw=Math.atan2(dx,dz);
+      if(d>0.6){ move.set(dx/d,0,dz/d); }
+      else { equipEnemy(e,p.key); p.taken=true; scene.remove(p.g);
+        e.grabTarget=null; e.state='engage'; e.stateT=0.15;
+        const hp=e.pos.clone(); hp.y=1.2; ring(hp,COL.flame,0.9); burst(hp,6,COL.flame,0.7); }
+    }
+  }
+  else if(e.state==='holding'){                          // grappling the player (resolved player-side)
+    wantYaw=Math.atan2(dirP.x,dirP.z);
+    if(dist>0.95){ move.copy(dirP); }
+    if(!player.grabbed || player.grabbed.by!==e){ e.state='recover'; e.stateT=0.4; }
+  }
+  else if(e.state==='engage'){
+    // unarmed customers lunge in to grab you
+    if(e.wpn==='fists' && dist<1.05 && !player.grabbed && grabCD<=0 && player.iframe<=0 && !player.dead && Math.random()<0.6){
+      startGrab(e);
+    } else {
+    // keep pressing inward while strafing
+    let radial=(dist - e.standoff) + 0.9;             // hard inward pressure
+    if(player.attack && !player.attack.hit && dist < reach+1.4){
+      const toE=Math.atan2(e.pos.x-player.pos.x, e.pos.z-player.pos.z);
+      const aim=(player.attack.aim!=null?player.attack.aim:player.facing);
+      let da=((toE-aim+Math.PI)%TAU)-Math.PI;
+      if(Math.abs(da)<0.95) radial -= 1.2;            // small flinch off a swing
+    }
+    if(dist < reach*0.7) radial -= 0.6;
+    if(Math.abs(radial)<0.2) radial=0;
+    move.copy(_tang).multiplyScalar(e.circleDir*0.42).addScaledVector(dirP, clamp(radial,-1.1,2.0));
+    // in range: commit now. otherwise roll for a dart-in on the beat.
+    if(dist < reach+0.5 && tryToken(e)){ e.state='press'; e.stateT=rand(...e.aggr); }
+    else if(e.stateT<=0){
+      e.circleDir *= Math.random()<0.4?-1:1;
+      e.stateT=rand(0.35,0.85);
+      if(dist < reach+1.7 && Math.random()<e.commit && tryToken(e)){ e.state='press'; e.stateT=rand(...e.aggr); }
+    }
+    }
+  }
+  else if(e.state==='press'){                          // committed: close and hit
+    if(dist>reach+0.05){ move.copy(dirP); }
+    else { beginEnemyAttack(e,wantYaw); }
+    if(e.stateT<=0 && !e.attack){ if(e.hasToken){e.hasToken=false;tokensUsed--;} e.state='engage'; e.stateT=rand(0.3,0.7); }
+  }
+  else if(e.state==='attacking'){ /* driven by attack integrate */ }
+  else if(e.state==='recover'){                         // brief pull-back after swinging
+    move.copy(dirP).multiplyScalar(-0.35).addScaledVector(_tang, e.circleDir*0.7);
+    if(e.stateT<=0){ if(e.hasToken){ e.hasToken=false; tokensUsed--; } e.state='engage'; e.stateT=rand(0.25,0.6); }
+  }
+
+  // separation from other enemies
+  const sep=new V3();
+  for(const o of enemies){ if(o===e||o.dead)continue; const dx=e.pos.x-o.pos.x,dz=e.pos.z-o.pos.z,d=Math.hypot(dx,dz);
+    if(d<0.9&&d>0.001){ sep.x+=dx/d*(0.9-d); sep.z+=dz/d*(0.9-d); } }
+  move.addScaledVector(sep,0.7);
+
+  // integrate
+  if(!e.attack){
+    if(move.lengthSq()>1) move.normalize();
+    e.vel.x=damp(e.vel.x, move.x*e.spd, 14, dt);
+    e.vel.z=damp(e.vel.z, move.z*e.spd, 14, dt);
+  } else {
+    e.vel.multiplyScalar(Math.exp(-8*dt));
+  }
+  e.pos.addScaledVector(e.vel,dt);
+  collide(e.pos,e.r);
+
+  // attack integrate
+  if(e.attack){
+    const A=e.attack; A.t+=dt;
+    e.facing=angLerp(e.facing, A.aim, Math.min(1,dt*12));
+    if(A.t<A.wind*0.6){ // step into it
+      e.vel.addScaledVector(dirP, 12*dt);
+    }
+    if(!A.hit&&A.t>=A.hitAt){ A.hit=true; syncEnemyMesh(e,dt,e.facing); resolveHit(e,false); }
+    if(A.t>=A.dur){ e.attack=null; e.state='recover'; e.stateT=WEAPONS[e.wpn].rec+rand(0.2,0.6); }
+  } else {
+    e.speed=Math.hypot(e.vel.x,e.vel.z); e.movePhase+=dt*e.speed*2.4;
+    e.facing=angLerp(e.facing, wantYaw, Math.min(1,dt*6));
+  }
+  syncEnemyMesh(e,dt,e.facing);
+}
+function tryToken(e){ if(e.hasToken)return true; if(tokensUsed<ATTACK_TOKENS){ tokensUsed++; e.hasToken=true; return true; } return false; }
+let grabCD=0;
+function nearestFreePickup(e){ let best=null,bd=99; for(const p of PICKUPS){ if(p.taken)continue; const d=Math.hypot(p.x-e.pos.x,p.z-e.pos.z); if(d<bd){bd=d;best=p;} } return best; }
+function equipEnemy(e,key){ e.wpn=key; e.dur=WEAPONS[key].dur; equip(e.chef,key); e.standoff=WEAPONS[key].reach+rand(0.25,0.7); if(AC)sfx.pickup(); }
+function startGrab(e){
+  if(player.grabbed||player.dead||player.iframe>0||grabCD>0) return;
+  player.grabbed={ by:e, mash:0, need:(e.kind==='tough'?8:5), t:0, max:2.6, dmgT:0.4 };
+  e.state='holding'; e.stateT=3.2; if(e.hasToken){ e.hasToken=false; tokensUsed--; }
+  grabCD=2.4; shake(0.45); sfx.hurt(); haptic(0.5,0.5,120); kitchenBump(0.3);
+  player.attack=null; player.dodge=null;
+  const hp=player.pos.clone(); hp.y=1.5; popWord(hp,'GRABBED!','#ff8a3a',30);
+}
+function beginEnemyAttack(e,aim){
+  if(e.attack)return;
+  const heavy=Math.random()<0.25 && e.kind==='tough';
+  const w=WEAPONS[e.wpn]; const wind=w.wind*e.wind*(heavy?1.4:1)+0.14;
+  e.attack={ wpn:e.wpn, heavy, t:0, wind, active:0.09, rec:w.rec, dur:wind+0.09+w.rec, hitAt:wind, hit:false,
+    side:(Math.random()<0.5?1:-1),
+    shape:(e.wpn==='fists' ? PUNCHES[(Math.random()*PUNCHES.length)|0] : (heavy?FINISH:SWINGS[(Math.random()*SWINGS.length)|0])), aim };
+  e.state='attacking';
+}
+function syncEnemyMesh(e,dt,wantYaw){
+  e.chef.position.copy(e.pos); e.chef.rotation.y=e.facing;
+  poseChef(e,false,dt);
+}
+
+/* ================================================================ POSE */
+/* rotation-driven posing for both player & enemy. `a` is the actor object. */
+function poseChef(a, isPlayer, dt){
+  const c=a.chef, u=c.userData, b=u.body, up=u.upper;
+  c.position.copy(a.pos); c.rotation.y=a.facing;
+  if(!a._an) a._an={ idle:Math.random()*10, twist:0, sway:0, toqueX:0,toqueXv:0, rx:0,rxv:0, rz:0,rzv:0, prevPh:a.movePhase||0 };
+  const AN=a._an, t=GAME.t+AN.idle, spd=a.speed||0, moving=spd>0.6, ph=a.movePhase;
+  // full-body RUN blend — player only, when moving fast and not busy
+  const rk=((isPlayer||a._fetching) && !a.attack && !a.guard && !a.dodge && !a.tackle) ? clamp((spd-2.3)/3.4,0,1) : 0;
+  a._runK = rk*rk*(3-2*rk);
+  a._idleK = (!a.attack && !a.guard && !a.dodge && !a.dead) ? clamp(1-spd/0.9,0,1) : 0;
+
+  if(a.dead){ updateDead(a,dt); return; }
+  if(!a._feet) resetFeet(a);
+
+  // ---- attack envelope (shared by body + arms) ----
+  let atk=null;
+  if(a.attack){
+    const A=a.attack, w2=WEAPONS[A.wpn];
+    const windK=clamp(A.t/A.wind,0,1);
+    const strikeK=clamp(Math.max(0,A.t-A.wind)/(A.active+A.rec*0.55),0,1);
+    const heavyMul = w2.cls==='heavy'?1.5 : w2.cls==='medium'?1.18 : 1;
+    atk={ A, w2, windK, strikeK, heavyMul, thrust:!!w2.thrust };
+  }
+
+  // ---- footwork: feet plant in world space, step to catch up ----
+  updateFeet(a, dt, moving);
+
+  // ---- recoil springs (impact) ----
+  AN.rxv += (-95*AN.rx - 13*AN.rxv)*dt; AN.rx += AN.rxv*dt;
+  AN.rzv += (-95*AN.rz - 13*AN.rzv)*dt; AN.rz += AN.rzv*dt;
+
+  // ---- weight shift: lean onto the planted foot; bob with the step ----
+  const idleK=a._idleK||0;
+  AN.sway = damp(AN.sway, (a._swayTarget||0) + idleK*Math.sin(t*1.5)*0.045, 10, dt);
+  const bob = (moving? Math.abs(Math.sin(ph))*0.05*Math.min(1,spd/4.5):0)
+              + Math.sin(t*2.1)*0.011 - (a._stepDip||0)
+              + idleK*Math.sin(t*3.3)*0.02;   // a boxer's light square-up bounce
+
+  // ---- body: gross tilt (weave/stagger/dodge/recoil); waist bend goes on the spine ----
+  let leanX=0, leanZ=0;
+  if(a.guard) leanX += 0.08;
+  if(a.dodge) leanX += Math.sin((a.dodge.t/a.dodge.dur)*Math.PI)*0.45;
+  if(a._weaveT>0) leanZ += a._weave*Math.sin((a._weaveT/0.22)*Math.PI)*0.42;
+  if(a.stagger>0) leanZ += Math.sin(GAME.t*30)*0.15*clamp(a.stagger,0,1);
+  leanX += clamp(AN.rx,-0.6,0.6); leanZ += clamp(AN.rz,-0.5,0.5) + AN.sway*0.4;
+  b.position.set(AN.sway, bob, 0);
+  b.rotation.x = damp(b.rotation.x, leanX, 17, dt);
+  b.rotation.z = damp(b.rotation.z, leanZ, 17, dt);
+
+  // ---- spine (waist joint): the upper body flexes forward and undulates ----
+  let waist=0;
+  if(moving && !atk) waist += Math.min(1,spd/5)*0.14;
+  waist += (a._runK||0)*0.34;                            // drive forward into the run
+  if(moving) waist += Math.sin(ph*2)*0.035*Math.min(1,spd/4);  // stride undulation
+  if(atk){ waist += lerp(0,-0.10,atk.windK); waist = lerp(waist, (atk.A.shape?atk.A.shape.lean:0.28)*atk.heavyMul*0.75, atk.strikeK); }
+  if(a.tackle){ waist += 0.5; }                          // shoulder-down charge
+  u.spine.rotation.x = damp(u.spine.rotation.x, waist, 16, dt);
+  u.abMesh.rotation.x = damp(u.abMesh.rotation.x, -waist*0.22, 11, dt);   // belly counter-curves (an S-spine)
+
+  // ---- squash / stretch ----
+  const sq=a._sq||0;
+  let stretch = a.dodge? Math.sin((a.dodge.t/a.dodge.dur)*Math.PI)*0.12 : 0;
+  b.scale.set(1+sq*0.5-stretch*0.5, 1-sq*0.6+stretch*0.85, 1+sq*0.5-stretch*0.5);
+
+  // ---- upper-body twist: gait counter-rotation + swing drive ----
+  let twist = AN.sway*0.4;
+  if(moving && !atk) twist += -Math.sin(ph)*0.13*Math.min(1,spd/4);
+  if(atk){
+    const S=atk.A.shape||SWINGS[0];
+    twist = lerp(0, S.coil*atk.heavyMul, atk.windK);
+    twist = lerp(twist, S.follow*atk.heavyMul, atk.thrust?atk.strikeK*0.4:atk.strikeK);
+  }
+  AN.twist = damp(AN.twist, twist, atk?26:9, dt);
+  up.rotation.y = AN.twist;
+  u.hips.rotation.y = damp(u.hips.rotation.y, -AN.twist*0.35, 12, dt);
+
+  // ---- toque secondary motion ----
+  AN.toqueXv += (-80*AN.toqueX - 12*AN.toqueXv)*dt; AN.toqueX += AN.toqueXv*dt;
+  u.toque.rotation.x = AN.toqueX*0.5 + 0.02*Math.sin(t*2.1);
+  u.toque.rotation.z = -b.rotation.z*0.5;
+  u.head.rotation.x = damp(u.head.rotation.x, AN.rx*0.6 - (a.hurt>0.3?0.2*a.hurt:0) + (a._runK||0)*0.32, 14, dt);
+
+  // ---- solve the limbs with IK ----
+  solveLegsIK(a, b);
+  solveArmsIK(a, dt, atk);
+
+  const e=clamp(a.hurt||0,0,1);
+  u.mats.skin.emissive.setHex(0xff3b30);  u.mats.skin.emissiveIntensity=e*0.7;
+  u.mats.jacket.emissive.setHex(0xff3b30); u.mats.jacket.emissiveIntensity=e*0.5;
+  springDeform(u.dHead, dt); applyDeform(u.head, u.dHead, c.scale.x||1);
+}
+
+/* plant both feet at the stance, in world space */
+function resetFeet(a){
+  a._feet=true; const legs=a.chef.userData.legs;
+  for(let i=0;i<2;i++){ const st=STANCE[i]; toGround(a,st.x,st.z,legs[i].world); legs[i].stepT=1; legs[i].lift=0; }
+  a._swayTarget=0; a._stepDip=0; a._stepCool=0;
+}
+/* feet plant, lead the body by velocity, and step in rhythm — quicker and
+   near-simultaneous at speed so they never lag into a stretch */
+const _ideal=new V3();
+function updateFeet(a, dt, moving){
+  const legs=a.chef.userData.legs;
+  a._stepCool=(a._stepCool||0)-dt;
+  const spd=a.speed||0, run=a._runK||0;
+  const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0, vm=Math.hypot(vx,vz)||1;
+  const lead=Math.min(0.42, spd*0.11) + run*0.16;       // reach further ahead at a run
+  const stepDur = moving ? clamp(0.15 - spd*0.01, 0.065, 0.15) : 0.2;
+  const stepLen = 0.19 + run*0.17;                       // longer strides at a run
+  const fast = spd>3.2;                                  // running: let both feet catch up
+  let anyStepping=false; for(const L of legs) if(L.stepT<1) anyStepping=true;
+  let stepPhase=-1, whichFoot=0;
+  for(let i=0;i<2;i++){
+    const L=legs[i], st=STANCE[i]; toGround(a,st.x,st.z,_ideal);
+    if(spd>0.3){ _ideal.x += vx/vm*lead; _ideal.z += vz/vm*lead; }
+    if(L.stepT>=1){
+      const off=Math.hypot(L.world.x-_ideal.x, L.world.z-_ideal.z);
+      if(off>stepLen && (!anyStepping || fast) && a._stepCool<=0){
+        L.from.copy(L.world); L.to.copy(_ideal);
+        L.stepT=0; a._stepCool = fast?0.02:0.05; anyStepping=true;
+        if(a===player && moving) sfx.step();
+      }
+    } else {
+      L.stepT=Math.min(1, L.stepT + dt/stepDur);
+      const tt=L.stepT; L.world.lerpVectors(L.from,L.to, tt*tt*(3-2*tt));
+      L.lift=Math.sin(tt*Math.PI)*(0.06+Math.min(0.07,spd*0.012)+run*0.15); L.world.y=L.lift; if(tt>=1){ L.lift=0; L.world.y=0; }
+      stepPhase=tt; whichFoot=i;
+    }
+  }
+  a._swayTarget = stepPhase>=0 ? (whichFoot===0? 0.05 : -0.05) : 0;
+  a._stepDip = stepPhase>=0 ? Math.sin(stepPhase*Math.PI)*0.02 : 0;
+}
+const _hipV=new V3(), _footV=new V3();
+function solveLegsIK(a, b){
+  const legs=a.chef.userData.legs, inv=1/(a.chef.scale.x||1);
+  const c=Math.cos(a.facing), s=Math.sin(a.facing);
+  for(let i=0;i<2;i++){
+    const L=legs[i];
+    _hipV.set(L.hip.x + b.position.x*0.5, L.hip.y + b.position.y, L.hip.z + b.position.z*0.5);
+    // world planted foot -> root-LOCAL (undo pos, yaw, AND the root's scale)
+    const dx=L.world.x-a.pos.x, dz=L.world.z-a.pos.z;
+    _footV.set((dx*c - dz*s)*inv, L.world.y*inv + 0.055, (dx*s + dz*c)*inv);
+    // clamp foot within leg reach so the leg can never stretch thin
+    const dxh=_footV.x-_hipV.x, dzh=_footV.z-_hipV.z, dyh=_footV.y-_hipV.y;
+    const horiz=Math.hypot(dxh,dzh);
+    const maxH=Math.sqrt(Math.max(0.04, (THIGH+SHIN)*(THIGH+SHIN)*0.94 - dyh*dyh));
+    if(horiz>maxH){ const k=maxH/horiz; _footV.x=_hipV.x+dxh*k; _footV.z=_hipV.z+dzh*k; }
+    solveTwoBone(L.thigh, L.shin, _hipV, _footV, THIGH, SHIN, KNEE_FWD, L.knee);
+    L.boot.position.set(_footV.x, Math.max(0.03, _footV.y-0.02), _footV.z+0.04);
+    L.boot.rotation.set(-L.lift*2.4, 0, 0);
+  }
+}
+const _bnd2=new V3(), _fdir=new V3();
+function solveArmsIK(a, dt, atk){
+  const u=a.chef.userData;
+  const spd=a.speed||0, ph=a.movePhase, g=a.guardV||0, run=a._runK||0;
+  const isFist=(a.wpn==='fists');
+  const activeHand = atk ? ((isFist && atk.A.shape && atk.A.shape.hand!=null) ? atk.A.shape.hand : 1) : -1;
+  for(let i=0;i<2;i++){
+    const A=u.arms[i]; const isWeapon=(i===1); const isActive=(i===activeHand); const sign=(i===0?-1:1);
+    // default: a ready guard, hands up and in front
+    let tx=A.sh.x + sign*0.02, ty=1.34, tz=0.36;
+    const idleK=a._idleK||0;
+    if(idleK>0.01 && !atk && g<0.1){
+      // square up: hands lift into a loose ready position and float
+      ty += idleK*(0.09 + Math.sin(GAME.t*3.3 + i*1.7)*0.035);
+      tz += idleK*(0.05 + Math.sin(GAME.t*2.6 + i)*0.03);
+      tx += idleK*sign*-0.03;
+    }
+    if(a.state==='holding'){ tx=A.sh.x*0.4; ty=1.40; tz=0.72 + Math.sin(GAME.t*18+i)*0.03; }  // clamped onto the player
+    if(a.tackle){ tx=A.sh.x*0.55; ty=1.28; tz=0.78; }   // arms out to plow through
+    if(run>0.01 && !atk){
+      // RUN: tight, bent arms pumping fore/aft, opposite the legs
+      const swing=Math.sin(ph + (i===0?0:Math.PI));
+      const rtx=A.sh.x*0.55 + sign*0.04;      // tuck the hands in toward the chest
+      const rty=1.46 + swing*0.13;            // rise on the forward drive
+      const rtz=0.14 + swing*0.42;            // the pump
+      tx=lerp(tx,rtx,run); ty=lerp(ty,rty,run); tz=lerp(tz,rtz,run);
+    } else if(spd>0.6 && !atk && g<0.1){ const sw=Math.min(1,spd/4);
+      tz += Math.sin(ph + (i===0?0:Math.PI))*0.12*sw; ty += Math.abs(Math.sin(ph))*0.03*sw; }
+    if(g>0.02){ tx=lerp(tx, sign*0.17, g); ty=lerp(ty,1.62,g); tz=lerp(tz,0.36,g); }
+    if(atk){
+      const A2=atk.A, windK=atk.windK, strikeK=atk.strikeK, side=A2.side;
+      if(isActive){
+        if(atk.thrust && !isFist){
+          tx=lerp(0.28,0.30,windK); ty=lerp(1.36,1.42,windK); tz=lerp(0.24,-0.02,windK);
+          tx=lerp(tx,0.18,strikeK);  ty=lerp(ty,1.36,strikeK); tz=lerp(tz,1.0,strikeK);
+        } else {
+          const S=A2.shape||SWINGS[0];
+          tx=lerp(A.sh.x, S.s[0], windK); ty=lerp(1.34, S.s[1], windK); tz=lerp(0.36, S.s[2], windK);
+          tx=lerp(tx, S.e[0], strikeK);   ty=lerp(ty, S.e[1], strikeK); tz=lerp(tz, S.e[2], strikeK);
+          tz += Math.sin(strikeK*Math.PI)*0.12;   // follow-through overshoot
+        }
+      } else {
+        // off-hand braces up in guard while the other strikes
+        tx=lerp(tx, A.sh.x*0.55 + sign*0.02, 0.6); ty=lerp(ty, isFist?1.58:1.44, 0.6); tz=lerp(tz, isFist?0.42:0.30, 0.6);
+      }
+    }
+    if(a.hurt>0.5 && !atk) ty += Math.sin(GAME.t*26+i)*0.10*((a.hurt-0.5)*2);
+    const rate = atk&&isActive ? 30 : (run>0.3?24:14);
+    A.tgt.x=damp(A.tgt.x,tx,rate,dt); A.tgt.y=damp(A.tgt.y,ty,rate,dt); A.tgt.z=damp(A.tgt.z,tz,rate,dt);
+    if(atk && isActive && !(atk.thrust&&!isFist) && atk.A.shape){ const bd=atk.A.shape.bend; _bnd2.set(bd[0],bd[1],bd[2]); }
+    else if(run>0.3 && !atk){ _bnd2.set(sign*0.5,-0.65,-0.9); }   // elbows bent back, runner's form
+    else _bnd2.set(sign*0.6,-1,0.5);       // elbows break down and away from the ribs
+    solveTwoBone(A.up, A.fore, A.sh, A.tgt, ARM_U, ARM_F, _bnd2, A.elb);
+    A.hand.position.copy(A.tgt);
+    _fdir.subVectors(A.tgt, A.elb);
+    if(_fdir.lengthSq()>1e-6){ _fdir.normalize(); A.hand.quaternion.setFromUnitVectors(FWD, _fdir); }
+  }
+  // ---- weapon flourish: twirl the pan, swing the spatula around, sword-style ----
+  const wg=u.weaponGroup;
+  if(wg){
+    if(atk){ // clean grip through a swing
+      wg.rotation.x=damp(wg.rotation.x,0.15,22,dt); wg.rotation.y=damp(wg.rotation.y,0,22,dt); wg.rotation.z=damp(wg.rotation.z,0,22,dt);
+    } else if(u.weaponKey!=='fists'){
+      const f=GAME.t*2.6 + (a._an?a._an.idle:0);
+      const calm=1 - clamp((a.speed||0)/6,0,1)*0.35;          // a touch calmer at a run
+      const twirl = WEAPONS[u.weaponKey].thrust ? 0.7 : 1.15;  // knives flourish tighter
+      wg.rotation.z=damp(wg.rotation.z, Math.sin(f)*twirl*calm, 7, dt);
+      wg.rotation.x=damp(wg.rotation.x, 0.15 + Math.cos(f*0.7)*0.42*calm, 7, dt);
+      wg.rotation.y=damp(wg.rotation.y, Math.sin(f*0.5)*0.3*calm, 7, dt);
+    }
+  }
+}
+/* ragdoll-lite death: the torso folds forward over planted feet, limbs go limp */
+function deathPose(a, dt){
+  const u=a.chef.userData, b=u.body;
+  a._tipV = (a._tipV||0) + (-46*((a._tip||0)-Math.PI*0.5) - 10*(a._tipV||0))*dt;
+  a._tip = (a._tip||0) + a._tipV*dt;
+  b.rotation.x = a._tip;
+  b.rotation.z = damp(b.rotation.z, a._toppleZ||0, 6, dt);
+  b.position.set(0, damp(b.position.y,0,8,dt), 0);
+  b.scale.set(1,1,1);
+  u.upper.rotation.y = damp(u.upper.rotation.y, 0, 6, dt);
+  u.hips.rotation.y  = damp(u.hips.rotation.y, 0, 6, dt);
+  u.toque.rotation.x = damp(u.toque.rotation.x, 0.7, 5, dt);
+  for(let i=0;i<2;i++){ const A=u.arms[i], sign=i===0?-1:1;
+    A.tgt.x=damp(A.tgt.x,sign*0.42,5,dt); A.tgt.y=damp(A.tgt.y,0.55,5,dt); A.tgt.z=damp(A.tgt.z,0.15,5,dt);
+    _bnd2.set(sign*0.6,-1,0.3);
+    solveTwoBone(A.up,A.fore,A.sh,A.tgt,ARM_U,ARM_F,_bnd2,A.elb);
+    A.hand.position.copy(A.tgt); _fdir.subVectors(A.tgt,A.elb);
+    if(_fdir.lengthSq()>1e-6){ _fdir.normalize(); A.hand.quaternion.setFromUnitVectors(FWD,_fdir); } }
+  for(let i=0;i<2;i++){ const L=u.legs[i];
+    _hipV.set(L.hip.x, L.hip.y, L.hip.z); toRootLocal(a,L.world,_footV); _footV.y=0.055;
+    solveTwoBone(L.thigh,L.shin,_hipV,_footV,THIGH,SHIN,KNEE_FWD,null);
+    L.boot.position.set(_footV.x,0.055,_footV.z+0.04); L.boot.rotation.set(0,0,0); }
+  springDeform(u.dHead, dt); applyDeform(u.head, u.dHead, a.chef.scale.x||1);
+}
+
+/* ================================================ Verlet ragdoll (ported) */
+const RAG={ grav:-19, damp:0.986, iters:9, friction:0.72 };
+const RAG_STEP=1/120;
+const _rp1=new V3(), _rp2=new V3(), _rgv=new V3();
+function ragPt(p,r){ return { p:p.clone(), o:p.clone(), r:r }; }
+function finiteV(v){ return Number.isFinite(v.x)&&Number.isFinite(v.y)&&Number.isFinite(v.z); }
+function buildRagdoll(a){
+  const u=a.chef.userData, s=a.chef.scale.x||1;
+  a.chef.updateMatrixWorld(true);
+  const shW =i=> u.upper.localToWorld(u.arms[i].sh.clone());
+  const elbW=i=> u.upper.localToWorld(u.arms[i].elb.clone());
+  const hipW=i=> a.chef.localToWorld(u.legs[i].hip.clone());
+  const kneW=i=> a.chef.localToWorld(u.legs[i].knee.clone());
+  const hanW=i=> u.arms[i].hand.getWorldPosition(new V3());
+  const fooW=i=>{ const w=u.legs[i].world; return new V3(w.x, w.y+0.055*s, w.z); };
+  const P={
+    head:  ragPt(u.head.getWorldPosition(new V3()), 0.235*s),
+    chest: ragPt(u.upper.localToWorld(new V3(0,1.55,0)), 0.30*s),
+    hipC:  ragPt(a.chef.localToWorld(new V3(0,0.85,0)), 0.26*s),
+    shL:ragPt(shW(0),0.15*s), shR:ragPt(shW(1),0.15*s),
+    hipL:ragPt(hipW(0),0.14*s), hipR:ragPt(hipW(1),0.14*s),
+    elbL:ragPt(elbW(0),0.09*s), elbR:ragPt(elbW(1),0.09*s),
+    hanL:ragPt(hanW(0),0.11*s), hanR:ragPt(hanW(1),0.11*s),
+    kneL:ragPt(kneW(0),0.11*s), kneR:ragPt(kneW(1),0.11*s),
+    fooL:ragPt(fooW(0),0.06*s), fooR:ragPt(fooW(1),0.06*s)
+  };
+  const list=Object.keys(P).map(k=>P[k]);
+  for(const q of list){ if(!finiteV(q.p)){ a.rag=null; return; } }   // bail → spring-topple
+  const C=[]; const link=(x,y,k)=>C.push({a:P[x],b:P[y],len:Math.max(P[x].p.distanceTo(P[y].p),0.01),k:k===undefined?1:k});
+  link('head','chest',0.9); link('head','shL',0.55); link('head','shR',0.55);
+  link('chest','shL'); link('chest','shR'); link('shL','shR',0.9);
+  link('chest','hipC',0.95); link('hipC','hipL'); link('hipC','hipR'); link('hipL','hipR',0.9);
+  link('shL','hipL',0.7); link('shR','hipR',0.7); link('shL','hipR',0.5); link('shR','hipL',0.5);
+  link('shL','elbL'); link('elbL','hanL'); link('shR','elbR'); link('elbR','hanR');
+  link('hipL','kneL'); link('kneL','fooL'); link('hipR','kneR'); link('kneR','fooR');
+  link('chest','elbL',0.12); link('chest','elbR',0.12);
+  a.rag={ pts:P, list, cons:C, acc:0 };
+  for(const m of u.cos) m.visible=false;   // hide fiddly bits while limp
+}
+function ragImpulse(a, dir, power){
+  const R=a.rag; if(!R) return;
+  [['head',1],['chest',0.55],['shL',0.4],['shR',0.4]].forEach(h=>{ const pt=R.pts[h[0]];
+    pt.o.addScaledVector(dir, -power*h[1]*0.05); pt.o.y += power*h[1]*0.012; });
+}
+function ragTick(a, dt){ const R=a.rag; if(!R) return; R.acc+=dt; let g=0;
+  while(R.acc>=RAG_STEP && g++<8){ R.acc-=RAG_STEP; ragStep(a, RAG_STEP); } }
+function ragStep(a, dt){
+  const R=a.rag, list=R.list;
+  for(const q of list){ _rgv.subVectors(q.p,q.o).multiplyScalar(RAG.damp); q.o.copy(q.p); q.p.add(_rgv); q.p.y+=RAG.grav*dt*dt; }
+  for(let it=0; it<RAG.iters; it++){
+    for(const c of R.cons){ _rgv.subVectors(c.b.p,c.a.p); const d=_rgv.length(); if(d<1e-6) continue;
+      const diff=(d-c.len)/d*0.5*c.k; c.a.p.addScaledVector(_rgv,diff); c.b.p.addScaledVector(_rgv,-diff); }
+    for(const q of list){ if(q.p.y<q.r){ q.p.y=q.r; q.o.x+=(q.p.x-q.o.x)*RAG.friction; q.o.z+=(q.p.z-q.o.z)*RAG.friction; }
+      q.p.x=clamp(q.p.x,-HALFW+0.3,HALFW-0.3); q.p.z=clamp(q.p.z,-HALFD+0.3,HALFD-0.3); }
+  }
+}
+function ragApply(a){
+  const u=a.chef.userData, b=u.body, P=a.rag.pts;
+  a.chef.updateMatrixWorld(true);
+  b.position.set(0,0,0); b.rotation.set(0,0,0); b.scale.set(1,1,1);
+  u.spine.rotation.set(0,0,0); u.upper.rotation.set(0,0,0); u.hips.rotation.set(0,0,0);
+  const L=p=> a.chef.worldToLocal(p.clone());
+  const Lhead=L(P.head.p), LshL=L(P.shL.p), LshR=L(P.shR.p), LhipL=L(P.hipL.p), LhipR=L(P.hipR.p),
+        LelbL=L(P.elbL.p), LelbR=L(P.elbR.p), LhanL=L(P.hanL.p), LhanR=L(P.hanR.p),
+        LkneL=L(P.kneL.p), LkneR=L(P.kneR.p), LfooL=L(P.fooL.p), LfooR=L(P.fooR.p);
+  const shMid=_rp1.copy(LshL).add(LshR).multiplyScalar(0.5);
+  const hipMid=_rp2.copy(LhipL).add(LhipR).multiplyScalar(0.5);
+  orientBone(u.torso, hipMid, shMid);
+  u.head.position.copy(Lhead);
+  u.hips.position.copy(hipMid); u.hips.quaternion.copy(u.torso.quaternion);
+  u.toque.position.copy(Lhead); u.toque.position.y += 0.16;
+  orientFixed(u.arms[0].up, LshL, LelbL, ARM_U); orientFixed(u.arms[0].fore, LelbL, LhanL, ARM_F); u.arms[0].hand.position.copy(LhanL);
+  orientFixed(u.arms[1].up, LshR, LelbR, ARM_U); orientFixed(u.arms[1].fore, LelbR, LhanR, ARM_F); u.arms[1].hand.position.copy(LhanR);
+  orientFixed(u.legs[0].thigh, LhipL, LkneL, THIGH); orientFixed(u.legs[0].shin, LkneL, LfooL, SHIN); u.legs[0].boot.position.copy(LfooL);
+  orientFixed(u.legs[1].thigh, LhipR, LkneR, THIGH); orientFixed(u.legs[1].shin, LkneR, LfooR, SHIN); u.legs[1].boot.position.copy(LfooR);
+  springDeform(u.dHead, 0.016); applyDeform(u.head, u.dHead, a.chef.scale.x||1);
+}
+/* dispatcher: real ragdoll when we have one, else the spring-topple */
+function updateDead(a, dt){
+  if(a.rag){ ragTick(a, dt); ragApply(a); }
+  else deathPose(a, dt);
+}
+
+/* inject a directional impact into an actor's springs (recoil + hat bobble) */
+function applyImpact(T, worldAng, power){
+  const AN=T._an; if(!AN) return;
+  const rel=worldAng - T.facing;
+  AN.rxv += Math.cos(rel)*power*6;
+  AN.rzv += -Math.sin(rel)*power*6;
+  AN.toqueXv += power*4;
+}
+
+/* let player mirror into pose fns: attach sync helpers */
+function attachPlayerHelpers(P){
+  P.actorSync=function(){ /* pos/facing already tracked */ };
+}
+
+/* ================================================================ PICKUPS */
+let nearPickup=null;
+function updatePrompt(){
+  nearPickup=null; let bd=1.6;
+  for(const p of PICKUPS){ if(p.taken)continue; const d=Math.hypot(p.x-player.pos.x,p.z-player.pos.z);
+    if(d<bd){ bd=d; nearPickup=p; } }
+  const el=document.getElementById('prompt');
+  if(nearPickup && GAME.mode==='play'){
+    el.classList.add('on');
+    el.innerHTML='<span class="k">GRAB</span><span class="k">F</span> pick up <b>'+WEAPONS[nearPickup.key].name.toUpperCase()+'</b>';
+  } else el.classList.remove('on');
+}
+function tryPickup(){
+  if(!nearPickup) return;
+  const p=nearPickup;
+  // drop current weapon back as a pickup if it isn't fists and has life
+  if(player.wpn!=='fists' && player.dur>0 && player.dur!==Infinity){
+    spawnPickup(player.wpn, player.pos.x - Math.sin(player.facing)*0.6, player.pos.z - Math.cos(player.facing)*0.6);
+  }
+  player.wpn=p.key; player.dur=WEAPONS[p.key].dur; equip(player.chef,p.key);
+  p.taken=true; scene.remove(p.g);
+  sfx.pickup(); updateHUDWeapon(); toast('Picked up '+WEAPONS[p.key].name.toUpperCase());
+  const hpos=player.pos.clone(); hpos.y=1.3; ring(hpos,COL.herb,1.2); burst(hpos,8,COL.herb,0.8);
+}
+
+/* ================================================================ LOCK-ON */
+function toggleLock(){
+  if(player.lockOn){ player.lockOn=null; toast('Lock-on off'); }
+  else { const t=nearestEnemy(player.pos,player.facing,null); if(t){ player.lockOn=t; toast('Locked on'); } }
+}
+function switchTarget(dir){
+  const alive=enemies.filter(e=>!e.dead); if(alive.length<2||!player.lockOn)return;
+  alive.sort((a,b)=>Math.atan2(a.pos.x-player.pos.x,a.pos.z-player.pos.z)-Math.atan2(b.pos.x-player.pos.x,b.pos.z-player.pos.z));
+  let i=alive.indexOf(player.lockOn); i=(i+dir+alive.length)%alive.length; player.lockOn=alive[i];
+}
+
+/* ================================================================ HURT */
+function playerHurtFlash(dmg){
+  const f=document.getElementById('dmgflash');
+  f.animate([{opacity:Math.min(0.5,dmg/40)},{opacity:0}],{duration:300});
+  player.hurt=1; punchScale(player.chef,0.2); sfx.hurt(); haptic(0.6+Math.min(0.4,dmg*0.02),0.5,110); kitchenBump(0.3);
+  updateHUDHealth();
+  if(player.hp<=0 && !player.dead){ playerDown(); }
+}
+function startTackle(P){
+  if(P.tackle||P.dodge||P.attack||P.grabbed||P.stagger>0||P.tackleCD>0) return;
+  let tgt=P.lockOn||nearestEnemy(P.pos,P.facing,2.8)||nearestEnemy(P.pos,P.facing,null);
+  let dir;
+  if(tgt){ dir=new V3(tgt.pos.x-P.pos.x,0,tgt.pos.z-P.pos.z); P.facing=Math.atan2(dir.x,dir.z); }
+  else { dir=new V3(Math.sin(P.facing),0,Math.cos(P.facing)); }
+  if(dir.lengthSq()<1e-4) dir.set(Math.sin(P.facing),0,Math.cos(P.facing));
+  dir.normalize();
+  P.tackle={ t:0, dur:0.42, dir, hit:false };
+  P.tackleCD=0.85; P.iframe=0.16; P.attack=null; P.guard=false;
+  sfx.step(); shake(0.22); haptic(0.3,0.4,60);
+}
+function tackleEnemy(P,e){
+  const ang=Math.atan2(e.pos.x-P.pos.x, e.pos.z-P.pos.z);
+  e.hp-=20;
+  const kb=15; e.vel.x=Math.sin(ang)*kb; e.vel.z=Math.cos(ang)*kb;
+  e.stagger=0.85; e.state='engage'; e.stateT=0.2; e.attack=null;
+  if(e.hasToken){ e.hasToken=false; tokensUsed--; }
+  if(player.grabbed && player.grabbed.by===e){ player.grabbed=null; hideMashUI(); }
+  const cp=e.pos.clone(); cp.y=1.2;
+  shake(0.7); hitstop(0.06); impactFrames(3,0xffe03d,0x140c07); hitPost(0.72,0xff8a3a);
+  burst(cp,16,0xffe03d,1.3); ring(cp,COL.flame,1.3); popWord(cp,'TACKLE!','#ffe03d',34);
+  sfx.thud(1); haptic(0.7,0.6,150); kitchenBump(0.4); applyImpact(e,ang,1.5); punchScale(e.chef,0.35);
+  addCombo();
+  if(e.hp<=0) killChef(e, ang);
+  P.vel.multiplyScalar(0.35); if(P.tackle) P.tackle.t=P.tackle.dur;   // charge ends on contact
+}
+function mashUI(Gr){ const g=document.getElementById('grabui'); if(!g)return; g.classList.add('on');
+  const f=document.getElementById('grabfill'); if(f) f.style.transform='scaleX('+clamp(Gr.mash/Gr.need,0,1)+')'; }
+function hideMashUI(){ const g=document.getElementById('grabui'); if(g) g.classList.remove('on'); }
+function handleGrab(P,dt,pad){
+  const Gr=P.grabbed, e=Gr.by;
+  if(!e || e.dead){ P.grabbed=null; hideMashUI(); return; }
+  Gr.t+=dt; Gr.dmgT-=dt;
+  let m=0;
+  if(consume('lightEdge')) m++; if(consume('heavyEdge')) m++; if(consume('dodgeEdge')) m++;
+  if(tapK('j')) m++; if(tapK('k')) m++; if(tapK('shift')) m++;
+  if(MOUSE.l){ m++; MOUSE.l=false; } if(MOUSE.r){ m++; MOUSE.r=false; }
+  if(TOUCH.lightEdge){ m++; TOUCH.lightEdge=false; } if(TOUCH.heavyEdge){ m++; TOUCH.heavyEdge=false; } if(TOUCH.dodgeEdge){ m++; TOUCH.dodgeEdge=false; }
+  if(pad){ if(pad.lightEdge)m++; if(pad.heavyEdge)m++; if(pad.dodgeEdge)m++; }
+  const mx=(pad?pad.move.x:0)+TOUCH.moveX + ((KEY['a']?-1:0)+(KEY['d']?1:0));
+  if(Gr._px===undefined) Gr._px=0;
+  if(Math.abs(mx)>0.5 && Math.sign(mx)!==Math.sign(Gr._px)) m+=0.5;
+  Gr._px=mx;
+  Gr.mash += m;
+  if(Gr.dmgT<=0){ Gr.dmgT=0.55; P.hp-=(e.kind==='tough'?4:2.5); P.hurt=1; shake(0.22); updateHUDHealth();
+    if(P.hp<=0){ P.grabbed=null; hideMashUI(); playerDown(); return; } }
+  const dx=e.pos.x-P.pos.x, dz=e.pos.z-P.pos.z, d=Math.hypot(dx,dz)||1;
+  P.facing=angLerp(P.facing, Math.atan2(dx,dz), Math.min(1,dt*12));
+  const k=Math.min(1,dt*7); P.pos.x += dx*(1-0.95/d)*k; P.pos.z += dz*(1-0.95/d)*k; P.vel.set(0,0,0);
+  mashUI(Gr);
+  if(Gr.mash>=Gr.need){                        // broke free
+    P.grabbed=null; hideMashUI(); P.iframe=0.6;
+    e.stagger=0.7; e.state='recover'; e.stateT=0.6; e.vel.set(-dx/d*7,0,-dz/d*7);
+    shake(0.5); sfx.block(); haptic(0.4,0.5,80);
+    const hp=P.pos.clone(); hp.y=1.5; popWord(hp,'BROKE FREE!','#7dd6c0',30); burst(hp,12,0x9be6d0,1.1);
+    return;
+  }
+  if(Gr.t>=Gr.max){                            // slammed
+    P.hp-=(e.kind==='tough'?12:8); P.grabbed=null; hideMashUI();
+    P.stagger=0.5; P.iframe=0.3; P.vel.set(-dx/d*9,0,-dz/d*9);
+    e.state='recover'; e.stateT=0.7;
+    shake(0.9); impactFrames(3,0xff3b30,0x140c07); hitPost(0.85,0xff3b30); sfx.hurt(); haptic(0.9,0.7,200);
+    const hp=P.pos.clone(); hp.y=1.4; popWord(hp,'SLAMMED','#ff3b30',34); updateHUDHealth();
+    if(P.hp<=0) playerDown();
+    return;
+  }
+}
+function playerDown(){
+  player.dead=true; shake(1.2); hitstop(0.15);
+  impactFrames(4, 0xff3b30, 0x140c07); hitPost(0.9, 0xff3b30);
+  buildRagdoll(player); if(player.rag) ragImpulse(player, _rp1.set(-Math.sin(player.facing),0.2,-Math.cos(player.facing)).normalize(), 1.1);
+  const p=player.pos.clone(); p.y=1.2; popWord(p,"86'D",'#ff3b30',46);
+  setTimeout(()=>endNight(false),900);
+}
+
+/* ================================================================ HUD */
+function updateHUDHealth(){
+  const k=clamp(player.hp/player.hpMax,0,1);
+  document.getElementById('hpfill').style.transform='scaleX('+k+')';
+  document.getElementById('hpghost').style.transform='scaleX('+k+')';
+  document.getElementById('hpfill').classList.toggle('low', k<0.25);
+}
+function updateHUDWeapon(){
+  document.getElementById('wpnname').textContent=WEAPONS[player.wpn].name.toUpperCase();
+  const pips=document.getElementById('pips'); pips.innerHTML='';
+  const w=WEAPONS[player.wpn];
+  if(w.dur===Infinity){ return; }
+  const total=w.dur, left=Math.max(0,player.dur);
+  for(let i=0;i<total;i++){ const d=document.createElement('i');
+    d.className='pip'+(i>=left?' spent':(left<=3?' crit':left<=total*0.35?' low':''));
+    pips.appendChild(d); }
+}
+function updateHUDCooks(n){ document.getElementById('cooksN').textContent=n; }
+let toastT=null;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'),1600); }
+
+/* ================================================================ WAVES */
+// Discrete numbered waves: cfg.waves is still one flat kind list (the seam's
+// documented contract), sliced into per-wave chunks by cfg.waveSizes (e.g.
+// [3,4,5,6,7]). A wave's chunk only starts spawning once the previous chunk
+// is fully spawned AND cleared, with a short announced rest between them.
+// Omitting waveSizes collapses to one chunk = the whole list, i.e. the
+// original single-wave trickle, so any caller not passing it is unaffected.
+const WAVE={ spawned:0, done:false };
+function spawnEnemy(kind){
+  // spawn at a random edge, away from player
+  let x,z,tries=0;
+  do{ const side=(Math.random()*4)|0;
+    if(side===0){x=rand(-HALFW+1,HALFW-1);z=-HALFD+1.2;}
+    else if(side===1){x=rand(-HALFW+1,HALFW-1);z=HALFD-1.2;}
+    else if(side===2){x=-HALFW+1.2;z=rand(-HALFD+1,HALFD-1);}
+    else {x=HALFW-1.2;z=rand(-HALFD+1,HALFD-1);}
+    tries++;
+  } while(Math.hypot(x-player.pos.x,z-player.pos.z)<4 && tries<10);
+  const e=makeEnemy(kind,new V3(x,0,z)); enemies.push(e);
+  // little poof
+  const p=new V3(x,1.2,z); burst(p,6,COL.cream,0.7);
+  return e;
+}
+function chunkWaves(list, sizes){
+  sizes = (sizes && sizes.length) ? sizes : [list.length];
+  const chunks=[]; let idx=0;
+  for(const size of sizes){ chunks.push(list.slice(idx, idx+Math.max(0,size))); idx+=size; }
+  // sizes summing short of the full list would silently drop enemies — fold
+  // any leftover into one more wave instead.
+  if(idx<list.length) chunks.push(list.slice(idx));
+  return chunks;
+}
+function updateHUDWave(){
+  const el=document.getElementById('waveL'); if(!el) return;
+  el.textContent = WAVE.chunks && WAVE.chunks.length>1
+    ? 'WAVE '+(WAVE.wave+1)+' / '+WAVE.chunks.length : '';
+}
+function spawnWaveChunk(delay){
+  const first=Math.min(4, WAVE.total);
+  WAVE.pending=first;
+  for(let i=0;i<first;i++){ setTimeout(()=>{ WAVE.pending=Math.max(0,(WAVE.pending||1)-1);
+    spawnEnemy(WAVE.queue[WAVE.spawned]||'weak'); WAVE.spawned++;
+    if(WAVE.spawned>=WAVE.total) WAVE.waveDone=true;
+    updateHUDCooks(enemies.filter(e=>!e.dead).length); }, delay+i*350); }
+}
+function startNextWave(){
+  WAVE.resting=true; updateHUDWave();
+  toast('WAVE '+(WAVE.wave+2)+' / '+WAVE.chunks.length);
+  setTimeout(()=>{
+    WAVE.resting=false; WAVE.wave++;
+    WAVE.queue=WAVE.chunks[WAVE.wave]; WAVE.total=WAVE.queue.length;
+    WAVE.spawned=0; WAVE.waveDone=false; WAVE.pending=0;
+    spawnWaveChunk(200);
+    updateHUDWave();
+  }, 2200);
+}
+function maybeSpawnWave(){
+  if(WAVE.resting) return;
+  const alive=enemies.filter(e=>!e.dead).length;
+  const inflight=WAVE.pending||0;
+  if(!WAVE.waveDone){
+    if(alive<=2 && (WAVE.spawned+inflight)<WAVE.total){
+      const n=Math.min(2, WAVE.total-WAVE.spawned-inflight);
+      for(let i=0;i<n;i++){ WAVE.pending=(WAVE.pending||0)+1;
+        setTimeout(()=>{ WAVE.pending=Math.max(0,(WAVE.pending||1)-1);
+          spawnEnemy(WAVE.queue[WAVE.spawned]||'weak'); WAVE.spawned++;
+          updateHUDCooks(enemies.filter(e=>!e.dead).length);
+          if(WAVE.spawned>=WAVE.total) WAVE.waveDone=true; }, i*450); }
+    }
+    return;
+  }
+  // this wave's queue is fully spawned — advance once the room is actually clear
+  if(alive>0 || inflight>0) return;
+  if(WAVE.wave+1>=WAVE.chunks.length){ WAVE.done=true; return; }
+  startNextWave();
+}
+
+/* ================================================================ NIGHT (the seam) */
+/* startNight(cfg,onEnd): cfg = { larder:[{key,x,z}], waves:[kind...],
+   waveSizes:[n...]?, player:{wpn} }
+   waveSizes splits the flat `waves` list into numbered waves (e.g. [3,4,5,6,7]
+   for 5 escalating waves) with a rest + HUD/toast announcement between each.
+   Omit it for the original single continuous wave.
+   onEnd(result): result = { survived:bool, kills, maxCombo, wpn } */
+function startNight(cfg, onEnd){
+  // clear
+  for(const e of enemies) scene.remove(e.chef); enemies.length=0;
+  for(const p of PICKUPS) scene.remove(p.g); PICKUPS.length=0;
+  tokensUsed=0;
+  GAME.kills=0; GAME.combo=0; GAME.maxCombo=0; GAME.hitsLanded=0; GAME.onEnd=onEnd;
+  // player
+  if(!player){ player=makePlayer(); attachPlayerHelpers(player); }
+  player.pos.set(0,0,2.5); player.vel.set(0,0,0); player.facing=Math.PI; player.hp=player.hpMax; player._feet=false;
+  player.wpn=cfg.player&&cfg.player.wpn||'fists'; player.dur=WEAPONS[player.wpn].dur; equip(player.chef,player.wpn);
+  player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null;
+  player.grabbed=null; hideMashUI(); grabCD=0; player.tackle=null; player.tackleCD=0;
+  resetRagPose(player);
+  player._feet=null; player.vel.set(0,0,0);
+  CAM.yaw=Math.PI; CAM.lockK=0;
+  // larder
+  for(const it of cfg.larder) spawnPickup(it.key,it.x,it.z);
+  // waves
+  WAVE.chunks=chunkWaves(cfg.waves, cfg.waveSizes);
+  WAVE.wave=0; WAVE.resting=false; WAVE.done=false; WAVE.winT=0;
+  WAVE.queue=WAVE.chunks[0]; WAVE.total=WAVE.queue.length; WAVE.spawned=0; WAVE.waveDone=false; WAVE.pending=0;
+  spawnWaveChunk(300);
+  updateHUDCooks(Math.min(4,WAVE.total));
+  updateHUDWave();
+  updateHUDHealth(); updateHUDWeapon();
+  GAME.mode='play';
+  document.getElementById('hud').classList.add('on');
+  if(TOUCHCAP) touchEl.classList.add('on');
+  document.getElementById('veil').classList.add('hide');
+  document.getElementById('hint').classList.add('on');
+}
+let ended=false;
+function endNight(survived){
+  if(ended)return; ended=true; GAME.mode='over';
+  const res={ survived, kills:GAME.kills, maxCombo:GAME.maxCombo, wpn:player.wpn };
+  if(GAME.onEnd) GAME.onEnd(res);
+  document.getElementById('hint').classList.remove('on');
+  showEnd(res);
+}
+
+/* ================================================================ CARDS */
+function showTitle(){
+  GAME.mode='title';
+  document.getElementById('card').innerHTML =
+    '<div class="kick">AFTER HOURS · THE PATRONS CAME BACK</div>'+
+    '<div class="title">SHORT<br><span class="b">ORDER</span></div>'+
+    '<div class="sub">The dinner rush is over. They\u2019re not. Grab whatever\u2019s on the pass \u2014 '+
+    'a spatula, a nonstick, the cast iron if you can swing it \u2014 and clear the line. '+
+    'Everything breaks. Everything is heavy in its own way.</div>'+
+    '<button class="btn" id="playBtn">STEP TO THE PASS</button>'+
+    '<div id="ctrls">'+ctrlRows()+'</div>';
+  document.getElementById('playBtn').onclick=()=>{ audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startNight(SLICE, onNightEnd); };
+  document.getElementById('veil').classList.remove('hide');
+  touchEl.classList.remove('on');
+}
+function ctrlRows(){
+  const rows=[
+    ['Move','Left stick / WASD','pad'],
+    ['Light attack','Cross / J','pad'],
+    ['Heavy attack','Square / K','pad'],
+    ['Pick up weapon','Triangle / F','pad'],
+    ['Guard','L2 / Space','pad'],
+    ['Weave','Right stick / Q E','pad'],
+    ['Dash','R2 + stick / Shift','pad'],
+    ['Rotate camera','L1 R1 / [ ]','pad'],
+    ['Lock-on','R3 / L','pad'],
+    ['Switch target','L1 R1 (locked)','pad'],
+  ];
+  return rows.map(r=>'<div class="r"><span>'+r[0]+'</span><b class="'+(r[2]||'')+'">'+r[1]+'</b></div>').join('');
+}
+function showEnd(res){
+  const c=document.getElementById('card');
+  document.getElementById('veil').classList.remove('hide');
+  document.getElementById('hud').classList.remove('on');
+  touchEl.classList.remove('on');
+  const win=res.survived;
+  c.innerHTML='<div class="card end '+(win?'win':'lose')+'">'+
+    '<div class="kick">'+(win?'THE LINE IS CLEAN':'YOU WENT DOWN')+'</div>'+
+    '<div class="title">'+(win?'KITCHEN<br>CLEARED':'86\u2019D')+'</div>'+
+    '<div class="stat">Cooks put down <b>'+res.kills+'</b> &nbsp;·&nbsp; Best combo <b>'+res.maxCombo+'</b>'+
+    (win?'':'<br>Last weapon in hand: <b>'+WEAPONS[res.wpn].name+'</b>')+'</div>'+
+    '<button class="btn" id="againBtn">'+(win?'ANOTHER NIGHT':'BACK ON THE LINE')+'</button></div>';
+  document.getElementById('againBtn').onclick=()=>{ ended=false; startNight(SLICE, onNightEnd); };
+}
+function onNightEnd(res){ /* the seam hands the cooking-loop layer a result here */ }
+
+/* the hardcoded test night for this slice */
+const SLICE={
+  player:{ wpn:'fists' },
+  larder:[
+    {key:'spatula', x:-3.6,z:3.0}, {key:'spatula', x:3.6,z:3.0},
+    {key:'nonstick', x:0,z:3.2},
+    {key:'castiron', x:-7.4,z:3.6},        // over by the far prep station — go get it
+    {key:'knife', x:7.5,z:4.5},
+    {key:'potlid', x:5.5,z:-4.5}
+  ],
+  waveSizes: [3,4,5,6,7],
+  waves:[
+    'weak','weak','weak',                                   // wave 1
+    'weak','weak','weak','tough',                            // wave 2
+    'weak','weak','tough','weak','tough',                    // wave 3
+    'weak','tough','weak','tough','weak','tough',             // wave 4
+    'tough','weak','tough','weak','tough','weak','tough'      // wave 5
+  ]
+};
+
+/* ================================================================ LOOP */
+let last=performance.now()/1000;
+function tick(){
+  requestAnimationFrame(tick);
+  let now=performance.now()/1000; let dt=Math.min(0.05, now-last); last=now;
+  GAME.t+=dt;
+
+  const pad=pollPad();
+  if(pad.start && GAME.mode==='play'){ /* pause hook (omitted in slice) */ }
+
+  // hitstop freezes sim but not render
+  let sdt=dt;
+  if(FX.hitstop>0){ FX.hitstop-=dt; sdt=0.0001; }
+
+  if(GAME.mode==='play'){
+    updatePlayer(sdt, pad);
+    for(const e of enemies) updateEnemy(e, sdt);
+    // reap
+    for(let i=enemies.length-1;i>=0;i--) if(enemies[i]._remove) enemies.splice(i,1);
+    // win: all waves spawned and nobody left standing (frame-timed so it can't be missed)
+    if(!ended && WAVE.done && enemies.every(e=>e.dead)){
+      WAVE.winT=(WAVE.winT||0)+dt;
+      if(WAVE.winT>0.7) endNight(true);
+    } else WAVE.winT=0;
+  } else {
+    // idle breathing on title
+    if(player){ poseChef(player,true,dt); }
+  }
+
+  sparkTick(dt); ringTick(dt); kitchenTick(dt); grabCD=Math.max(0,grabCD-dt);
+  // pickup bobbing
+  for(const p of PICKUPS){ if(p.taken)continue; p.g.position.y=p.y0+Math.sin(GAME.t*2+p.x)*0.08; p.g.rotation.y+=dt*1.2;
+    p.disc.material.opacity=0.18+Math.sin(GAME.t*4+p.z)*0.08; }
+  // stove flicker
+  const flames=arena.userData.stoveFlames||[];
+  for(const f of flames){ f.scale.y=1+Math.sin(GAME.t*18+f.userData.b)*0.15; f.material.emissiveIntensity=1.8+Math.sin(GAME.t*22+f.userData.b)*0.6; }
+  stoveGlow.intensity=0.8+Math.sin(GAME.t*16)*0.2;
+
+  updateCamera(dt);
+  postTick(dt);
+  renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,camera);
+  renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+}
+
+function updateCamera(dt){
+  updateCameraVectors();
+  const P=player;
+  const target = P? P.pos : new V3();
+  const locked = !!(P && P.lockOn && !P.lockOn.dead);
+  CAM.lockK = damp(CAM.lockK, locked?1:0, 5, dt);
+  const k = CAM.lockK;
+
+  // LOCK-ON: swing the camera BEHIND the player along the player->target axis,
+  // so you're looking over his shoulder AT the enemy. (This used to use the
+  // reverse vector, which parked the lens on the far side facing back at you.)
+  if(locked){
+    const t=P.lockOn.pos;
+    const desired=Math.atan2(t.x-P.pos.x, t.z-P.pos.z);
+    CAM.yaw=angLerp(CAM.yaw, desired, Math.min(1,dt*7));
+    updateCameraVectors();                       // re-derive fwd/right after the swing
+  }
+
+  let look=target.clone(); look.y=1.4;
+  let want=CAM.pos.clone();
+  const dir=camFwd.clone().multiplyScalar(-1); // player -> camera
+  // trail behind the player, but SHORTEN the distance so the camera can never
+  // sit outside the room (which would just show the back of a wall).
+  const mx=HALFW-0.6, mz=HALFD-0.6;
+  let dist=CAM.dist*(1-0.34*k);                  // pull in tight when locked
+  if(dir.x>1e-4) dist=Math.min(dist,(mx-target.x)/dir.x);
+  else if(dir.x<-1e-4) dist=Math.min(dist,(-mx-target.x)/dir.x);
+  if(dir.z>1e-4) dist=Math.min(dist,(mz-target.z)/dir.z);
+  else if(dir.z<-1e-4) dist=Math.min(dist,(-mz-target.z)/dir.z);
+  dist=Math.max(2.0,dist);
+  want.copy(target).addScaledVector(dir,dist);
+  want.addScaledVector(camRight, 0.95*k);        // over the shoulder: slide off-centre
+  want.y=CAM.height - 0.55*k;                    // drop toward head height
+  if(locked){
+    // frame BOTH of you: sit the aim between the pair, biased at the enemy
+    const t=P.lockOn.pos;
+    const fl=new V3(lerp(P.pos.x,t.x,0.42), 1.45, lerp(P.pos.z,t.z,0.42));
+    fl.addScaledVector(camRight, 0.42);          // keep the player from sliding off-frame
+    look.lerp(fl, k);
+  } else if(P){
+    const ne=nearestEnemy(P.pos,P.facing,null);
+    if(ne){ look.lerp(new V3(ne.pos.x,1.4,ne.pos.z),0.12); }
+  }
+  CAM.pos.lerp(want, Math.min(1,dt*(7+3*k)));
+  CAM.pos.x=clamp(CAM.pos.x,-mx,mx); CAM.pos.z=clamp(CAM.pos.z,-mz,mz);
+  // trauma shake
+  FX.trauma=Math.max(0,FX.trauma-dt*2.4);
+  const s=FX.trauma*FX.trauma;
+  camera.position.copy(CAM.pos);
+  camera.position.x+=(Math.random()-0.5)*s*0.7;
+  camera.position.y+=(Math.random()-0.5)*s*0.55;
+  camera.position.z+=(Math.random()-0.5)*s*0.7;
+  CAM.look.lerp(look, Math.min(1,dt*9));
+  _shl.copy(CAM.look);
+  _shl.x+=(Math.random()-0.5)*s*0.28; _shl.y+=(Math.random()-0.5)*s*0.24;   // jitter the aim too — reads as a harder hit
+  camera.lookAt(_shl);
+  camera.rotation.z+=(Math.random()-0.5)*s*0.095;
+  camera.fov=lerp(camera.fov, 55 - 7*k + s*5, Math.min(1,dt*7));   // zoom in on lock
+  camera.updateProjectionMatrix();
+}
+
+addEventListener('resize',layout); addEventListener('orientationchange',layout); layout();
+
+/* boot */
+showTitle();
+// a gentle idle so the title screen isn't empty: place player on the pass
+if(!player){ player=makePlayer(); attachPlayerHelpers(player); }
+player.pos.set(0,0,2); player.facing=Math.PI;
+CAM.pos.set(0,3.2,6.5); CAM.look.set(0,1.4,2);
+tick();
+</script>
+</body>
+</html>
