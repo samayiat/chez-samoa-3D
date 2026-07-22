@@ -120,6 +120,54 @@ below locked in scope and decisions for when work actually begins.
   actually run in this repo's CI yet, since there's nothing for it to build until Track A produces
   something.
 
+## Further decisions locked in (sectioned interview round)
+
+A second interview pass, organized by section since the scope had grown large enough to need it.
+
+**1. Co-op protocol & session details**
+- Rooms are exactly 2 players, no spectator slots.
+- On disconnect mid-fight: pause the sim and wait for reconnection, rather than continuing solo
+  with the dropped chef going idle/AI.
+- Character assignment: whoever creates the room picks their character first; the joiner gets
+  whichever is left. No per-device persistent preference for now.
+
+**2. Persistence & save data**
+- Only day-service progress persists locally (day count, money/rent, shop upgrades). Combat-session
+  state (weapon durability, drink count, HP) resets fresh every time a brawl/boss fight starts —
+  it's transient to the encounter, not persistent progress.
+- In co-op, the room creator's save is "the" save being played — the joining player is a guest
+  contributing combat/service help, not advancing their own separate economy.
+- No save-format versioning yet — there's no real player progress to protect; add a version field
+  once the save shape has actually stabilized.
+
+**3. Visual verification / "definition of done"**
+- Since this environment can't interactively render/play a Three.js scene, verification for
+  anything visual is: generate screenshots via a Playwright-based pipeline (both source projects
+  already have this kind of tooling — see `culinary-dash/work_handoff/*shot.js` and
+  `culinary-dash-3d/e2e/`) after each piece lands, and the developer is the one who actually judges
+  whether it looks/feels right — matches `HANDOFF_CLAUDE_CODE.md`'s own "the taste calls stay with
+  the developer" framing.
+- Every report on a landed piece explicitly states what's mechanically verified (tests pass, no
+  exceptions/NaN) versus what's still visually unverified — every time, not just when something
+  seems risky.
+
+**4. Art/asset pipeline**
+- The redesigned mob roster stays fully procedural (primitives/shaders), matching both projects'
+  existing house style. No 3D-compatible equivalent of the 2D game's sprite-generation ("pixel lab")
+  pipeline is needed for this port.
+
+**5. Platform & performance targets**
+- No specific target devices yet — build for reasonably modern browsers/devices in general, revisit
+  if something specific turns out to struggle once this is actually being played.
+- Despite quality-scaling integration itself being deferred (see "Quality/performance scaling is not
+  a concern yet" above), the architecture should still be **shaped to handle mismatched devices**
+  (independent quality settings per device) when that work eventually happens — not assume both
+  co-op devices have comparable hardware.
+
+**6. HUD/UX unification**
+- The HUD stays visually distinct per phase (service/brawl/boss each keep their own current
+  treatment) for this pass. A unified visual redesign across all phases is separate, later work.
+
 ## The two tracks
 
 ### Track A — Combat port into `culinary-dash-3d` (do this first)
