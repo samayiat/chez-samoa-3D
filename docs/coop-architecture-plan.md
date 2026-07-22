@@ -104,6 +104,19 @@ below locked in scope and decisions for when work actually begins.
   `resolveHit` becomes the single path all damage flows through (mobs, Vince, anything added later),
   and this gets an actual test asserting nothing deals damage outside it — mutation-tested, in the
   same style as the invariant's origin.
+- **`culinary-dash-3d` gets its own `CLAUDE.md`**, written now (before the port itself starts),
+  capturing everything locked in this document as dev-facing invariants — mirrors the house style
+  both source projects already use, and means a future session isn't reconstructing this from
+  conversation history.
+- **Track A work happens on a new dedicated branch**, not piled onto `claude/godot-setup-6qgsqq`
+  (which already carries Short Order, the repo consolidation, and this planning doc) — a change
+  this size (replacing a whole combat system) gets its own branch/PR.
+- **A dev preview deploy is wanted, but treated as disposable.** Not a committed permanent URL/path
+  — just something viewable to check progress against while the port is in flight. No need to
+  carefully plan the final serving path now; that can change freely later.
+- **The carried-over `culinary-dash-pages.yml` workflow stays reference-only** — not adapted to
+  actually run in this repo's CI yet, since there's nothing for it to build until Track A produces
+  something.
 
 ## The two tracks
 
