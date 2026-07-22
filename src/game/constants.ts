@@ -100,7 +100,7 @@ export const CHEF_SPEED = 5.4;
 export const CARRY_SLOW = 0.92;
 
 // brawl (original: BRAWL_TIME=90, CHEF_HP=20, ENEMY_HP=5, PUNCH_DMG=1.25)
-export const BRAWL_TIME = 90;
+export const BRAWL_TIME = 150;
 export const CHEF_HP = 20;
 export const ENEMY_HP = 5;
 export const PUNCH_DMG = 1.25;
@@ -111,7 +111,7 @@ export const THIEF_SPEED = 3.0;
 export const LUNGE_DMG = 1;
 export const DRINK_PERMANENT_AT = 3;
 export const WASTED_AT = 5;
-export const WAVE_COUNT = 3;
+export const WAVE_COUNT = 5;
 
 // night (original: NIGHT_TIME=75, BOTTLE_PRICE=750)
 export const NIGHT_TIME = 75;
