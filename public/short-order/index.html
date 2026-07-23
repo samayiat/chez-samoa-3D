@@ -2070,7 +2070,7 @@ function updatePlayer(dt, pad){
   let spd=6.7;
   if(P.guard) spd*=0.42;
   if(P.attack) spd*=0.14;
-  if(P.hold) spd*=0.42;                         // hauling someone slows your walk
+  if(P.hold) spd*=0.85;                         // hauling someone barely slows you -- you can RUN them to the rail
   if(P.tackle){
     const T=P.tackle; T.t+=dt; const k=1-T.t/T.dur;
     if(T.rush){
