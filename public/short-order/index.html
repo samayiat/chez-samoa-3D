@@ -822,7 +822,8 @@ function passSlotX(i){ return (i-(PASS_SLOTS-1)/2) * (PASS.w-1.4)/(PASS_SLOTS-1)
       const seat=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.5),dark); seat.position.set(0.2,1.06,0.1); seat.castShadow=true; body.add(seat);
       const back=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.5,0.5),dark); back.position.set(0.42,1.34,0.1); back.castShadow=true; body.add(back);
     }
-    if(!tipped) OBST.push({x,z,rx:1.0,rz:1.0});
+    // both stand AND tipped tables block you now -- nothing walk-through
+    OBST.push(tipped ? {x,z,rx:1.1,rz:0.7} : {x,z,rx:1.0,rz:1.0});
   }
 })();
 
@@ -1578,22 +1579,32 @@ function collide(pos,r){
    treated as heavier (a live actor gives way more than the chef) so you feel
    solid; enemy-vs-enemy splits the push evenly. Runs after everyone has moved,
    then re-clamps to walls/props so nobody gets shoved through the bar. */
+const BODY_PAD=0.14;   // extra personal space so bodies STOP with a clean gap, not interpenetrate (kept off .r so attack/grab ranges don't shift)
+function bodyGive(a){                   // how much this body YIELDS to a push (lower = heavier / moves less)
+  if(a.dead) return 0.06;              // a fresh corpse is near-immovable; the living pile up against it
+  if(a===player) return 0.32;          // the player gives more now -- a crowd walls you off instead of letting you ghost through
+  return 0.5;
+}
 function resolveBodies(){
-  const live=[player]; for(const e of enemies) if(!e.dead) live.push(e);
-  for(let iter=0; iter<2; iter++){
+  // living actors PLUS fresh corpses (still full-size, before the shrink) so you
+  // can't walk through a body that just dropped in front of you
+  const live=[player];
+  for(const e of enemies) if(!e.dead || e.deadT<1.6) live.push(e);
+  for(let iter=0; iter<4; iter++){
     for(let i=0;i<live.length;i++) for(let j=i+1;j<live.length;j++){
       const a=live[i], b=live[j];
+      if(a.dead && b.dead) continue;   // two corpses don't need resolving
       let dx=b.pos.x-a.pos.x, dz=b.pos.z-a.pos.z, d=Math.hypot(dx,dz);
-      const min=(a.r||0.34)+(b.r||0.34);
+      const min=(a.r||0.34)+(b.r||0.34) + BODY_PAD*2;
       if(d>=min) continue;
       if(d<1e-4){ dx=Math.cos(i*2.4+j); dz=Math.sin(i*2.4+j); d=1; }   // exact overlap: split along a stable direction
       const overlap=min-d; dx/=d; dz/=d;
-      // weight the push: the player barely gives (0.15), enemies give the rest
-      const aw=(a===player)?0.15:0.5, bw=(b===player)?0.15:0.5, s=aw+bw||1;
+      const aw=bodyGive(a), bw=bodyGive(b), s=aw+bw||1;
       a.pos.x-=dx*overlap*(aw/s); a.pos.z-=dz*overlap*(aw/s);
       b.pos.x+=dx*overlap*(bw/s); b.pos.z+=dz*overlap*(bw/s);
     }
   }
+  // re-clamp only the LIVING to walls/props (don't fight the ragdoll's own transforms)
   collide(player.pos, player.r);
   for(const e of enemies) if(!e.dead) collide(e.pos, e.r);
 }
@@ -2335,15 +2346,31 @@ function solveArmsIK(a, dt, atk){
     if(a.state==='holding'){ tx=A.sh.x*0.4; ty=1.40; tz=0.72 + Math.sin(GAME.t*18+i)*0.03; }  // clamped onto the player
     if(a.tackle){ tx=A.sh.x*0.55; ty=1.28; tz=0.78; }   // arms out to plow through
     if(run>0.01 && !atk){
-      // RUN: tight, bent arms pumping fore/aft, opposite the legs
-      const swing=Math.sin(ph + (i===0?0:Math.PI));
-      const amp=0.30 + Math.min(0.28, spd*0.05);   // pump grows with stride (faster = bigger arm swing)
-      const rtx=A.sh.x*0.55 + sign*0.04;      // tuck the hands in toward the chest
-      const rty=1.46 + swing*(0.11+amp*0.10); // rise on the forward drive, scaled by pace
-      const rtz=0.14 + swing*amp;             // the pump
+      // RUN: the WHOLE arm swings fore/aft from the shoulder like a pendulum.
+      // The hand rides a constant-radius arc about the shoulder (sh at ~1.54),
+      // so |hand-shoulder| stays ~R across the cycle and the elbow holds ONE
+      // bend -- instead of the old depth-only pump that yo-yo'd the radius and
+      // folded the forearm up behind the back on the backswing.
+      const s=Math.sin(ph + (i===0?0:Math.PI));   // -1 back .. +1 forward
+      const R=0.52 + Math.min(0.10, spd*0.02);    // radius grows a touch with pace
+      const th=s*0.85;                             // swing angle ~+/-49deg
+      // point on the R-circle about the shoulder (down = -y, forward = +z), then
+      // TILT the whole swing plane forward so the hand rides higher in front and
+      // drops behind (a runner's diagonal) WITHOUT changing the radius -- a
+      // rotation preserves |hand-shoulder|, so the elbow keeps one bend.
+      const dz0=R*Math.sin(th), dy0=-R*Math.cos(th), tl=0.26;
+      const rtx=A.sh.x + sign*0.03;                // stay UNDER the shoulder (no cross-body tuck)
+      const rtz=dz0*Math.cos(tl) - dy0*Math.sin(tl);
+      const rty=1.54 + (dz0*Math.sin(tl) + dy0*Math.cos(tl));
       tx=lerp(tx,rtx,run); ty=lerp(ty,rty,run); tz=lerp(tz,rtz,run);
     } else if(spd>0.6 && !atk && g<0.1){ const sw=Math.min(1,spd/4);
-      tz += Math.sin(ph + (i===0?0:Math.PI))*(0.12+sw*0.10)*sw; ty += Math.abs(Math.sin(ph))*0.03*sw; }
+      // WALK: same pendulum, gentler -- a small tilted arc about the shoulder
+      const s=Math.sin(ph + (i===0?0:Math.PI)), R=0.42, th=s*0.5*sw, tl=0.2;
+      const dz0=R*Math.sin(th), dy0=-R*Math.cos(th);
+      tx=lerp(tx, A.sh.x + sign*0.04, sw*0.5);
+      ty=lerp(ty, 1.54 + (dz0*Math.sin(tl) + dy0*Math.cos(tl)), sw*0.6);
+      tz=lerp(tz, dz0*Math.cos(tl) - dy0*Math.sin(tl), sw*0.7);
+    }
     if(g>0.02){ tx=lerp(tx, sign*0.17, g); ty=lerp(ty,1.62,g); tz=lerp(tz,0.36,g); }
     if(atk){
       const A2=atk.A, windK=atk.windK, strikeK=atk.strikeK, side=A2.side;
