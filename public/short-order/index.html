@@ -386,10 +386,45 @@ const WALL_H=4.5;
 const wallMat = new THREE.MeshStandardMaterial({ color:0x2e2118, roughness:1 });
 function wall(x,z,w,h,d,mat){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat||wallMat);
   m.position.set(x,h/2,z); m.receiveShadow=true; m.castShadow=true; arena.add(m); return m; }
-wall(0,-HALFD,ARENA.w,WALL_H,0.5);
-wall(0, HALFD,ARENA.w,WALL_H,0.5);
-wall(-HALFW,0,0.5,WALL_H,ARENA.d);
-wall( HALFW,0,0.5,WALL_H,ARENA.d);
+// a wall segment centred freely in Y (for headers/sills above & below openings)
+function seg(x,y,z,w,h,d){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),wallMat);
+  m.position.set(x,y,z); m.receiveShadow=true; m.castShadow=true; arena.add(m); return m; }
+
+// window geometry, hoisted here so the wall APERTURES, the frames, and the
+// exterior world all share one source of truth.
+const WIN_W=8.6, WIN_H=4.0, WIN_PANES=4;
+const WHW=WIN_W/2;                       // window half-width
+const WY0=WALL_H/2-WIN_H/2, WY1=WALL_H/2+WIN_H/2;   // opening spans y 0.25 .. 4.25
+const WYC=WALL_H/2;                       // opening centre height
+const WXB=HALFW*0.53, WZS=HALFD*0.55;     // window offsets along the back/side walls
+// all EIGHT openings: centre on their wall (no inset) + outward bearing (ry
+// rotates local +Z, the room-facing side, to the interior).
+const WINDOWS=[
+  {x:-WXB, z:-HALFD, ry:0},        {x: WXB, z:-HALFD, ry:0},          // back  (out -Z)
+  {x:-WXB, z: HALFD, ry:Math.PI},  {x: WXB, z: HALFD, ry:Math.PI},    // front (out +Z)
+  {x:-HALFW, z:-WZS, ry:Math.PI/2},{x:-HALFW, z:WZS, ry:Math.PI/2},   // left  (out -X)
+  {x: HALFW, z:-WZS, ry:-Math.PI/2},{x: HALFW, z:WZS, ry:-Math.PI/2}, // right (out +X)
+];
+
+// Every wall gets real holes so the ocean outside shows through. Build each as
+// piers around its openings + a thin sill and header, from the opening rects
+// (not by eye) so no gap leaks to the void and no segment covers the glass.
+function apertureWall(orient, fixed, thick, span, openCenters){
+  const half=span/2, cs=[...openCenters].sort((a,b)=>a-b);
+  const edges=[-half]; for(const c of cs){ edges.push(c-WHW, c+WHW); } edges.push(half);
+  for(let i=0;i<edges.length;i+=2){ const a=edges[i], b=edges[i+1]; if(b-a>0.02){
+    const m=(a+b)/2, len=b-a;
+    if(orient==='x') seg(m, WYC, fixed, len, WALL_H, thick); else seg(fixed, WYC, m, thick, WALL_H, len);
+  }}
+  for(const c of cs){   // sill (floor->WY0) + header (WY1->WALL_H) across each opening
+    if(orient==='x'){ seg(c, WY0/2, fixed, WIN_W, WY0, thick); seg(c, (WY1+WALL_H)/2, fixed, WIN_W, WALL_H-WY1, thick); }
+    else            { seg(fixed, WY0/2, c, thick, WY0, WIN_W); seg(fixed, (WY1+WALL_H)/2, c, thick, WALL_H-WY1, WIN_W); }
+  }
+}
+apertureWall('x', -HALFD, 0.5, ARENA.w, [-WXB, WXB]);   // back
+apertureWall('x',  HALFD, 0.5, ARENA.w, [-WXB, WXB]);   // front
+apertureWall('z', -HALFW, 0.5, ARENA.d, [-WZS, WZS]);   // left
+apertureWall('z',  HALFW, 0.5, ARENA.d, [-WZS, WZS]);   // right
 
 /* ============================================================ LOCALE VIEWS
    The daytime loop's 2D game (culinary-dash_src.html) already solved "what's
@@ -552,100 +587,113 @@ for(const key in LOCALES){
 let locTexT=0;
 function updateLocaleTextures(dt,t){
   locTexT+=dt; if(locTexT<0.033) return; locTexT=0;
-  for(const key in LOCALES){
-    if(key==='ocean') continue;       // ocean is drawn as per-window parallax layers below
-    const L=LOCALES[key];
-    L.draw(L.ctx,0,0,LW,LH,t*1000);   // ported functions assume ms, GAME.t is seconds
-    L.texture.needsUpdate=true;
-  }
-  for(const s of oceanSeaAnims){ ocSea(s.ctx, t*1000, s.az); s.tex.needsUpdate=true; }   // each window's sea slice
+  // the ocean is now real 3D geometry (buildOcean) -- just drift its texture and
+  // boat here; no per-window canvas repaint anymore.
+  if(OCEAN.sea){ OCEAN.sea.offset.x = (t*0.006)%1; OCEAN.sea.offset.y = (t*0.010)%1; }
+  if(OCEAN.boat){ OCEAN.boat.position.x = Math.sin(t*0.06)*10; }
 }
 
-/* ---- OCEAN SUNSET, AS ONE COHERENT WORLD ---------------------------------
-   The whole restaurant looks out on a SINGLE ocean at dusk, not a different
-   picture per window. Each window shows the slice of that world it actually
-   faces: the sun (and its glitter on the water) live at one compass bearing,
-   so they only appear in the windows looking that way -- the windows out the
-   back, toward the sunset -- not repeated in all eight (that was the "million
-   suns"). Windows facing away just show open sea and a cooler dusk sky.
-   Landmarks (an island, palms, a drifting boat) sit at their own bearings too.
-   Still painted as the 3 parallax layers (sky / sea / palm) hung at different
-   depths behind the glass, so it also reads with depth as the camera pans.
-   `az` is the window's OUTWARD bearing; scrX() maps a world bearing to an x
-   inside that window, or null if it's out of this window's view. */
-const OHZ=Math.round(LH*0.56);
-const AZ_SUN=Math.PI;              // the sunset sits out the back wall (ry=0 -> outward bearing PI)
-const AZ_ISLE=Math.PI-1.1, AZ_PALM=Math.PI+1.7;   // an island to one side, a palm cluster to the other
-const WIN_FOV=1.9;                 // horizontal field a single window sees (radians)
-function angDiff(a,b){ let d=(a-b)%(2*Math.PI); if(d>Math.PI)d-=2*Math.PI; if(d<-Math.PI)d+=2*Math.PI; return d; }
-function scrX(bearing,az){ const d=angDiff(bearing,az); if(Math.abs(d)>WIN_FOV*0.62) return null; return LW*0.5 + (d/WIN_FOV)*LW; }
-function ocSky(lx,az){
-  lx.clearRect(0,0,LW,LH);
-  const warm=Math.max(0,Math.cos(angDiff(AZ_SUN,az)));   // 1 facing the sun, 0 at 90deg away
-  // cool dusk base, warmed toward the sunset bearing
-  lx.fillStyle=lgrad(lx,0,0,0,LH,[[0,'#1b1a4a'],[0.5,'#38285e'],[0.8,'#553a5c'],[1,'#6e4652']]);
-  lx.fillRect(0,0,LW,LH);
-  if(warm>0.02){ lx.globalAlpha=warm*0.92;               // sunset glow banked on the horizon
-    lx.fillStyle=lgrad(lx,0,LH*0.28,0,OHZ+4,[[0,'rgba(120,60,90,0)'],[0.55,'#c8683f'],[1,'#ffb45a']]);
-    lx.fillRect(0,0,LW,OHZ+4); lx.globalAlpha=1; }
-  const sx=scrX(AZ_SUN,az);
-  if(sx!=null){ const sy=OHZ-16, R=13;                   // the setting sun, only where it's actually faced
-    const g=lx.createRadialGradient(sx,sy,2,sx,sy,R*2.6);
-    g.addColorStop(0,'rgba(255,247,214,0.95)'); g.addColorStop(0.4,'rgba(255,196,120,0.55)'); g.addColorStop(1,'rgba(255,150,90,0)');
-    lx.fillStyle=g; lx.beginPath(); lx.arc(sx,sy,R*2.6,0,6.283); lx.fill();
-    lx.fillStyle='#fff2cf'; lx.beginPath(); lx.arc(sx,sy,R,0,6.283); lx.fill(); }
-}
-function ocSea(lx,t,az){
-  lx.clearRect(0,0,LW,LH);                               // transparent above the waterline
-  const warm=Math.max(0,Math.cos(angDiff(AZ_SUN,az)));
-  lx.fillStyle=lgrad(lx,0,OHZ,0,LH,[[0,warm>0.4?'#c8664c':'#4a3a66'],[0.4,'#3a3568'],[1,'#171a40']]);
-  lx.fillRect(0,OHZ,LW,LH-OHZ);
-  lx.fillStyle='#0c1428'; lx.fillRect(0,OHZ-1,LW,2);     // horizon line
-  const sx=scrX(AZ_SUN,az);
-  if(sx!=null) for(let i=0;i<10;i++){ const gy=OHZ+2+i*2.2, gw=3+((Math.sin(t*0.002+i)*0.5+0.5)*7|0);   // sun glitter
-    lx.fillStyle='rgba(255,214,150,'+(0.4-i*0.035).toFixed(3)+')'; lx.fillRect(sx-gw/2,gy,gw,1); }
-  const ix=scrX(AZ_ISLE,az);
-  if(ix!=null){ lx.fillStyle='#161d3a'; lx.beginPath(); lx.moveTo(ix-18,OHZ); lx.quadraticCurveTo(ix,OHZ-9,ix+18,OHZ); lx.closePath(); lx.fill(); }  // island
-  const bAz=AZ_SUN+Math.sin(t*0.00016)*1.4, bx=scrX(bAz,az);   // a boat drifting across the bay
-  if(bx!=null){ const by=OHZ-1; lx.fillStyle='#0a1020'; lx.fillRect(bx-4,by,8,2);
-    lx.beginPath(); lx.moveTo(bx,by); lx.lineTo(bx,by-8); lx.lineTo(bx+6,by-1); lx.closePath(); lx.fill(); }
-  for(let r=0;r<3;r++){ const wy=OHZ+8+r*7, off=Math.sin(t*0.0012+r*2)*4;   // drifting wave dashes
-    lx.fillStyle='rgba(20,26,60,0.4)';
-    for(let k=-16;k<LW;k+=16) lx.fillRect(k+off+r*6,wy,9,1); }
-}
-function ocPalm(lx,az){
-  lx.clearRect(0,0,LW,LH);
-  const px=scrX(AZ_PALM,az); if(px==null) return;        // the palm only frames the windows facing it
-  const D='#0a1420';
-  lx.strokeStyle=D; lx.lineWidth=5; lx.lineCap='round';
-  lx.beginPath(); lx.moveTo(px-34,LH+6); lx.quadraticCurveTo(px-22,LH*0.55,px,24); lx.stroke();   // trunk
-  lx.lineWidth=3.2;
-  for(const [ex,ey] of [[-46,-6],[-30,-26],[-6,-34],[20,-30],[40,-14],[30,10]]){                  // drooping fronds
-    lx.beginPath(); lx.moveTo(px,24); lx.quadraticCurveTo(px+ex*0.5, 24+ey*0.5-8, px+ex, 24+ey); lx.stroke(); }
-  lx.fillStyle=D;
-  for(const [ox,oy] of [[-5,28],[4,29],[-1,33]]){ lx.beginPath(); lx.arc(px+ox,oy,3,0,6.283); lx.fill(); }   // coconuts
-}
-function mkOceanTex(){ const cv=document.createElement('canvas'); cv.width=LW; cv.height=LH;
-  const ctx=cv.getContext('2d'); const tex=new THREE.CanvasTexture(cv);
-  tex.generateMipmaps=false; tex.minFilter=THREE.LinearFilter; return {ctx,tex}; }
-const oceanSeaAnims=[];            // per-window animated sea layers (sky/palm are static per window)
-
-/* the restaurant's windows — a locale billboard behind real glass, ported
-   from arena.js's oceanWindow(); on the back wall, either side of the bar.
-   This IS "the windows" from the daytime loop, not a lookalike. */
+/* ---- THE OCEAN AS A REAL 3D WORLD OUTSIDE --------------------------------
+   The restaurant sits on a bay at dusk. Rather than paint each window with a
+   flat canvas slice (which read as billboards), we build ONE ocean world OUTSIDE
+   the walls -- sky dome, sea, sun, island, a drifting boat, and palms right
+   outside the glass -- all at real distance. The walls now have real openings
+   (see apertureWall above), so the actual camera sees this world THROUGH the
+   windows and the parallax is genuine: the near palms sweep fast as you move,
+   the sea drifts mid-slow, the sun and horizon barely shift. No per-window
+   canvas, no azimuth slicing -- real geometry does all of it for free.
+   Everything is unlit (MeshBasic) + fog:false, like the old window textures, so
+   the room's 14-30 fog and key light don't wash out the distant view. */
+const AZ_SUN=Math.PI;                        // the sunset is out the back wall
+// bearing -> world direction (b=0 -> +Z front, PI -> -Z back, +-PI/2 -> +-X sides)
+function bearingDir(b){ return {x:Math.sin(b), z:Math.cos(b)}; }
 const winFrameMat=new THREE.MeshStandardMaterial({color:0x5a3f28,roughness:.8,flatShading:true});
-// Floor-to-ceiling panoramic glass -- there's a real skybox/ocean behind
-// these already, so there's no reason to hide most of it behind wall; WIN_H
-// now spans nearly the full WALL_H (defined up with the walls) instead of
-// sitting as a smallish band above eye level, and WIN_W is pushed out to the
-// widest it can go while still clearing the bar on the back wall (its
-// half-width 4, windows centered at HALFW*0.53 -- see the placement calls
-// below).
-const WIN_W=8.6, WIN_H=4.0, WIN_PANES=4;
-// the window grid (border + mullions + transoms) as a set of thin bars at
-// depth `fz`, transparent in between -- shared by the flat and the parallax
-// windows. No solid backing pane; whatever's behind (a flat locale texture, or
-// the 3 parallax layers) shows through.
+const wellDark=new THREE.MeshStandardMaterial({color:0x0d0906,roughness:1,flatShading:true});
+const OCEAN={};                              // animated refs (sea shimmer, boat)
+
+function skyDomeTex(){
+  // dusk gradient down the sphere: cool zenith -> warm sunset band at the
+  // horizon (v~0.5) -> warm below (hidden under the sea). Canvas top = zenith.
+  const c=document.createElement('canvas'); c.width=8; c.height=256; const g=c.getContext('2d');
+  g.fillStyle=lgrad(g,0,0,0,256,[[0,'#141a46'],[0.32,'#2c2a5c'],[0.46,'#7a4a63'],[0.5,'#c8683f'],[0.56,'#ffb45a'],[0.7,'#8a4a40'],[1,'#3a2540']]);
+  g.fillRect(0,0,8,256);
+  const t=new THREE.CanvasTexture(c); t.minFilter=THREE.LinearFilter; return t;
+}
+function seaTex(){
+  // dusk water: darker to the front, a warm band + glitter column toward the
+  // sun (top of the canvas = the -Z / sunset side of the plane).
+  const c=document.createElement('canvas'); c.width=256; c.height=256; const g=c.getContext('2d');
+  g.fillStyle=lgrad(g,0,0,0,256,[[0,'#3a2f52'],[0.5,'#26244a'],[1,'#141830']]);
+  g.fillRect(0,0,256,256);
+  g.fillStyle='#c8683f'; g.globalAlpha=0.22; g.fillRect(0,0,256,52); g.globalAlpha=1;   // warm reflection toward the sun
+  for(let i=0;i<60;i++){                                            // sun glitter column near x-centre, sun side
+    const gx=128+(Math.random()-0.5)*44, gy=Math.random()*120, w=2+Math.random()*7;
+    g.fillStyle='rgba(255,214,150,'+(0.05+Math.random()*0.22).toFixed(3)+')'; g.fillRect(gx-w/2,gy,w,1);
+  }
+  for(let i=0;i<240;i++){                                           // scattered wave flecks
+    const wx=Math.random()*256, wy=Math.random()*256, w=3+Math.random()*8;
+    g.fillStyle='rgba(150,160,200,'+(0.03+Math.random()*0.06).toFixed(3)+')'; g.fillRect(wx,wy,w,1);
+  }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(6,6);
+  t.minFilter=THREE.LinearFilter; return t;
+}
+function palmSilhouette(x,z,ry,scale){
+  // a dark dusk palm just OUTSIDE the glass -- the near-parallax cue that sells
+  // the depth (it swings across the window as the camera moves)
+  const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=ry; g.scale.setScalar(scale||1); arena.add(g);
+  const dark=new THREE.MeshBasicMaterial({color:0x0a1622, fog:false});
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.2,4.4,7),dark); trunk.position.set(0,2.2,0); trunk.rotation.z=0.16; g.add(trunk);
+  for(let i=0;i<7;i++){ const fr=new THREE.Mesh(new THREE.BoxGeometry(2.6,0.12,0.5),dark);
+    fr.position.set(0.3,4.3,0); fr.rotation.z=0.5-i*(Math.PI/6); fr.rotation.y=i*0.9; g.add(fr); }
+  return g;
+}
+function buildOcean(){
+  // --- sky dome (far, barely parallaxes -- correct for sky) ---
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(90,32,18),
+    new THREE.MeshBasicMaterial({map:skyDomeTex(), side:THREE.BackSide, fog:false, depthWrite:false}));
+  dome.position.set(0,1.6,0); dome.renderOrder=-10; arena.add(dome);
+
+  // --- sea (mid: a big plane out to the horizon, texture drifts) ---
+  const stex=seaTex(); OCEAN.sea=stex;
+  const sea=new THREE.Mesh(new THREE.PlaneGeometry(320,320),
+    new THREE.MeshBasicMaterial({map:stex, fog:false}));
+  sea.rotation.x=-Math.PI/2; sea.position.set(0,-1.2,0); sea.renderOrder=-8; arena.add(sea);
+
+  // --- the setting sun + glow, out the back on the horizon ---
+  const sd=bearingDir(AZ_SUN), sunD=86, sunPos=[sd.x*sunD, 5.5, sd.z*sunD];
+  const glow=new THREE.Mesh(new THREE.CircleGeometry(9,24),
+    new THREE.MeshBasicMaterial({color:0xffb45a, fog:false, transparent:true, opacity:0.35}));
+  const sun=new THREE.Mesh(new THREE.CircleGeometry(3.4,24),
+    new THREE.MeshBasicMaterial({color:0xfff2cf, fog:false}));
+  for(const m of [glow,sun]){ m.position.set(sunPos[0],sunPos[1],sunPos[2]); m.lookAt(0,sunPos[1],0); m.renderOrder=-9; arena.add(m); }
+
+  // --- distant island silhouette, off to the sun side ---
+  const id=bearingDir(AZ_SUN-0.45), isleD=58;
+  const isle=new THREE.Group(); isle.position.set(id.x*isleD, 0, id.z*isleD); arena.add(isle);
+  const islMat=new THREE.MeshBasicMaterial({color:0x121a30, fog:false});
+  for(const [ox,w,h] of [[-6,10,2.4],[2,14,3.6],[10,8,1.9]]){
+    const hump=new THREE.Mesh(new THREE.CylinderGeometry(0.1,w*0.5,h,5), islMat);
+    hump.position.set(ox,h*0.5-0.3,0); isle.add(hump);
+  }
+
+  // --- a boat drifting across the bay (animated) ---
+  const bd=bearingDir(AZ_SUN), boatD=34;
+  const boat=new THREE.Group(); boat.position.set(0,-0.4,bd.z*boatD); arena.add(boat); OCEAN.boat=boat; OCEAN.boatD=boatD;
+  const bMat=new THREE.MeshBasicMaterial({color:0x0a1020, fog:false});
+  const hull=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.5,0.7),bMat); boat.add(hull);
+  const sail=new THREE.Mesh(new THREE.BoxGeometry(0.08,1.6,0.5),bMat); sail.position.set(0,1.0,0); boat.add(sail);
+
+  // --- near palms just OUTSIDE each window (strong parallax framing) ---
+  for(const win of WINDOWS){
+    const o=bearingDir((win.ry+Math.PI));            // outward normal of this window
+    const px=win.x + o.x*2.8 + o.z*2.4, pz=win.z + o.z*2.8 - o.x*2.4;   // outside + to one side
+    palmSilhouette(px, pz, win.ry+0.3, 0.9);
+  }
+}
+buildOcean();
+
+/* the window FRAMES -- the muntins/mullions sitting in each wall opening. The
+   view itself is the shared ocean world behind, seen through the real hole. */
 function winGrid(w,fz){
   const bar=(bw,bh,bx,by)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,0.12),winFrameMat);
     m.position.set(bx,by,fz); m.castShadow=true; w.add(m); };
@@ -654,89 +702,17 @@ function winGrid(w,fz){
   for(let i=1;i<WIN_PANES;i++){ const mx=-WIN_W/2+0.15+(WIN_W-0.3)*(i/WIN_PANES); bar(0.1,WIN_H-0.3,mx,0); }  // mullions
   for(const ty of [WIN_H*0.22,-WIN_H*0.22]) bar(WIN_W-0.3,0.1,0,ty);  // transoms
 }
-// OCEAN gets depth: the 3 layers recede into a shallow dark "well" whose reveals
-// hide the layer edges, so it reads as looking THROUGH a deep-set window rather
-// than at a flat picture. Layers sit at increasing z toward the room; the grid
-// caps the front. The gap between sky (0.28) and palm (0.66) is what parallaxes.
-const wellDark=new THREE.MeshStandardMaterial({color:0x0d0906,roughness:1,flatShading:true});
-function parallaxWell(w,az){
-  // this window's own 3 canvases, painted for the slice of the world it faces
-  const sky=mkOceanTex(), sea=mkOceanTex(), palm=mkOceanTex();
-  ocSky(sky.ctx,az);  sky.tex.needsUpdate=true;      // sky + palm are static per window
-  ocPalm(palm.ctx,az); palm.tex.needsUpdate=true;
-  ocSea(sea.ctx,0,az); sea.tex.needsUpdate=true;
-  oceanSeaAnims.push({ctx:sea.ctx, tex:sea.tex, az});   // only the sea animates
-  const gw=WIN_W-0.28, gh=WIN_H-0.28;
-  const layer=(tex,zz,opaque,order)=>{
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(gw,gh),
-      new THREE.MeshBasicMaterial({map:tex,fog:false,transparent:!opaque,depthWrite:opaque}));
-    m.position.set(0,0,zz); m.renderOrder=order; w.add(m); return m;
-  };
-  layer(sky.tex, 0.28, true, 0);    // far backdrop (opaque, writes depth)
-  layer(sea.tex, 0.47, false,1);    // mid: sea (transparent above the waterline)
-  layer(palm.tex,0.66, false,2);    // near: palm silhouette (parallaxes most)
-  // the well reveals -- dark box sides from the wall face out to the front lip,
-  // masking the layer edges at oblique angles
-  const zC=0.47, zD=0.5, r=0.13;
-  const rev=(bw,bh,bx,by)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,zD),wellDark);
-    m.position.set(bx,by,zC); w.add(m); };
-  rev(WIN_W,r,0,gh/2+r/2); rev(WIN_W,r,0,-gh/2-r/2);      // top / bottom reveal
-  rev(r,WIN_H,-gw/2-r/2,0); rev(r,WIN_H,gw/2+r/2,0);       // left / right reveal
-  winGrid(w,0.70);
+function oceanWindow(win){
+  const w=new THREE.Group(); w.position.set(win.x,WALL_H/2,win.z); w.rotation.y=win.ry; arena.add(w);
+  // dark jamb lining the opening depth (the 0.5 wall thickness), so grazing
+  // angles read as a deep-set window, not a paper-thin cut
+  const jr=0.12, jd=0.5;
+  const jamb=(bw,bh,bx,by)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,jd),wellDark); m.position.set(bx,by,0); w.add(m); };
+  jamb(WIN_W+jr*2, jr, 0, WIN_H/2+jr/2); jamb(WIN_W+jr*2, jr, 0, -WIN_H/2-jr/2);
+  jamb(jr, WIN_H, -WIN_W/2-jr/2, 0);      jamb(jr, WIN_H, WIN_W/2+jr/2, 0);
+  winGrid(w, 0.10);                        // frame just on the room side of the opening
 }
-function oceanWindow(x,z,ry,locale,palm){
-  const w=new THREE.Group(); w.position.set(x,WALL_H/2,z); w.rotation.y=ry; arena.add(w);
-  // the window's OUTWARD bearing: local -Z rotated by ry -> world, as an angle.
-  // ry=0 (back wall, looks -Z) -> PI; PI (front) -> 0; +-PI/2 (sides) -> +-PI/2.
-  if(locale==='ocean'){ parallaxWell(w, (ry+Math.PI)%(2*Math.PI)); return; }
-  const fr=new THREE.Mesh(new THREE.BoxGeometry(WIN_W,WIN_H,0.16),winFrameMat); fr.castShadow=true; w.add(fr);
-  // MeshBasicMaterial, not Standard -- this is a lit-from-outside view, not
-  // a physical surface the room's key light should darken. fog:false too --
-  // kitchen-room.js's own locale materials do the same (its `flat()`
-  // helper): the outside world is its own backdrop, not something standing
-  // IN the room's atmosphere, so the scene fog shouldn't wash it toward the
-  // dark fog color at distance the way it correctly does for room props.
-  const sea=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,WIN_H-0.3,0.06),
-    new THREE.MeshBasicMaterial({map:LOCALES[locale].texture,fog:false})); sea.position.z=0.07; w.add(sea);
-  // vertical mullions dividing the pane into WIN_PANES equal strips
-  for(let i=1;i<WIN_PANES;i++){
-    const mx=-WIN_W/2+0.15+(WIN_W-0.3)*(i/WIN_PANES);
-    const mullion=new THREE.Mesh(new THREE.BoxGeometry(0.1,WIN_H-0.3,0.09),winFrameMat); mullion.position.set(mx,0,0.1); w.add(mullion);
-  }
-  // two horizontal transoms (not one) -- a floor-to-ceiling pane needs more
-  // than a single crossbar to read as built, not just a stretched texture
-  for(const ty of [WIN_H*0.22, -WIN_H*0.22]){
-    const transom=new THREE.Mesh(new THREE.BoxGeometry(WIN_W-0.3,0.1,0.09),winFrameMat); transom.position.set(0,ty,0.1); w.add(transom);
-  }
-  if(palm){
-    const trunk=new THREE.Mesh(new THREE.BoxGeometry(0.14,1.5,0.08),new THREE.MeshStandardMaterial({color:0x0a1a20,flatShading:true}));
-    trunk.position.set(-WIN_W*0.32,-0.5,0.11); trunk.rotation.z=0.22; w.add(trunk);
-    for(let i=0;i<5;i++){
-      const fr2=new THREE.Mesh(new THREE.BoxGeometry(1.0,0.08,0.06),new THREE.MeshStandardMaterial({color:0x0a1a20,flatShading:true}));
-      fr2.position.set(-WIN_W*0.24,0.35,0.12); fr2.rotation.z=0.55-i*0.42; w.add(fr2);
-    }
-  }
-}
-// z is well clear of the back wall's own thickness (0.5 deep, centered at
-// -HALFD -- its inner face is at -HALFD+0.25) so the window sits in front of
-// it, not embedded inside/behind the opaque wall mesh. A first version at
-// -HALFD+0.02 rendered invisible for exactly this reason -- found by walking
-// up to it and looking, not assumed from the numbers.
-// pushed out to HALFW*0.53 (was 0.42) so the now-much-wider WIN_W=7.2 frame
-// (half-width 3.6) doesn't overlap the bar (half-width 4) sitting between them.
-// EVERY window looks out on the SAME ocean world -- not a different locale per
-// wall. Each gets its outward bearing (ry+PI) so it paints only its own slice:
-// the sun shows out the back windows (bearing PI), the sides catch it obliquely
-// or not at all, the front is open dusk sea. ry rotates the window's local +Z
-// (its "into the room" face) to the interior: 0 back, PI front, +-PI/2 sides.
-oceanWindow(-HALFW*0.53,-HALFD+0.4,0,'ocean');
-oceanWindow( HALFW*0.53,-HALFD+0.4,0,'ocean');
-oceanWindow(-HALFW*0.53, HALFD-0.4, Math.PI, 'ocean');
-oceanWindow( HALFW*0.53, HALFD-0.4, Math.PI, 'ocean');
-oceanWindow(-HALFW+0.4, -HALFD*0.55,  Math.PI/2, 'ocean');
-oceanWindow(-HALFW+0.4,  HALFD*0.55,  Math.PI/2, 'ocean');
-oceanWindow( HALFW-0.4, -HALFD*0.55, -Math.PI/2, 'ocean');
-oceanWindow( HALFW-0.4,  HALFD*0.55, -Math.PI/2, 'ocean');
+for(const win of WINDOWS) oceanWindow(win);
 
 /* the bar — the back counter, dark wood, stocked bottles catching the light.
    This IS the daytime loop's bar (see arena.js's back-counter block) --

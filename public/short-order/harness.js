@@ -83,7 +83,7 @@ const THREE={
   OrthographicCamera:function(){const n=node();n.updateProjectionMatrix=function(){};return n;},
   WebGLRenderTarget:function(){return {texture:{},setSize(){}};},
   Quaternion:Quat, Matrix4:Mat4,
-  CanvasTexture:function(){return {wrapS:0,wrapT:0,repeat:{set(){}},anisotropy:1};},
+  CanvasTexture:function(){return {wrapS:0,wrapT:0,repeat:{x:1,y:1,set(){}},offset:{x:0,y:0,set(){}},anisotropy:1};},
   RepeatWrapping:1,sRGBEncoding:2,ACESFilmicToneMapping:3,PCFSoftShadowMap:4,DoubleSide:5,AdditiveBlending:6,LinearFilter:7,RGBAFormat:8,
 };
 
