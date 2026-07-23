@@ -325,7 +325,7 @@ function hitPost(power,col){ const U=POST.uniforms;
 // than from cooling the ambient toward blue/purple, which just muddies the
 // warm palette this room's actually going for (amber wood, warm skin
 // tones, an ocean/city/nebula sunset glow now sitting right in the windows).
-const hemi = new THREE.HemisphereLight(0xff9a55, 0x1c0a04, 0.22); scene.add(hemi);   // dimmer (was .35) -- moodier, more cinematic
+const hemi = new THREE.HemisphereLight(0xff9a55, 0x1c0a04, 0.30); scene.add(hemi);   // 0.30 -- lift the shadow side a touch so fighters read as solid, not pure silhouette, against the bright open bay
 const key = new THREE.DirectionalLight(0xffcf8a, 1.75);   // was 2.3 -- let the shadows go deep
 key.position.set(6,13,4); key.castShadow = true;
 key.shadow.mapSize.set(2048,2048);
@@ -339,10 +339,10 @@ key.shadow.bias=-0.0007; key.shadow.radius=3;
 scene.add(key);
 // dim, deep-red fill instead of a cool blue counterpoint -- softens the key
 // side's shadows without importing a cold color into a warm room
-const fill = new THREE.DirectionalLight(0xaa5028, 0.32); fill.position.set(-8,6,-6); scene.add(fill);
-// backlight for silhouette separation against the dark walls, recolored
-// warm (deep amber/ember, not Vince's cold blue) to stay in-palette
-const backRim = new THREE.DirectionalLight(0xff7a3a, 0.6); backRim.position.set(-9,9,-14); scene.add(backRim);
+const fill = new THREE.DirectionalLight(0xaa5028, 0.44); fill.position.set(-8,6,-6); scene.add(fill);   // 0.44 -- more front fill so faces/fronts read against the bright ocean
+// backRim WAS for separation against DARK walls; the bay behind is now bright,
+// so a warm rim just melts fighters into it -- dropped to a low edge kiss.
+const backRim = new THREE.DirectionalLight(0xff7a3a, 0.24); backRim.position.set(-9,9,-14); scene.add(backRim);
 // positioned at the actual stove once BAR exists, in the ARENA section below
 // -- (-8.5,1.4,-4) was a leftover from the pre-restaurant kitchen layout and
 // had drifted away from the flame it's supposed to be lighting
@@ -406,25 +406,43 @@ const WINDOWS=[
   {x: HALFW, z:-WZS, ry:-Math.PI/2},{x: HALFW, z:WZS, ry:-Math.PI/2}, // right (out +X)
 ];
 
-// Every wall gets real holes so the ocean outside shows through. Build each as
-// piers around its openings + a thin sill and header, from the opening rects
-// (not by eye) so no gap leaks to the void and no segment covers the glass.
-function apertureWall(orient, fixed, thick, span, openCenters){
-  const half=span/2, cs=[...openCenters].sort((a,b)=>a-b);
-  const edges=[-half]; for(const c of cs){ edges.push(c-WHW, c+WHW); } edges.push(half);
-  for(let i=0;i<edges.length;i+=2){ const a=edges[i], b=edges[i+1]; if(b-a>0.02){
-    const m=(a+b)/2, len=b-a;
-    if(orient==='x') seg(m, WYC, fixed, len, WALL_H, thick); else seg(fixed, WYC, m, thick, WALL_H, len);
-  }}
-  for(const c of cs){   // sill (floor->WY0) + header (WY1->WALL_H) across each opening
-    if(orient==='x'){ seg(c, WY0/2, fixed, WIN_W, WY0, thick); seg(c, (WY1+WALL_H)/2, fixed, WIN_W, WALL_H-WY1, thick); }
-    else            { seg(fixed, WY0/2, c, thick, WY0, WIN_W); seg(fixed, (WY1+WALL_H)/2, c, thick, WALL_H-WY1, WIN_W); }
+// OPEN-AIR TERRACE. Instead of enclosing plaster walls, the restaurant is a
+// rooftop deck on the bay at dusk -- a colonnade of posts, a low parapet edge,
+// and pergola beams open to the sky. The ocean world (buildOcean) wraps around
+// it. Gameplay is still contained by collide()'s arena bounds + OBST, which are
+// independent of these meshes -- the parapet just sits AT the perimeter so
+// fighters stop against the railing.
+const postMat=new THREE.MeshStandardMaterial({color:0x4a3320,roughness:.85,flatShading:true});
+const railMat=new THREE.MeshStandardMaterial({color:0x2f2116,roughness:.9,flatShading:true});
+const RAIL_H=0.85, POST_TOP=WALL_H-0.3, POST_R=0.19;
+function post(x,z){ const m=new THREE.Mesh(new THREE.BoxGeometry(POST_R*2,POST_TOP,POST_R*2),postMat);
+  m.position.set(x,POST_TOP/2,z); m.castShadow=m.receiveShadow=true; arena.add(m);
+  const cap=new THREE.Mesh(new THREE.BoxGeometry(POST_R*2.6,0.18,POST_R*2.6),postMat); cap.position.set(x,POST_TOP,z); cap.castShadow=true; arena.add(cap); }
+function terraceEdge(orient, fixed, span, postCenters){
+  const half=span/2;
+  // low parapet: a solid kick-wall + a top rail bar, the full length of the edge
+  if(orient==='x'){
+    seg(0, RAIL_H*0.42, fixed, span, RAIL_H*0.84, 0.16);          // solid kick-wall
+    const r=new THREE.Mesh(new THREE.BoxGeometry(span,0.12,0.26),railMat); r.position.set(0,RAIL_H,fixed); r.castShadow=true; arena.add(r);
+  } else {
+    seg(fixed, RAIL_H*0.42, 0, 0.16, RAIL_H*0.84, span);
+    const r=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.12,span),railMat); r.position.set(fixed,RAIL_H,0); r.castShadow=true; arena.add(r);
   }
+  for(const c of postCenters){ if(orient==='x') post(c,fixed); else post(fixed,c); }
+  // pergola lintel along the top, tying the posts together
+  if(orient==='x'){ const b=new THREE.Mesh(new THREE.BoxGeometry(span,0.2,0.28),postMat); b.position.set(0,POST_TOP,fixed); b.castShadow=true; arena.add(b); }
+  else            { const b=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.2,span),postMat); b.position.set(fixed,POST_TOP,0); b.castShadow=true; arena.add(b); }
 }
-apertureWall('x', -HALFD, 0.5, ARENA.w, [-WXB, WXB]);   // back
-apertureWall('x',  HALFD, 0.5, ARENA.w, [-WXB, WXB]);   // front
-apertureWall('z', -HALFW, 0.5, ARENA.d, [-WZS, WZS]);   // left
-apertureWall('z',  HALFW, 0.5, ARENA.d, [-WZS, WZS]);   // right
+// posts at each window-bay edge + the corners, so the colonnade frames the views
+const backPosts=[-HALFW,-WXB-WHW,-WXB+WHW,WXB-WHW,WXB+WHW,HALFW];
+const sidePosts=[-HALFD,-WZS-WHW,-WZS+WHW,WZS-WHW,WZS+WHW,HALFD];
+terraceEdge('x', -HALFD, ARENA.w, backPosts);
+terraceEdge('x',  HALFD, ARENA.w, backPosts);
+terraceEdge('z', -HALFW, ARENA.d, sidePosts);
+terraceEdge('z',  HALFW, ARENA.d, sidePosts);
+// a few pergola rafters spanning front-to-back overhead, for dappled dusk
+for(let i=-2;i<=2;i++){ const rf=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.14,ARENA.d),postMat);
+  rf.position.set(i*(HALFW/2.6),POST_TOP+0.14,0); rf.castShadow=true; arena.add(rf); }
 
 /* ============================================================ LOCALE VIEWS
    The daytime loop's 2D game (culinary-dash_src.html) already solved "what's
@@ -657,7 +675,7 @@ function buildOcean(){
   const stex=seaTex(); OCEAN.sea=stex;
   const sea=new THREE.Mesh(new THREE.PlaneGeometry(320,320),
     new THREE.MeshBasicMaterial({map:stex, fog:false}));
-  sea.rotation.x=-Math.PI/2; sea.position.set(0,-1.2,0); sea.renderOrder=-8; arena.add(sea);
+  sea.rotation.x=-Math.PI/2; sea.position.set(0,-1.9,0); sea.renderOrder=-8; arena.add(sea);   // below the deck -- you look out and slightly DOWN over the water past the railing
 
   // --- the setting sun + glow, out the back on the horizon ---
   const sd=bearingDir(AZ_SUN), sunD=86, sunPos=[sd.x*sunD, 5.5, sd.z*sunD];
@@ -692,27 +710,8 @@ function buildOcean(){
 }
 buildOcean();
 
-/* the window FRAMES -- the muntins/mullions sitting in each wall opening. The
-   view itself is the shared ocean world behind, seen through the real hole. */
-function winGrid(w,fz){
-  const bar=(bw,bh,bx,by)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,0.12),winFrameMat);
-    m.position.set(bx,by,fz); m.castShadow=true; w.add(m); };
-  bar(WIN_W,0.16,0,WIN_H/2-0.08); bar(WIN_W,0.16,0,-WIN_H/2+0.08);   // top / bottom border
-  bar(0.16,WIN_H,-WIN_W/2+0.08,0); bar(0.16,WIN_H,WIN_W/2-0.08,0);   // left / right border
-  for(let i=1;i<WIN_PANES;i++){ const mx=-WIN_W/2+0.15+(WIN_W-0.3)*(i/WIN_PANES); bar(0.1,WIN_H-0.3,mx,0); }  // mullions
-  for(const ty of [WIN_H*0.22,-WIN_H*0.22]) bar(WIN_W-0.3,0.1,0,ty);  // transoms
-}
-function oceanWindow(win){
-  const w=new THREE.Group(); w.position.set(win.x,WALL_H/2,win.z); w.rotation.y=win.ry; arena.add(w);
-  // dark jamb lining the opening depth (the 0.5 wall thickness), so grazing
-  // angles read as a deep-set window, not a paper-thin cut
-  const jr=0.12, jd=0.5;
-  const jamb=(bw,bh,bx,by)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,jd),wellDark); m.position.set(bx,by,0); w.add(m); };
-  jamb(WIN_W+jr*2, jr, 0, WIN_H/2+jr/2); jamb(WIN_W+jr*2, jr, 0, -WIN_H/2-jr/2);
-  jamb(jr, WIN_H, -WIN_W/2-jr/2, 0);      jamb(jr, WIN_H, WIN_W/2+jr/2, 0);
-  winGrid(w, 0.10);                        // frame just on the room side of the opening
-}
-for(const win of WINDOWS) oceanWindow(win);
+// (the enclosed glass windows are gone -- the terrace colonnade + pergola above
+// frame the open bay directly. winFrameMat/wellDark are reused by the posts.)
 
 /* the bar — the back counter, dark wood, stocked bottles catching the light.
    This IS the daytime loop's bar (see arena.js's back-counter block) --
