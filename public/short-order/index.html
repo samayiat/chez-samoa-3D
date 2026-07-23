@@ -125,6 +125,13 @@
   .hint{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:10;
     font-size:11px;letter-spacing:.18em;color:#7a6647;opacity:0;transition:opacity .5s}
   .hint.on{opacity:1}
+  #pause{position:fixed;inset:0;z-index:30;display:grid;place-items:center;
+    background:rgba(10,7,4,.62);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .18s}
+  #pause.on{opacity:1;pointer-events:auto}
+  #pause .pinner{text-align:center}
+  #pause .ptitle{font-family:"Anton",sans-serif;font-size:calc(var(--u)*11);letter-spacing:.06em;
+    color:#f4e4c1;text-shadow:0 4px 0 #000a,0 0 30px #ff8a3a55}
+  #pause .psub{margin-top:calc(var(--u)*1.5);font-size:calc(var(--u)*2.1);letter-spacing:.22em;color:#b79a6e}
   #vign{position:fixed;inset:0;pointer-events:none;z-index:9;
     box-shadow:inset 0 0 200px 40px #000000aa;opacity:.32}
   #grabui{position:absolute;left:50%;top:56%;transform:translateX(-50%);text-align:center;opacity:0;pointer-events:none;transition:opacity .08s;z-index:8}
@@ -201,6 +208,7 @@
   <div id="words"></div>
 </div>
 <div class="hint" id="hint"></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc to resume</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -1499,7 +1507,7 @@ function pollPad(){
   GP._pad=gp;
   const out={ move:new THREE.Vector2(), rstick:new THREE.Vector2(),
     light:false,heavy:false,pickup:false,grab:false, guard:false,dodge:false,
-    camL:false,camR:false, lock:false, start:false };
+    jump:false,rush:false, camL:false,camR:false, lock:false, start:false };
   if(!gp){ return out; }
   const a=gp.axes, b=gp.buttons;
   const radial=(x,y,dead)=>{ const m=Math.hypot(x,y); if(m<dead) return [0,0];
@@ -1512,9 +1520,12 @@ function pollPad(){
   out.light=tap(0);         // cross
   out.heavy=tap(2);         // square
   out.pickup=tap(3);        // triangle
-  out.grab=tap(1);          // circle
+  const circ=tap(1);        // circle -- one edge read, shared by grapple-mash + JUMP
+  out.grab=circ;            // circle: counts toward the grapple mash
+  out.jump=circ;            // circle: JUMP (moved off R2)
   out.guard=(b[6]&&b[6].value>0.4)||pressed(6); // L2 held
-  out.dodge=(b[7]&&b[7].value>0.4)||pressed(7); // R2 held (with stick = dodge)
+  const r2=((b[7]&&b[7].value>0.4)||pressed(7));  // R2 down (analog OR digital trigger)
+  out.rush=r2 && !GP.prev._r2; GP.prev._r2=r2;    // R2 edge -> GRAB RUSH (no longer jump)
   out.camL=pressed(4); out.camR=pressed(5);     // L1/R1
   out.lock=tap(10)||tap(11);                     // stick click
   out.start=tap(9);
@@ -1962,7 +1973,7 @@ function updatePlayer(dt, pad){
   // and sets up the overhead SLAM (attack while airborne). Brief i-frames on
   // takeoff so you can still hop a sweep. -----
   const grounded=P.pos.y<=restY(P.pos.x,P.pos.z,P.pos.y,P.r)+0.03;   // grounded on floor OR a prop top
-  const wantJump=pad.dodge||tapK('shift')||consume('dodgeEdge');
+  const wantJump=pad.jump||tapK('shift')||consume('dodgeEdge');   // Circle / Shift / on-screen JUMP -- R2 no longer jumps
   if(wantJump && grounded && P.jumpCD<=0 && P.stagger<=0 && !P.tackle){
     P.vy=JUMP_V;
     const jx=(mv.lengthSq()>0.02?mv.x:Math.sin(P.facing)), jz=(mv.lengthSq()>0.02?mv.z:Math.cos(P.facing));
@@ -1978,7 +1989,7 @@ function updatePlayer(dt, pad){
   // showed but F whiffed into a tackle -- you literally could not arm up at the
   // pass. 2.0 comfortably clears the counter so you can grab over it, and stays
   // >= the prompt's detection range so anything prompted is actually grabbable.
-  if(pad.pickup||tapK('f')||consume('pickupEdge')){
+  if(pad.pickup||pad.rush||tapK('f')||consume('pickupEdge')){    // R2 (rush) / Triangle / F
     if(P.hold) throwHeld(P);                                     // holding a patron -> throw them (contextual)
     else { const g=grabTarget(P);                                // a STAGGERED person in front beats a floor weapon
       if(g) grabEnemy(P,g);
@@ -3133,6 +3144,7 @@ function startNight(cfg, onEnd){
   updateHUDWave();
   updateHUDHealth(); updateHUDWeapon();
   GAME.mode='play';
+  GAME.paused=false; { const pe=document.getElementById('pause'); if(pe) pe.classList.remove('on'); if(master){ try{ master.gain.value=0.5; }catch(e){} } }
   document.getElementById('hud').classList.add('on');
   if(TOUCHCAP) touchEl.classList.add('on');
   document.getElementById('veil').classList.add('hide');
@@ -3167,14 +3179,15 @@ function ctrlRows(){
     ['Move','Left stick / WASD','pad'],
     ['Light attack','Cross / J','pad'],
     ['Heavy attack','Square / K','pad'],
-    ['Pick up weapon','Triangle / F','pad'],
+    ['Grab / rush / pick up','R2 / Triangle / F','pad'],
+    ['Jump / vault','Circle / Shift','pad'],
     ['Guard','L2 / Space','pad'],
     ['Weave','Right stick / Q E','pad'],
-    ['Jump / vault','R2 / Shift','pad'],
     ['Overhead slam','Attack in the air','pad'],
     ['Rotate camera','L1 R1 / [ ]','pad'],
     ['Lock-on','R3 / L','pad'],
     ['Switch target','L1 R1 (locked)','pad'],
+    ['Pause','Start / Esc','pad'],
   ];
   return rows.map(r=>'<div class="r"><span>'+r[0]+'</span><b class="'+(r[2]||'')+'">'+r[1]+'</b></div>').join('');
 }
@@ -3213,14 +3226,27 @@ const SLICE={
 };
 
 /* ================================================================ LOOP */
+function togglePause(){
+  GAME.paused=!GAME.paused;
+  const el=document.getElementById('pause'); if(el) el.classList.toggle('on', GAME.paused);
+  if(master){ try{ master.gain.value = GAME.paused ? 0.0 : 0.5; }catch(e){} }   // duck the room tone while frozen
+  haptic(0.25,0.2,40);
+}
 let last=performance.now()/1000;
 function tick(){
   requestAnimationFrame(tick);
   let now=performance.now()/1000; let dt=Math.min(0.05, now-last); last=now;
-  GAME.t+=dt;
 
   const pad=pollPad();
-  if(pad.start && GAME.mode==='play'){ /* pause hook (omitted in slice) */ }
+  // PAUSE: Start button / Esc / P -- only mid-fight. A true freeze: no sim, no
+  // time advance; we just keep re-rendering the last frame until you resume.
+  if((pad.start||tapK('escape')||tapK('p')) && GAME.mode==='play'){ togglePause(); }
+  if(GAME.paused){
+    renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,camera);
+    renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+    return;
+  }
+  GAME.t+=dt;
 
   // hitstop freezes sim but not render
   let sdt=dt;
