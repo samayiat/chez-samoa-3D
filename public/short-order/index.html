@@ -742,7 +742,7 @@ const BAR={ x:0, z:-HALFD+1.1, w:8, d:1.5 };
   // flame now -- it used to be hardcoded at a pre-restaurant-kitchen spot
   // that had nothing to do with this bar
   stoveGlow.position.set(BAR.x-BAR.w/2+0.9,1.9,BAR.z);
-  OBST.push({x:BAR.x,z:BAR.z,rx:BAR.w/2+0.35,rz:BAR.d/2+0.35});
+  OBST.push({x:BAR.x,z:BAR.z,rx:BAR.w/2+0.35,rz:BAR.d/2+0.35,top:1.2});   // countertop -- hop onto it
 })();
 
 /* the pass — the kitchen/dining boundary, matching the daytime loop's own
@@ -773,7 +773,7 @@ function passSlotX(i){ return (i-(PASS_SLOTS-1)/2) * (PASS.w-1.4)/(PASS_SLOTS-1)
     const bulb=new THREE.Mesh(new THREE.SphereGeometry(0.07,10,6),
       new THREE.MeshStandardMaterial({color:0xfff0c8,emissive:0xffcf8a,emissiveIntensity:2})); bulb.position.set(lx,2.0,0.15); g.add(bulb);
   }
-  OBST.push({x:PASS.x,z:PASS.z,rx:PASS.w/2+0.35,rz:PASS.d/2+0.35});
+  OBST.push({x:PASS.x,z:PASS.z,rx:PASS.w/2+0.35,rz:PASS.d/2+0.35,top:1.26});   // the pass -- vault or stand on it
 })();
 
 /* dining tables shoved to the walls, chairs stacked seat-down, one tipped
@@ -797,8 +797,9 @@ function passSlotX(i){ return (i-(PASS_SLOTS-1)/2) * (PASS.w-1.4)/(PASS_SLOTS-1)
       const seat=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.5),dark); seat.position.set(0.2,1.06,0.1); seat.castShadow=true; body.add(seat);
       const back=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.5,0.5),dark); back.position.set(0.42,1.34,0.1); back.castShadow=true; body.add(back);
     }
-    // both stand AND tipped tables block you now -- nothing walk-through
-    OBST.push(tipped ? {x,z,rx:1.1,rz:0.7} : {x,z,rx:1.0,rz:1.0});
+    // both stand AND tipped tables block you now -- nothing walk-through; the
+    // flat table tops are standable (~1.0), the tipped one is a low vault (~0.7)
+    OBST.push(tipped ? {x,z,rx:1.1,rz:0.7,top:0.75} : {x,z,rx:1.0,rz:1.0,top:1.0});
   }
 })();
 
@@ -818,8 +819,42 @@ function passSlotX(i){ return (i-(PASS_SLOTS-1)/2) * (PASS.w-1.4)/(PASS_SLOTS-1)
     // light that used to sit at a fixed (9,3,7), a leftover from the
     // pre-restaurant kitchen layout with no relationship to anything here
     const glow=new THREE.PointLight(0x8fc866,0.35,7,2); glow.position.set(0,2.6,0); p.add(glow);
-    OBST.push({x:sx,z:-HALFD*0.15,rx:0.7,rz:0.7});
+    OBST.push({x:sx,z:-HALFD*0.15,rx:0.7,rz:0.7,top:3});   // full-height tree -- solid, can't stand/vault
   }
+})();
+
+/* parkour furniture -- crates, a keg and a prep bench scattered around the
+   fighting floor's edges (clear of the central lane and the spawn lines) to
+   jump ON and OVER. Each is a mesh + an OBST with a `top` surface height. */
+(function props(){
+  const woodM=new THREE.MeshStandardMaterial({color:0x6b4a2c,roughness:.8,flatShading:true});
+  const crateM=new THREE.MeshStandardMaterial({color:0x7a5330,roughness:.85,flatShading:true});
+  const darkM=new THREE.MeshStandardMaterial({color:0x2e2114,roughness:.9,flatShading:true});
+  const metalM=new THREE.MeshStandardMaterial({color:0x8a7a5a,metalness:.4,roughness:.5,flatShading:true});
+  function crate(x,z,s,ry){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(s,s,s),crateM);
+    m.position.set(x,s/2,z); m.rotation.y=ry||0; m.castShadow=m.receiveShadow=true; arena.add(m);
+    OBST.push({x,z,rx:s/2+0.3,rz:s/2+0.3,top:s}); return m;
+  }
+  // a stack of two crates you can step up (0.85 -> higher perch)
+  crate(-HALFW+4.6, HALFD-4.2, 0.95, 0.3);
+  crate(-HALFW+4.4, HALFD-4.4, 0.7, -0.2).position.y=0.95+0.35;   // second crate sits on the first
+  OBST.push({x:-HALFW+4.4,z:HALFD-4.4,rx:0.65,rz:0.65,top:1.65});
+  crate(HALFW-5.0, -HALFD+4.6, 0.85, -0.35);
+  crate(HALFW-4.2, HALFD-5.2, 0.75, 0.5);
+
+  // a keg / barrel on the kitchen side
+  (function keg(){ const x=-HALFW+5.2, z=-HALFD+3.4;
+    const b=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,1.0,14),woodM); b.position.set(x,0.5,z); b.castShadow=b.receiveShadow=true; arena.add(b);
+    const rim=new THREE.Mesh(new THREE.CylinderGeometry(0.52,0.52,0.1,14),metalM); rim.position.set(x,0.85,z); arena.add(rim);
+    OBST.push({x,z,rx:0.7,rz:0.7,top:1.0}); })();
+
+  // a low prep bench near mid-field (a wide platform to leap along)
+  (function bench(){ const x=HALFW-6.5, z=1.2;
+    const g=new THREE.Group(); g.position.set(x,0,z); arena.add(g);
+    const topM=new THREE.Mesh(new THREE.BoxGeometry(2.6,0.16,1.0),woodM); topM.position.y=0.7; topM.castShadow=topM.receiveShadow=true; g.add(topM);
+    for(const lx of [-1.1,1.1]) for(const lz of [-0.4,0.4]){ const leg=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.7,0.14),darkM); leg.position.set(lx,0.35,lz); leg.castShadow=true; g.add(leg); }
+    OBST.push({x,z,rx:1.3+0.25,rz:0.5+0.25,top:0.78}); })();
 })();
 
 /* the caged work-lamp swinging over the pass -- Vince's arena (arena.js)
@@ -1538,14 +1573,15 @@ const camFwd=new V3(), camRight=new V3();
 function updateCameraVectors(){ camFwd.set(Math.sin(CAM.yaw),0,Math.cos(CAM.yaw)); camRight.set(-camFwd.z,0,camFwd.x); }
 
 /* ================================================================ HELPERS */
-// VAULT_CLEAR: once you're airborne above this height you clear the low counters
-// and tables -- jump/vault right over them. Arena walls always contain you.
-const VAULT_CLEAR=1.25;
+// Props are platforms: each OBST has a `top` (surface height). collide() only
+// side-blocks a prop while your feet are BELOW its top (walk into it at ground
+// level); once your feet reach the top you move ONTO it, and above it you vault.
 function collide(pos,r){
   pos.x=clamp(pos.x,-HALFW+r+0.3,HALFW-r-0.3);
   pos.z=clamp(pos.z,-HALFD+r+0.3,HALFD-r-0.3);
-  if((pos.y||0) > VAULT_CLEAR) return;   // airborne over the props -> vault
+  const y=pos.y||0;
   for(const o of OBST){
+    if(y >= (o.top||1.25)-0.12) continue;   // standing on / clearing this prop -> no side push
     const dx=pos.x-o.x, dz=pos.z-o.z;
     const px=(o.rx+r)-Math.abs(dx), pz=(o.rz+r)-Math.abs(dz);
     if(px>0&&pz>0){ if(px<pz){ pos.x+=(dx<0?-px:px); } else { pos.z+=(dz<0?-pz:pz); } }
@@ -1553,6 +1589,13 @@ function collide(pos,r){
   // re-clamp: a prop resolution must never shove a body out THROUGH an arena wall
   pos.x=clamp(pos.x,-HALFW+r+0.3,HALFW-r-0.3);
   pos.z=clamp(pos.z,-HALFD+r+0.3,HALFD-r-0.3);
+}
+function within(x,z,o,r){ return Math.abs(x-o.x)<o.rx+(r||0)*0.5 && Math.abs(z-o.z)<o.rz+(r||0)*0.5; }
+// the surface a body at (x,z,y) is RESTING on (feet within a hair of a prop top),
+// else the floor -- used for the standing/grounded check and the airborne factor
+function restY(x,z,y,r){ let s=0;
+  for(const o of OBST){ const t=o.top||0; if(t>0.05 && Math.abs(y-t)<0.14 && within(x,z,o,r) && t>s) s=t; }
+  return s;
 }
 /* HARD body-to-body collision. The enemy AI's soft "separation" steer only
    nudges intent; bodies still walked through each other and the player, which
@@ -1899,7 +1942,7 @@ function updatePlayer(dt, pad){
   // ----- JUMP (was dash): vertical hop, carries momentum, clears low props,
   // and sets up the overhead SLAM (attack while airborne). Brief i-frames on
   // takeoff so you can still hop a sweep. -----
-  const grounded=P.pos.y<=0.02;
+  const grounded=P.pos.y<=restY(P.pos.x,P.pos.z,P.pos.y,P.r)+0.03;   // grounded on floor OR a prop top
   const wantJump=pad.dodge||tapK('shift')||consume('dodgeEdge');
   if(wantJump && grounded && P.jumpCD<=0 && P.stagger<=0 && !P.tackle){
     P.vy=JUMP_V;
@@ -1924,7 +1967,7 @@ function updatePlayer(dt, pad){
   // ----- attacks (Cross light / Square heavy / touch) -----
   const wantLight=pad.light||tapK('j')||MOUSE.l||consume('lightEdge'); MOUSE.l=false;
   const wantHeavy=pad.heavy||tapK('k')||MOUSE.r||consume('heavyEdge'); MOUSE.r=false;
-  const airborne=P.pos.y>0.06;
+  const airborne=P.pos.y>restY(P.pos.x,P.pos.z,P.pos.y,P.r)+0.06;   // relative to the floor OR the prop you're standing on
   if(wantHeavy && airborne && !P.slam){
     // HEAVY in the air = OVERHEAD SLAM. Hurl yourself down; the ground-pound
     // resolves on landing (slamLand). If you're locked on (or an enemy is close),
@@ -1997,20 +2040,27 @@ function updatePlayer(dt, pad){
   }
   // ----- vertical (jump / slam) -- integrate BEFORE collide so it sees the
   // height for vaulting over the props -----
-  if(P.pos.y>0 || P.vy!==0){
+  const rest=restY(P.pos.x,P.pos.z,P.pos.y,P.r);
+  if(P.pos.y>rest+0.02 || P.vy!==0){
     // apex-hang: lighten gravity near the top of the arc so you FLOAT there --
     // the classic platformer trick for satisfying hang time. The slam drops with
     // committed weight but NOT so fast the overhead wind-up can't read on the way.
     const g = P.slam ? GRAV*1.7 : GRAV*(Math.abs(P.vy)<2.6 ? 0.48 : 1);   // 1.7: snappier drop, shorter overhead hold
+    const prevY=P.pos.y;
     P.vy -= g*dt;
     P.pos.y += P.vy*dt;
-    if(P.pos.y<=0){
-      const landV=P.vy; P.pos.y=0; P.vy=0;
+    // land on the FLOOR, or on any prop top we crossed DOWN through this frame
+    // (one-way: you can jump up past a table, then come down onto it)
+    let land = P.pos.y<=0 ? 0 : -1e9;
+    for(const o of OBST){ const t=o.top||0;
+      if(t>0.05 && prevY>=t-0.04 && P.pos.y<=t && within(P.pos.x,P.pos.z,o,P.r) && t>land) land=t; }
+    if(P.pos.y<=land){
+      const landV=P.vy; P.pos.y=land; P.vy=0;
       if(P.slam){ slamLand(P, landV); P.slam=null; P.slamHit=SLAM_HIT; P.jumpCD=0.18; }  // hammer DOWN on contact
       else if(landV<-5){ shake(0.12); }         // a little thump on a hard landing
     }
   }
-  P._air=clamp(P.pos.y/1.4,0,1);
+  P._air=clamp((P.pos.y-restY(P.pos.x,P.pos.z,P.pos.y,P.r))/1.4,0,1);
   P.pos.addScaledVector(P.vel,dt);
   collide(P.pos,P.r);
 
@@ -2269,7 +2319,7 @@ function poseChef(a, isPlayer, dt){
   if(a.stagger>0) leanZ += Math.sin(GAME.t*30)*0.15*clamp(a.stagger,0,1);
   leanX += clamp(AN.rx,-0.9,0.9); leanZ += clamp(AN.rz,-0.85,0.85) + AN.sway*0.4;   // raised so the hit reaction reads
   leanX += leanAf; leanZ += leanAl;                                                  // tip into accel (momentum read)
-  if(a.slam) leanX += -0.16;                        // descent: coil back, cocking the overhead wind-up
+  if(a.slam) leanX += -0.24;                        // descent: torso arches back, cocking the overhead wind-up
   else if((a.slamHit||0)>0) leanX += 0.7*((a.slamHit||0)/SLAM_HIT);  // strike: fold forward hard, driving the pound down on contact
   else if(air>0.1) leanX += -0.12*air;              // jump: a slight tuck-back on the rise
   b.position.set(AN.sway, bob, 0);
@@ -2336,13 +2386,14 @@ function updateFeet(a, dt, moving){
   const legs=a.chef.userData.legs;
   const air=a._air||0;
   if(air>0.08){   // AIRBORNE: no stepping -- tuck the feet up on a jump, extend them down for a slam stomp
+    const sm = a.slam?0.3:0.6;                       // slam: feet gather TOGETHER (trailing), jump: normal stance
     for(let i=0;i<2;i++){ const L=legs[i], st=STANCE[i];
-      toGround(a, st.x*0.6, st.z*0.6, L.world);      // feet gather in under the body
+      toGround(a, st.x*sm, st.z*sm, L.world);
       // solveLegsIK uses L.world.y as a body-LOCAL height (the chef group is
       // already lifted by pos.y) -- so this is foot height RELATIVE to the body,
       // NOT world height. Knees tuck up and COIL for the slam wind-up (they plant
       // and stomp on landing via normal footwork); a plain jump tucks a bit less.
-      L.world.y = a.slam ? (0.16 + i*0.05) : (0.30 + i*0.07);
+      L.world.y = a.slam ? (0.22 + i*0.05) : (0.30 + i*0.07);
       L.stepT=1; L.lift=0;
     }
     a._swayTarget=0; a._stepDip=0; a._flight=-1;
@@ -2467,14 +2518,14 @@ function solveArmsIK(a, dt, atk){
       }
     }
     const air=a._air||0, slamHit=a.slamHit||0;
-    if(a.slam){ tx=sign*0.12; ty=2.18; tz=-0.14; }              // WIND-UP held on the way down: both fists high, together, cocked back
+    if(a.slam){ tx=sign*0.07; ty=2.20; tz=-0.28; }              // WIND-UP: arms fully extended overhead, hands clasped near centre, cocked back (Rivals-style)
     else if(slamHit>0){ const k=slamHit/SLAM_HIT;                    // HAMMER: whip the fists straight down on contact, then recover
       tx=lerp(tx, sign*0.14, k); ty=lerp(ty, 0.55, k); tz=lerp(tz, 0.62, k); }
     else if(air>0.12 && !atk){ tx=A.sh.x+sign*0.15; ty=lerp(ty,1.30+air*0.18,air); tz=lerp(tz,0.30,air); }  // jump: arms out for balance
     if(a.hurt>0.5 && !atk && air<0.1) ty += Math.sin(GAME.t*26+i)*0.10*((a.hurt-0.5)*2);
     const rate = (a.slam||atk&&isActive) ? 34 : (slamHit>0?40 : (run>0.3?24:14));
     A.tgt.x=damp(A.tgt.x,tx,rate,dt); A.tgt.y=damp(A.tgt.y,ty,rate,dt); A.tgt.z=damp(A.tgt.z,tz,rate,dt);
-    if(a.slam){ _bnd2.set(sign*0.85, 0.7, -0.4); }                 // overhead cock: elbows up and out
+    if(a.slam){ _bnd2.set(sign*0.95, 0.5, -0.55); }                // overhead cock: elbows splay out and back into a wide V
     else if((a.slamHit||0)>0){ _bnd2.set(sign*0.5,-1,0.5); }       // hammer: elbows drive down
     else if(atk && isActive && !(atk.thrust&&!isFist) && atk.A.shape){ const bd=atk.A.shape.bend; _bnd2.set(bd[0],bd[1],bd[2]); }
     else if(run>0.3 && !atk){ _bnd2.set(sign*0.5,-0.65,-0.9); }   // elbows bent back, runner's form
