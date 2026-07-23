@@ -1371,7 +1371,7 @@ function makePlayer(){
     attack:null, combo:0, comboStep:0, chainT:0,
     guard:false, guardV:0,
     iframe:0, weaveCD:0, dodgeCD:0, dodge:null, tackle:null, tackleCD:0,
-    vy:0, jumpCD:0, slam:null, _air:0,      // vertical jump / air-slam state
+    vy:0, jumpCD:0, slam:null, slamHit:0, _air:0,   // vertical jump / air-slam state
     stagger:0, hurt:0, dead:false, _sq:0,
     lockOn:null, r:0.34,
     _an:{ idle:Math.random()*10, twist:0, sway:0, toqueX:0, toqueXv:0, toqueZ:0, toqueZv:0, rx:0, rxv:0, rz:0, rzv:0, prevPh:0 }
@@ -1839,7 +1839,7 @@ function updatePlayer(dt, pad){
   // ----- timers -----
   P.comboT=GAME.comboT; if(GAME.comboT>0){ GAME.comboT-=dt; if(GAME.comboT<=0){ GAME.combo=0;
     document.getElementById('combo').classList.remove('on'); } }
-  P.weaveCD=Math.max(0,P.weaveCD-dt); P.dodgeCD=Math.max(0,P.dodgeCD-dt); P.chainT=Math.max(0,P.chainT-dt); P.tackleCD=Math.max(0,P.tackleCD-dt); P.jumpCD=Math.max(0,P.jumpCD-dt);
+  P.weaveCD=Math.max(0,P.weaveCD-dt); P.dodgeCD=Math.max(0,P.dodgeCD-dt); P.chainT=Math.max(0,P.chainT-dt); P.tackleCD=Math.max(0,P.tackleCD-dt); P.jumpCD=Math.max(0,P.jumpCD-dt); P.slamHit=Math.max(0,P.slamHit-dt);
   P.iframe=Math.max(0,P.iframe-dt); P.stagger=Math.max(0,P.stagger-dt); P.hurt=damp(P.hurt,0,8,dt);
 
   updateCameraVectors();
@@ -1998,13 +1998,14 @@ function updatePlayer(dt, pad){
   // height for vaulting over the props -----
   if(P.pos.y>0 || P.vy!==0){
     // apex-hang: lighten gravity near the top of the arc so you FLOAT there --
-    // the classic platformer trick for satisfying hang time. Slam falls hard.
-    const g = P.slam ? GRAV*1.9 : GRAV*(Math.abs(P.vy)<2.6 ? 0.48 : 1);
+    // the classic platformer trick for satisfying hang time. The slam drops with
+    // committed weight but NOT so fast the overhead wind-up can't read on the way.
+    const g = P.slam ? GRAV*1.35 : GRAV*(Math.abs(P.vy)<2.6 ? 0.48 : 1);
     P.vy -= g*dt;
     P.pos.y += P.vy*dt;
     if(P.pos.y<=0){
       const landV=P.vy; P.pos.y=0; P.vy=0;
-      if(P.slam){ slamLand(P, landV); P.slam=null; P.jumpCD=0.18; }
+      if(P.slam){ slamLand(P, landV); P.slam=null; P.slamHit=0.24; P.jumpCD=0.18; }  // hammer DOWN on contact
       else if(landV<-5){ shake(0.12); }         // a little thump on a hard landing
     }
   }
@@ -2267,7 +2268,8 @@ function poseChef(a, isPlayer, dt){
   if(a.stagger>0) leanZ += Math.sin(GAME.t*30)*0.15*clamp(a.stagger,0,1);
   leanX += clamp(AN.rx,-0.9,0.9); leanZ += clamp(AN.rz,-0.85,0.85) + AN.sway*0.4;   // raised so the hit reaction reads
   leanX += leanAf; leanZ += leanAl;                                                  // tip into accel (momentum read)
-  if(a.slam) leanX += 0.5;                          // slam: fold forward, driving the pound down
+  if(a.slam) leanX += -0.16;                        // descent: coil back, cocking the overhead wind-up
+  else if((a.slamHit||0)>0) leanX += 0.7*((a.slamHit||0)/0.24);  // strike: fold forward hard, driving the pound down on contact
   else if(air>0.1) leanX += -0.12*air;              // jump: a slight tuck-back on the rise
   b.position.set(AN.sway, bob, 0);
   b.rotation.x = damp(b.rotation.x, leanX, 17, dt);
@@ -2337,9 +2339,9 @@ function updateFeet(a, dt, moving){
       toGround(a, st.x*0.6, st.z*0.6, L.world);      // feet gather in under the body
       // solveLegsIK uses L.world.y as a body-LOCAL height (the chef group is
       // already lifted by pos.y) -- so this is foot height RELATIVE to the body,
-      // NOT world height. Tuck up (knees rise, feet under the pelvis) on a jump;
-      // reach DOWN for the slam stomp.
-      L.world.y = a.slam ? -0.42 : (0.30 + i*0.07);
+      // NOT world height. Knees tuck up and COIL for the slam wind-up (they plant
+      // and stomp on landing via normal footwork); a plain jump tucks a bit less.
+      L.world.y = a.slam ? (0.16 + i*0.05) : (0.30 + i*0.07);
       L.stepT=1; L.lift=0;
     }
     a._swayTarget=0; a._stepDip=0; a._flight=-1;
@@ -2463,13 +2465,17 @@ function solveArmsIK(a, dt, atk){
         tx=lerp(tx, A.sh.x*0.55 + sign*0.02, 0.6); ty=lerp(ty, isFist?1.58:1.44, 0.6); tz=lerp(tz, isFist?0.42:0.30, 0.6);
       }
     }
-    const air=a._air||0;
-    if(a.slam){ tx=A.sh.x*0.5; ty=2.05; tz=0.14; }              // both fists overhead, hammering down
+    const air=a._air||0, slamHit=a.slamHit||0;
+    if(a.slam){ tx=sign*0.12; ty=2.18; tz=-0.14; }              // WIND-UP held on the way down: both fists high, together, cocked back
+    else if(slamHit>0){ const k=slamHit/0.24;                    // HAMMER: whip the fists straight down on contact, then recover
+      tx=lerp(tx, sign*0.14, k); ty=lerp(ty, 0.55, k); tz=lerp(tz, 0.62, k); }
     else if(air>0.12 && !atk){ tx=A.sh.x+sign*0.15; ty=lerp(ty,1.30+air*0.18,air); tz=lerp(tz,0.30,air); }  // jump: arms out for balance
     if(a.hurt>0.5 && !atk && air<0.1) ty += Math.sin(GAME.t*26+i)*0.10*((a.hurt-0.5)*2);
-    const rate = (a.slam||atk&&isActive) ? 30 : (run>0.3?24:14);
+    const rate = (a.slam||atk&&isActive) ? 26 : (slamHit>0?34 : (run>0.3?24:14));
     A.tgt.x=damp(A.tgt.x,tx,rate,dt); A.tgt.y=damp(A.tgt.y,ty,rate,dt); A.tgt.z=damp(A.tgt.z,tz,rate,dt);
-    if(atk && isActive && !(atk.thrust&&!isFist) && atk.A.shape){ const bd=atk.A.shape.bend; _bnd2.set(bd[0],bd[1],bd[2]); }
+    if(a.slam){ _bnd2.set(sign*0.85, 0.7, -0.4); }                 // overhead cock: elbows up and out
+    else if((a.slamHit||0)>0){ _bnd2.set(sign*0.5,-1,0.5); }       // hammer: elbows drive down
+    else if(atk && isActive && !(atk.thrust&&!isFist) && atk.A.shape){ const bd=atk.A.shape.bend; _bnd2.set(bd[0],bd[1],bd[2]); }
     else if(run>0.3 && !atk){ _bnd2.set(sign*0.5,-0.65,-0.9); }   // elbows bent back, runner's form
     else _bnd2.set(sign*0.6,-1,0.5);       // elbows break down and away from the ribs
     solveTwoBone(A.up, A.fore, A.sh, A.tgt, ARM_U, ARM_F, _bnd2, A.elb);
