@@ -316,6 +316,52 @@ const POST = new THREE.ShaderMaterial({
   '}'].join('\n')
 });
 postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), POST));
+
+/* ---- real flame: a procedural fbm-fire billboard (texture-free) ----
+   One shared ShaderMaterial for every torch flame. The VERTEX shader turns each
+   quad into a screen-facing billboard (works even parented to the swinging hand),
+   so nothing needs per-frame JS orientation -- we just tick uTime. The FRAGMENT
+   shader is the classic GPU fire: fbm value-noise scrolled upward, masked into a
+   teardrop, run through a red->orange->yellow->white color ramp, additive.
+   Core colors are HDR (>1) so they survive the ACES tone-map and read as fire. */
+const FLAME_MAT = new THREE.ShaderMaterial({
+  uniforms:{ uTime:{value:0} },
+  transparent:true, depthWrite:false, depthTest:true, blending:THREE.AdditiveBlending,
+  vertexShader:[
+    'uniform float uTime; varying vec2 vUv; varying float vSeed;',
+    'void main(){',
+    '  vUv=uv;',
+    '  vSeed = modelMatrix[3].x*0.37 + modelMatrix[3].z*0.53;',     // per-torch phase from world pos
+    '  vec4 c = modelViewMatrix * vec4(0.0,0.0,0.0,1.0);',          // quad centre in view space
+    '  gl_Position = projectionMatrix * vec4(c.xy + position.xy, c.z, 1.0);',   // offset by local size -> screen-facing
+    '}'].join('\n'),
+  fragmentShader:[
+    'uniform float uTime; varying vec2 vUv; varying float vSeed;',
+    'float hash(vec2 p){ return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453); }',
+    'float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);',
+    '  float a=hash(i),b=hash(i+vec2(1,0)),c=hash(i+vec2(0,1)),d=hash(i+vec2(1,1));',
+    '  return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }',
+    'float fbm(vec2 p){ float s=0.0,a=0.5; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.02; a*=0.5; } return s; }',
+    'void main(){',
+    '  vec2 uv=vUv;',
+    '  float t = uTime*1.7 + vSeed*7.0;',
+    '  float taper = smoothstep(0.0,0.14,uv.y) * smoothstep(1.0,0.34,uv.y);',   // fade in at base, out at tip
+    '  float width = 0.42 + 0.5*(1.0-uv.y);',                                    // wider at the base
+    '  float dx = abs(uv.x-0.5)/(0.5*width);',
+    '  float shape = taper*(1.0 - dx*dx);',
+    '  float n = fbm(vec2(uv.x*3.0 + vSeed, uv.y*2.4 - t));',                    // upward-scrolling turbulence
+    '  float flame = clamp(shape + (n-0.5)*0.62*taper, 0.0, 1.0);',
+    '  float body = smoothstep(0.34,0.72,flame);',
+    '  if(body<0.02) discard;',
+    '  vec3 col = mix(vec3(0.95,0.13,0.02), vec3(1.7,0.55,0.08), smoothstep(0.30,0.58,flame));',
+    '  col = mix(col, vec3(2.6,1.9,0.6), smoothstep(0.60,0.86,flame));',        // hot yellow-white core (HDR)
+    '  gl_FragColor = vec4(col*body, 1.0);',                                     // additive: mask modulates brightness
+    '}'].join('\n')
+});
+// a flame billboard whose BASE sits at the mesh origin (grows upward)
+function makeFlame(w,h){ const geo=new THREE.PlaneGeometry(w,h); geo.translate(0,h*0.5,0);
+  return new THREE.Mesh(geo, FLAME_MAT); }
+
 const IMP={ frames:0 };
 function impactFrames(n,a,b){ IMP.frames=Math.max(IMP.frames,n);
   POST.uniforms.uImpA.value.setHex(a===undefined?0xFFE03D:a);
@@ -976,9 +1022,7 @@ function makeWeaponMesh(key){
       ring.rotation.x=Math.PI/2; ring.position.z=i*0.3; g.add(ring); }                            // bamboo nodes
     const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.07,0.17,10),M(0x241608,.7,.1));
     bowl.rotation.x=Math.PI/2; bowl.position.z=1.2; bowl.castShadow=true; g.add(bowl);            // pitch bowl
-    const flame=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.36,10),
-      new THREE.MeshStandardMaterial({color:0xff8a2a,emissive:0xff5a10,emissiveIntensity:2.4,roughness:.4,flatShading:true}));
-    flame.rotation.x=-Math.PI/2; flame.position.z=1.42; g.add(flame);                             // lit flame at the tip
+    const flame=makeFlame(0.34,0.62); flame.position.z=1.42; g.add(flame);   // real fbm-fire billboard at the tip (screen-facing, always burns "up")
   }
   return g;
 }
@@ -1511,10 +1555,7 @@ function spawnTiki(x,z){
     ring.position.y=0.28+i*0.3; g.add(ring); }                                      // bamboo nodes
   const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.08,0.22,10),new THREE.MeshStandardMaterial({color:0x241608,roughness:.75,flatShading:true}));
   bowl.position.y=1.8; bowl.castShadow=true; g.add(bowl);                            // pitch bowl
-  const flame=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.44,10),
-    new THREE.MeshStandardMaterial({color:0xff8a2a,emissive:0xff5a10,emissiveIntensity:2.4,roughness:.4,flatShading:true}));
-  flame.position.y=2.1; flame.userData.b=Math.random()*10; g.add(flame);            // lit flame
-  (arena.userData.torchFlames||(arena.userData.torchFlames=[])).push(flame);
+  const flame=makeFlame(0.62,1.05); flame.position.y=1.86; g.add(flame);            // real fbm-fire billboard
   const disc=new THREE.Mesh(new THREE.CircleGeometry(0.5,20),
     new THREE.MeshBasicMaterial({color:COL.flame,transparent:true,opacity:0.25,depthWrite:false}));
   disc.rotation.x=-Math.PI/2; disc.position.y=0.03; g.add(disc);                      // grab-prompt glow at the base
@@ -3443,9 +3484,10 @@ function tick(){
   for(const p of PICKUPS){ if(p.taken)continue;
     if(!p.planted){ p.g.position.y=p.y0+Math.sin(GAME.t*2+p.x)*0.08; p.g.rotation.y+=dt*1.2; }
     p.disc.material.opacity=0.18+Math.sin(GAME.t*4+p.z)*0.08; }
-  // stove + tiki-torch flame flicker
-  const flames=(arena.userData.stoveFlames||[]).concat(arena.userData.torchFlames||[]);
+  // stove flame flicker (still an emissive cone) + tiki/torch fbm-fire time
+  const flames=arena.userData.stoveFlames||[];
   for(const f of flames){ f.scale.y=1+Math.sin(GAME.t*18+f.userData.b)*0.15; f.material.emissiveIntensity=1.8+Math.sin(GAME.t*22+f.userData.b)*0.6; }
+  FLAME_MAT.uniforms.uTime.value=GAME.t;   // the real flames animate entirely in-shader
   stoveGlow.intensity=0.8+Math.sin(GAME.t*16)*0.2;
   // the work-lamp's gentle overhead sway
   const lp=arena.userData.lampPivot;
