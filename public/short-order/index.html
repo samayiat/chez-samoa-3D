@@ -1794,6 +1794,7 @@ function killChef(T, ang){
 
 /* ================================================================ PLAYER */
 const GRAV=16, JUMP_V=7.8;              // floatier -- more hang time (see the apex-hang below)
+const SLAM_HIT=0.14;                    // how long the hammer downswing lasts on contact (snappy)
 // OVERHEAD SLAM: on landing an air-attack, a radial ground-pound. This is the
 // slam's single damage door (invariant #3: a live jump-attack deals it), mirror-
 // ing resolveHit's juice. Power scales with how hard you came down.
@@ -2000,12 +2001,12 @@ function updatePlayer(dt, pad){
     // apex-hang: lighten gravity near the top of the arc so you FLOAT there --
     // the classic platformer trick for satisfying hang time. The slam drops with
     // committed weight but NOT so fast the overhead wind-up can't read on the way.
-    const g = P.slam ? GRAV*1.35 : GRAV*(Math.abs(P.vy)<2.6 ? 0.48 : 1);
+    const g = P.slam ? GRAV*1.7 : GRAV*(Math.abs(P.vy)<2.6 ? 0.48 : 1);   // 1.7: snappier drop, shorter overhead hold
     P.vy -= g*dt;
     P.pos.y += P.vy*dt;
     if(P.pos.y<=0){
       const landV=P.vy; P.pos.y=0; P.vy=0;
-      if(P.slam){ slamLand(P, landV); P.slam=null; P.slamHit=0.24; P.jumpCD=0.18; }  // hammer DOWN on contact
+      if(P.slam){ slamLand(P, landV); P.slam=null; P.slamHit=SLAM_HIT; P.jumpCD=0.18; }  // hammer DOWN on contact
       else if(landV<-5){ shake(0.12); }         // a little thump on a hard landing
     }
   }
@@ -2269,7 +2270,7 @@ function poseChef(a, isPlayer, dt){
   leanX += clamp(AN.rx,-0.9,0.9); leanZ += clamp(AN.rz,-0.85,0.85) + AN.sway*0.4;   // raised so the hit reaction reads
   leanX += leanAf; leanZ += leanAl;                                                  // tip into accel (momentum read)
   if(a.slam) leanX += -0.16;                        // descent: coil back, cocking the overhead wind-up
-  else if((a.slamHit||0)>0) leanX += 0.7*((a.slamHit||0)/0.24);  // strike: fold forward hard, driving the pound down on contact
+  else if((a.slamHit||0)>0) leanX += 0.7*((a.slamHit||0)/SLAM_HIT);  // strike: fold forward hard, driving the pound down on contact
   else if(air>0.1) leanX += -0.12*air;              // jump: a slight tuck-back on the rise
   b.position.set(AN.sway, bob, 0);
   b.rotation.x = damp(b.rotation.x, leanX, 17, dt);
@@ -2467,11 +2468,11 @@ function solveArmsIK(a, dt, atk){
     }
     const air=a._air||0, slamHit=a.slamHit||0;
     if(a.slam){ tx=sign*0.12; ty=2.18; tz=-0.14; }              // WIND-UP held on the way down: both fists high, together, cocked back
-    else if(slamHit>0){ const k=slamHit/0.24;                    // HAMMER: whip the fists straight down on contact, then recover
+    else if(slamHit>0){ const k=slamHit/SLAM_HIT;                    // HAMMER: whip the fists straight down on contact, then recover
       tx=lerp(tx, sign*0.14, k); ty=lerp(ty, 0.55, k); tz=lerp(tz, 0.62, k); }
     else if(air>0.12 && !atk){ tx=A.sh.x+sign*0.15; ty=lerp(ty,1.30+air*0.18,air); tz=lerp(tz,0.30,air); }  // jump: arms out for balance
     if(a.hurt>0.5 && !atk && air<0.1) ty += Math.sin(GAME.t*26+i)*0.10*((a.hurt-0.5)*2);
-    const rate = (a.slam||atk&&isActive) ? 26 : (slamHit>0?34 : (run>0.3?24:14));
+    const rate = (a.slam||atk&&isActive) ? 34 : (slamHit>0?40 : (run>0.3?24:14));
     A.tgt.x=damp(A.tgt.x,tx,rate,dt); A.tgt.y=damp(A.tgt.y,ty,rate,dt); A.tgt.z=damp(A.tgt.z,tz,rate,dt);
     if(a.slam){ _bnd2.set(sign*0.85, 0.7, -0.4); }                 // overhead cock: elbows up and out
     else if((a.slamHit||0)>0){ _bnd2.set(sign*0.5,-1,0.5); }       // hammer: elbows drive down
