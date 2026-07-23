@@ -132,6 +132,13 @@
   #pause .ptitle{font-family:"Anton",sans-serif;font-size:calc(var(--u)*11);letter-spacing:.06em;
     color:#f4e4c1;text-shadow:0 4px 0 #000a,0 0 30px #ff8a3a55}
   #pause .psub{margin-top:calc(var(--u)*1.5);font-size:calc(var(--u)*2.1);letter-spacing:.22em;color:#b79a6e}
+  .mpause{position:fixed;left:50%;top:calc(var(--u)*1.2);transform:translateX(-50%);z-index:31;
+    width:calc(var(--u)*7);height:calc(var(--u)*5.4);display:none;place-items:center;
+    border:1px solid #6b5230;border-radius:calc(var(--u)*1.1);background:rgba(20,14,8,.5);
+    color:#e8d2a6;font-size:calc(var(--u)*2.3);letter-spacing:.1em;
+    pointer-events:auto;cursor:pointer;font-family:"DM Mono",monospace}
+  .mpause.on{display:grid}
+  .mpause:active{background:rgba(255,138,58,.35)}
   #vign{position:fixed;inset:0;pointer-events:none;z-index:9;
     box-shadow:inset 0 0 200px 40px #000000aa;opacity:.32}
   #grabui{position:absolute;left:50%;top:56%;transform:translateX(-50%);text-align:center;opacity:0;pointer-events:none;transition:opacity .08s;z-index:8}
@@ -208,7 +215,8 @@
   <div id="words"></div>
 </div>
 <div class="hint" id="hint"></div>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc to resume</div></div></div>
+<button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -1562,6 +1570,12 @@ const TOUCH={ moveX:0, moveY:0, guard:false, camL:false, camR:false,
 function consume(k){ const v=TOUCH[k]; TOUCH[k]=false; return v; }
 const TOUCHCAP = (window.matchMedia&&matchMedia('(pointer:coarse)').matches) || ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
 const touchEl=document.getElementById('touch');
+/* mobile PAUSE: a top-of-screen button (above the pause overlay so it stays
+   tappable), plus tap-anywhere-on-the-overlay to resume. */
+const bPause=document.getElementById('bPause');
+if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='play') togglePause(); });
+{ const pel=document.getElementById('pause');
+  if(pel) pel.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.paused) togglePause(); }); }
 
 /* analog stick */
 const stickBase=document.getElementById('tstick'), stickNub=document.getElementById('tnub');
@@ -3146,7 +3160,7 @@ function startNight(cfg, onEnd){
   GAME.mode='play';
   GAME.paused=false; { const pe=document.getElementById('pause'); if(pe) pe.classList.remove('on'); if(master){ try{ master.gain.value=0.5; }catch(e){} } }
   document.getElementById('hud').classList.add('on');
-  if(TOUCHCAP) touchEl.classList.add('on');
+  if(TOUCHCAP){ touchEl.classList.add('on'); if(bPause) bPause.classList.add('on'); }
   document.getElementById('veil').classList.add('hide');
   document.getElementById('hint').classList.add('on');
 }
@@ -3172,7 +3186,8 @@ function showTitle(){
     '<div id="ctrls">'+ctrlRows()+'</div>';
   document.getElementById('playBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startNight(SLICE, onNightEnd); };
   document.getElementById('veil').classList.remove('hide');
-  touchEl.classList.remove('on');
+  touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
+  GAME.paused=false; { const pe=document.getElementById('pause'); if(pe) pe.classList.remove('on'); }
 }
 function ctrlRows(){
   const rows=[
@@ -3195,7 +3210,8 @@ function showEnd(res){
   const c=document.getElementById('card');
   document.getElementById('veil').classList.remove('hide');
   document.getElementById('hud').classList.remove('on');
-  touchEl.classList.remove('on');
+  touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
+  GAME.paused=false; { const pe=document.getElementById('pause'); if(pe) pe.classList.remove('on'); }
   const win=res.survived;
   c.innerHTML='<div class="card end '+(win?'win':'lose')+'">'+
     '<div class="kick">'+(win?pick(['THE LINE IS CLEAN','FIVE STARS ON YELP','THE HEALTH INSPECTOR IS IMPRESSED','MICHELIN CALLED']):pick(['YOU WENT DOWN','ONE STAR: "FOOD WAS FINE, STAFF ATTACKED US"','THE CUSTOMER WAS RIGHT THIS TIME','SENT HOME EARLY']))+'</div>'+
