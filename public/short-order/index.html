@@ -937,7 +937,8 @@ const WEAPONS = {
   nonstick: { key:'nonstick', name:'Nonstick Pan', cls:'medium', reach:1.6,  light:9,  heavy:18, wind:0.17, rec:0.24, stagger:0.65, gbreak:false, knock:false, dur:32, shake:0.5,  heft:0.58, metal:true,  tint:0x2b2b2f },
   castiron: { key:'castiron', name:'Cast Iron',    cls:'heavy',  reach:1.7,  light:16, heavy:32, wind:0.34, rec:0.44, stagger:1.25, gbreak:true,  knock:true,  dur:22, shake:1.0,  heft:1.0,  metal:true,  tint:0x1a1a1c },
   knife:    { key:'knife',    name:"Chef's Knife", cls:'light',  reach:1.85, light:8,  heavy:15, wind:0.10, rec:0.13, stagger:0.30, gbreak:false, knock:false, dur:26, shake:0.28, heft:0.24, metal:true, thrust:true, tint:0xdfe6ea },
-  potlid:   { key:'potlid',   name:'Pot Lid',      cls:'shield', reach:1.1,  light:4,  heavy:7,  wind:0.15, rec:0.20, stagger:0.30, gbreak:false, knock:false, dur:48, shake:0.20, heft:0.30, metal:true, shield:true, tint:0xb9c4cc }
+  potlid:   { key:'potlid',   name:'Pot Lid',      cls:'shield', reach:1.1,  light:4,  heavy:7,  wind:0.15, rec:0.20, stagger:0.30, gbreak:false, knock:false, dur:48, shake:0.20, heft:0.30, metal:true, shield:true, tint:0xb9c4cc },
+  torch:    { key:'torch',    name:'Tiki Torch',   cls:'medium', reach:2.0,  light:10, heavy:19, wind:0.16, rec:0.22, stagger:0.75, gbreak:false, knock:true,  dur:34, shake:0.55, heft:0.55, metal:false, tint:0xff7a1e }
 };
 /* build a weapon mesh, business-end pointing +Z out of the hand */
 function makeWeaponMesh(key){
@@ -969,6 +970,15 @@ function makeWeaponMesh(key){
     const dome=new THREE.Mesh(new THREE.SphereGeometry(0.42,18,10,0,TAU,0,Math.PI/2.4),M(w.tint,.28,.65));
     dome.rotation.x=Math.PI/2; dome.position.z=0.35; dome.castShadow=true; g.add(dome);
     const knob=new THREE.Mesh(new THREE.SphereGeometry(0.07,10,8),M(0x2a2a2a,.5,.3)); knob.position.z=0.5; g.add(knob);
+  } else if(key==='torch'){
+    handle(1.15,0.052,0x6a4a22);                                            // long bamboo pole
+    for(let i=1;i<4;i++){ const ring=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.03,8),M(0x43301a,.65,.05));
+      ring.rotation.x=Math.PI/2; ring.position.z=i*0.3; g.add(ring); }                            // bamboo nodes
+    const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.07,0.17,10),M(0x241608,.7,.1));
+    bowl.rotation.x=Math.PI/2; bowl.position.z=1.2; bowl.castShadow=true; g.add(bowl);            // pitch bowl
+    const flame=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.36,10),
+      new THREE.MeshStandardMaterial({color:0xff8a2a,emissive:0xff5a10,emissiveIntensity:2.4,roughness:.4,flatShading:true}));
+    flame.rotation.x=-Math.PI/2; flame.position.z=1.42; g.add(flame);                             // lit flame at the tip
   }
   return g;
 }
@@ -1489,6 +1499,26 @@ function spawnPickup(key,x,z,y){
   const y0=y==null?1.12:y;
   g.position.set(x,y0,z); scene.add(g);
   const p={ g, key, x, z, disc, taken:false, y0 };
+  PICKUPS.push(p); return p;
+}
+// a STANDING tiki torch planted on the deck -- a persistent fixture you can grab
+// (it's a pickup for the new 'torch' weapon). Doesn't bob/spin like a floor pickup.
+function spawnTiki(x,z){
+  const g=new THREE.Group(); g.position.set(x,0,z); scene.add(g);
+  const woodM=new THREE.MeshStandardMaterial({color:0x6a4a22,roughness:.82,flatShading:true});
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.075,1.7,8),woodM); pole.position.y=0.85; pole.castShadow=true; g.add(pole);
+  for(let i=1;i<5;i++){ const ring=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,0.03,8),new THREE.MeshStandardMaterial({color:0x43301a,roughness:.7,flatShading:true}));
+    ring.position.y=0.28+i*0.3; g.add(ring); }                                      // bamboo nodes
+  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.08,0.22,10),new THREE.MeshStandardMaterial({color:0x241608,roughness:.75,flatShading:true}));
+  bowl.position.y=1.8; bowl.castShadow=true; g.add(bowl);                            // pitch bowl
+  const flame=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.44,10),
+    new THREE.MeshStandardMaterial({color:0xff8a2a,emissive:0xff5a10,emissiveIntensity:2.4,roughness:.4,flatShading:true}));
+  flame.position.y=2.1; flame.userData.b=Math.random()*10; g.add(flame);            // lit flame
+  (arena.userData.torchFlames||(arena.userData.torchFlames=[])).push(flame);
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(0.5,20),
+    new THREE.MeshBasicMaterial({color:COL.flame,transparent:true,opacity:0.25,depthWrite:false}));
+  disc.rotation.x=-Math.PI/2; disc.position.y=0.03; g.add(disc);                      // grab-prompt glow at the base
+  const p={ g, key:'torch', x, z, disc, taken:false, y0:0, planted:true };
   PICKUPS.push(p); return p;
 }
 
@@ -2335,7 +2365,7 @@ function updateEnemy(e, dt){
 }
 function tryToken(e){ if(e.hasToken)return true; if(tokensUsed<ATTACK_TOKENS){ tokensUsed++; e.hasToken=true; return true; } return false; }
 let grabCD=0;
-function nearestFreePickup(e){ let best=null,bd=99; for(const p of PICKUPS){ if(p.taken)continue; const d=Math.hypot(p.x-e.pos.x,p.z-e.pos.z); if(d<bd){bd=d;best=p;} } return best; }
+function nearestFreePickup(e){ let best=null,bd=99; for(const p of PICKUPS){ if(p.taken||p.planted)continue; const d=Math.hypot(p.x-e.pos.x,p.z-e.pos.z); if(d<bd){bd=d;best=p;} } return best; }
 function equipEnemy(e,key){ e.wpn=key; e.dur=WEAPONS[key].dur; equip(e.chef,key); e.standoff=WEAPONS[key].reach+rand(0.25,0.7); if(AC)sfx.pickup(); }
 function startGrab(e){
   if(player.grabbed||player.dead||player.iframe>0||grabCD>0) return;
@@ -3269,6 +3299,10 @@ function startNight(cfg, onEnd){
   CAM.yaw=pfacing; CAM.lockK=0;
   // larder
   for(const it of cfg.larder) spawnPickup(it.key,it.x,it.z,it.y);
+  // tiki torches -- persistent deck fixtures you can grab and wield
+  arena.userData.torchFlames=[];
+  spawnTiki(-HALFW+2, 4.5); spawnTiki(-HALFW+2, -6.5);
+  spawnTiki( HALFW-2, 4.5); spawnTiki( HALFW-2, -6.5);
   // waves
   WAVE.chunks=chunkWaves(cfg.waves, cfg.waveSizes);
   WAVE.wave=0; WAVE.resting=false; WAVE.done=false; WAVE.winT=0;
@@ -3405,11 +3439,12 @@ function tick(){
   }
 
   sparkTick(dt); ringTick(dt); kitchenTick(dt); grabCD=Math.max(0,grabCD-dt);
-  // pickup bobbing
-  for(const p of PICKUPS){ if(p.taken)continue; p.g.position.y=p.y0+Math.sin(GAME.t*2+p.x)*0.08; p.g.rotation.y+=dt*1.2;
+  // pickup bobbing (planted tikis stand still -- only the base glow pulses)
+  for(const p of PICKUPS){ if(p.taken)continue;
+    if(!p.planted){ p.g.position.y=p.y0+Math.sin(GAME.t*2+p.x)*0.08; p.g.rotation.y+=dt*1.2; }
     p.disc.material.opacity=0.18+Math.sin(GAME.t*4+p.z)*0.08; }
-  // stove flicker
-  const flames=arena.userData.stoveFlames||[];
+  // stove + tiki-torch flame flicker
+  const flames=(arena.userData.stoveFlames||[]).concat(arena.userData.torchFlames||[]);
   for(const f of flames){ f.scale.y=1+Math.sin(GAME.t*18+f.userData.b)*0.15; f.material.emissiveIntensity=1.8+Math.sin(GAME.t*22+f.userData.b)*0.6; }
   stoveGlow.intensity=0.8+Math.sin(GAME.t*16)*0.2;
   // the work-lamp's gentle overhead sway
