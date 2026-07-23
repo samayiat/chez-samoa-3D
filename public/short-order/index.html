@@ -207,7 +207,7 @@
   <div id="tface">
     <button class="b bg square" data-b="heavy"><span class="lab">HEAVY</span></button>
     <button class="b bg tri" data-b="pickup"><span class="lab">GRAB</span></button>
-    <button class="b bg roll" data-b="dodge"><span class="lab">DASH</span></button>
+    <button class="b bg roll" data-b="dodge"><span class="lab">JUMP</span></button>
     <button class="b bg cross" data-b="light"><span class="lab">HIT</span></button>
   </div>
   <button id="bGuard" class="b pill" data-hold="guard">GUARD</button>
@@ -1371,6 +1371,7 @@ function makePlayer(){
     attack:null, combo:0, comboStep:0, chainT:0,
     guard:false, guardV:0,
     iframe:0, weaveCD:0, dodgeCD:0, dodge:null, tackle:null, tackleCD:0,
+    vy:0, jumpCD:0, slam:null, _air:0,      // vertical jump / air-slam state
     stagger:0, hurt:0, dead:false, _sq:0,
     lockOn:null, r:0.34,
     _an:{ idle:Math.random()*10, twist:0, sway:0, toqueX:0, toqueXv:0, toqueZ:0, toqueZv:0, rx:0, rxv:0, rz:0, rzv:0, prevPh:0 }
@@ -1537,14 +1538,21 @@ const camFwd=new V3(), camRight=new V3();
 function updateCameraVectors(){ camFwd.set(Math.sin(CAM.yaw),0,Math.cos(CAM.yaw)); camRight.set(-camFwd.z,0,camFwd.x); }
 
 /* ================================================================ HELPERS */
+// VAULT_CLEAR: once you're airborne above this height you clear the low counters
+// and tables -- jump/vault right over them. Arena walls always contain you.
+const VAULT_CLEAR=1.25;
 function collide(pos,r){
   pos.x=clamp(pos.x,-HALFW+r+0.3,HALFW-r-0.3);
   pos.z=clamp(pos.z,-HALFD+r+0.3,HALFD-r-0.3);
+  if((pos.y||0) > VAULT_CLEAR) return;   // airborne over the props -> vault
   for(const o of OBST){
     const dx=pos.x-o.x, dz=pos.z-o.z;
     const px=(o.rx+r)-Math.abs(dx), pz=(o.rz+r)-Math.abs(dz);
     if(px>0&&pz>0){ if(px<pz){ pos.x+=(dx<0?-px:px); } else { pos.z+=(dz<0?-pz:pz); } }
   }
+  // re-clamp: a prop resolution must never shove a body out THROUGH an arena wall
+  pos.x=clamp(pos.x,-HALFW+r+0.3,HALFW-r-0.3);
+  pos.z=clamp(pos.z,-HALFD+r+0.3,HALFD-r-0.3);
 }
 /* HARD body-to-body collision. The enemy AI's soft "separation" steer only
    nudges intent; bodies still walked through each other and the player, which
@@ -1766,6 +1774,7 @@ function breakWeapon(A){
 }
 function killChef(T, ang){
   if(T.dead)return; T.dead=true; T.deadT=0; T.hp=0;
+  T.pos.y=0; T.vy=0; T.slam=null;                 // never die stuck in the air
   if(player.grabbed && player.grabbed.by===T){ player.grabbed=null; hideMashUI(); player.iframe=0.4; }
   if(T.hasToken){ T.hasToken=false; tokensUsed--; }
   T.vel.x+=Math.sin(ang)*5; T.vel.z+=Math.cos(ang)*5;
@@ -1783,6 +1792,29 @@ function killChef(T, ang){
 }
 
 /* ================================================================ PLAYER */
+const GRAV=22, JUMP_V=8.2;              // jump apex ~1.5m -- clears the counters (VAULT_CLEAR 1.25)
+// OVERHEAD SLAM: on landing an air-attack, a radial ground-pound. This is the
+// slam's single damage door (invariant #3: a live jump-attack deals it), mirror-
+// ing resolveHit's juice. Power scales with how hard you came down.
+function slamLand(P, landV){
+  const power=clamp(-landV/16, 0.45, 1.25), R=3.4;
+  const cpos=new V3(P.pos.x,0.2,P.pos.z);
+  shake(0.9+power*1.1); hitstop(0.06+power*0.1); impactFrames(4, 0xffe03d, 0x140c07);
+  hitPost(Math.min(1,power), 0xff8a3a); POST.uniforms.uZoom.value=Math.max(POST.uniforms.uZoom.value,0.06+power*0.1);
+  ring(cpos, COL.flame, 2.0+power*2.2); ring(cpos, 0xffffff, 1.4+power); burst(cpos, Math.round(18+power*22), 0xffb060, 2.2+power*2.4);
+  sfx.heavy(clamp(power,0,1)); if(AC) sfx.thud(0.7+power*0.5); haptic(0.8,0.7,Math.round(200+power*160)); kitchenBump(0.45+power*0.4);
+  for(const e of enemies){ if(e.dead) continue;
+    const d=Math.hypot(e.pos.x-P.pos.x, e.pos.z-P.pos.z); if(d>R+e.r) continue;
+    const fall=1-d/(R+e.r);                       // full at the epicentre, tapering out
+    const dmg=(10+power*14)*(0.5+fall*0.5);
+    e.hp-=dmg; e.hurt=1; e.stagger=Math.max(e.stagger, 0.55+power*0.4);
+    const ang=Math.atan2(e.pos.x-P.pos.x, e.pos.z-P.pos.z), kb=(0.8+power*1.1)*fall;
+    e.vel.x+=Math.sin(ang)*kb*7; e.vel.z+=Math.cos(ang)*kb*7;
+    applyImpact(e, ang, power*1.3*fall, 0.5, power);   // rocked outward + down
+    if(e.hp<=0) killChef(e, ang);
+  }
+  GAME.hitsLanded=(GAME.hitsLanded||0)+1;
+}
 function updatePlayer(dt, pad){
   const P=player; if(!P) return;
   if(P.dead){ poseChef(P,true,dt); return; }
@@ -1792,7 +1824,7 @@ function updatePlayer(dt, pad){
   // ----- timers -----
   P.comboT=GAME.comboT; if(GAME.comboT>0){ GAME.comboT-=dt; if(GAME.comboT<=0){ GAME.combo=0;
     document.getElementById('combo').classList.remove('on'); } }
-  P.weaveCD=Math.max(0,P.weaveCD-dt); P.dodgeCD=Math.max(0,P.dodgeCD-dt); P.chainT=Math.max(0,P.chainT-dt); P.tackleCD=Math.max(0,P.tackleCD-dt);
+  P.weaveCD=Math.max(0,P.weaveCD-dt); P.dodgeCD=Math.max(0,P.dodgeCD-dt); P.chainT=Math.max(0,P.chainT-dt); P.tackleCD=Math.max(0,P.tackleCD-dt); P.jumpCD=Math.max(0,P.jumpCD-dt);
   P.iframe=Math.max(0,P.iframe-dt); P.stagger=Math.max(0,P.stagger-dt); P.hurt=damp(P.hurt,0,8,dt);
 
   updateCameraVectors();
@@ -1848,15 +1880,16 @@ function updatePlayer(dt, pad){
   }
   if(P._weaveT>0) P._weaveT-=dt;
 
-  // ----- dodge (dir + R2 / Shift) -----
-  const wantDodge=(pad.dodge&&(Math.abs(pad.move.x)+Math.abs(pad.move.y)>0.3))||tapK('shift')||consume('dodgeEdge');
-  if(wantDodge && P.dodgeCD<=0 && P.stagger<=0){
-    let ddir=mv.clone(); if(ddir.lengthSq()<0.02){ ddir.copy(camFwd).multiplyScalar(-1); }
-    ddir.normalize();
-    // snappier evade: faster burst (see integrate), full i-frames through the
-    // whole hop (0.42s > dur), shorter cooldown (0.45). This is the "get the
-    // hell out of the way of a swing" button -- it has to actually clear the arc.
-    P.dodge={ t:0, dur:0.32, dir:ddir }; P.dodgeCD=0.45; P.iframe=0.42; P.attack=null;
+  // ----- JUMP (was dash): vertical hop, carries momentum, clears low props,
+  // and sets up the overhead SLAM (attack while airborne). Brief i-frames on
+  // takeoff so you can still hop a sweep. -----
+  const grounded=P.pos.y<=0.02;
+  const wantJump=pad.dodge||tapK('shift')||consume('dodgeEdge');
+  if(wantJump && grounded && P.jumpCD<=0 && P.stagger<=0 && !P.tackle){
+    P.vy=JUMP_V;
+    const jx=(mv.lengthSq()>0.02?mv.x:Math.sin(P.facing)), jz=(mv.lengthSq()>0.02?mv.z:Math.cos(P.facing));
+    P.vel.x+=jx*2.6; P.vel.z+=jz*2.6;                 // a bit of launch in the input/facing dir
+    P.jumpCD=0.28; P.iframe=Math.max(P.iframe,0.26); P.attack=null;
     sfx.step();
   }
 
@@ -1875,7 +1908,16 @@ function updatePlayer(dt, pad){
   // ----- attacks (Cross light / Square heavy / touch) -----
   const wantLight=pad.light||tapK('j')||MOUSE.l||consume('lightEdge'); MOUSE.l=false;
   const wantHeavy=pad.heavy||tapK('k')||MOUSE.r||consume('heavyEdge'); MOUSE.r=false;
-  if((wantLight||wantHeavy) && !P.dodge && !P.tackle && P.stagger<=0){
+  const airborne=P.pos.y>0.06;
+  if((wantLight||wantHeavy) && airborne && !P.slam){
+    // OVERHEAD SLAM: attack in the air -> stop rising, hurl yourself down. The
+    // ground-pound resolves on landing (slamLand). Aim at the nearest enemy so
+    // you can dive onto them.
+    let tgt=P.lockOn||nearestEnemy(P.pos,P.facing,null);
+    if(tgt){ P.facing=Math.atan2(tgt.pos.x-P.pos.x,tgt.pos.z-P.pos.z);
+      P.vel.x+=Math.sin(P.facing)*2.2; P.vel.z+=Math.cos(P.facing)*2.2; }   // lunge onto them
+    P.slam=true; P.vy=Math.min(P.vy,-6); P.attack=null; sfx.whiff();
+  } else if((wantLight||wantHeavy) && !airborne && !P.slam && !P.dodge && !P.tackle && P.stagger<=0){
     // recovery-cancel: once a swing has connected you can chain straight into the next
     const canStart = !P.attack || (P.attack.hit && P.attack.t >= P.attack.hitAt + 0.03);
     if(canStart){
@@ -1922,11 +1964,24 @@ function updatePlayer(dt, pad){
     P.vel.x=damp(P.vel.x, fx*lv + mv.x*spd, 13, dt);
     P.vel.z=damp(P.vel.z, fz*lv + mv.z*spd, 13, dt);
   } else if(P.stagger<=0){
-    P.vel.x=damp(P.vel.x, mv.x*spd, 10, dt);   // 10 (was 18): velocity ramps -- accel on press, slide on release; weightier, more committed
-    P.vel.z=damp(P.vel.z, mv.z*spd, 10, dt);
+    const acc=airborne?3:10;                   // reduced air control -- you commit to the arc of a jump
+    P.vel.x=damp(P.vel.x, mv.x*spd, acc, dt);   // ground: velocity ramps -- accel on press, slide on release
+    P.vel.z=damp(P.vel.z, mv.z*spd, acc, dt);
   } else {
     P.vel.multiplyScalar(Math.exp(-6*dt));
   }
+  // ----- vertical (jump / slam) -- integrate BEFORE collide so it sees the
+  // height for vaulting over the props -----
+  if(P.pos.y>0 || P.vy!==0){
+    P.vy -= (P.slam?GRAV*1.7:GRAV)*dt;
+    P.pos.y += P.vy*dt;
+    if(P.pos.y<=0){
+      const landV=P.vy; P.pos.y=0; P.vy=0;
+      if(P.slam){ slamLand(P, landV); P.slam=null; P.jumpCD=0.18; }
+      else if(landV<-5){ shake(0.12); }         // a little thump on a hard landing
+    }
+  }
+  P._air=clamp(P.pos.y/1.4,0,1);
   P.pos.addScaledVector(P.vel,dt);
   collide(P.pos,P.r);
 
@@ -2124,9 +2179,10 @@ function poseChef(a, isPlayer, dt){
   const AN=a._an, t=GAME.t+AN.idle, spd=a.speed||0, moving=spd>0.6, ph=a.movePhase;
   // full-body RUN blend — anyone moving fast and not busy (enemies included,
   // so the mob takes real strides instead of shuffling stiff)
-  const rk=(!a.attack && !a.guard && !a.dodge && !a.tackle) ? clamp((spd-2.3)/3.4,0,1) : 0;
+  const air=a._air||0;                                  // 0 grounded .. 1 apex
+  const rk=(!a.attack && !a.guard && !a.dodge && !a.tackle && air<0.1) ? clamp((spd-2.3)/3.4,0,1) : 0;
   a._runK = rk*rk*(3-2*rk);
-  a._idleK = (!a.attack && !a.guard && !a.dodge && !a.dead) ? clamp(1-spd/0.9,0,1) : 0;
+  a._idleK = (!a.attack && !a.guard && !a.dodge && !a.dead && air<0.1) ? clamp(1-spd/0.9,0,1) : 0;
 
   if(a.dead){ updateDead(a,dt); return; }
   if(!a._feet) resetFeet(a);
@@ -2184,6 +2240,8 @@ function poseChef(a, isPlayer, dt){
   if(a.stagger>0) leanZ += Math.sin(GAME.t*30)*0.15*clamp(a.stagger,0,1);
   leanX += clamp(AN.rx,-0.9,0.9); leanZ += clamp(AN.rz,-0.85,0.85) + AN.sway*0.4;   // raised so the hit reaction reads
   leanX += leanAf; leanZ += leanAl;                                                  // tip into accel (momentum read)
+  if(a.slam) leanX += 0.5;                          // slam: fold forward, driving the pound down
+  else if(air>0.1) leanX += -0.12*air;              // jump: a slight tuck-back on the rise
   b.position.set(AN.sway, bob, 0);
   b.rotation.x = damp(b.rotation.x, leanX, 17, dt);
   b.rotation.z = damp(b.rotation.z, leanZ, 17, dt);
@@ -2246,6 +2304,16 @@ function resetFeet(a){
 const _ideal=new V3();
 function updateFeet(a, dt, moving){
   const legs=a.chef.userData.legs;
+  const air=a._air||0;
+  if(air>0.08){   // AIRBORNE: no stepping -- tuck the feet up on a jump, extend them down for a slam stomp
+    for(let i=0;i<2;i++){ const L=legs[i], st=STANCE[i];
+      toGround(a, st.x*0.75, st.z*0.75, L.world);
+      L.world.y = a.slam ? (a.pos.y||0)*0.3 : (a.pos.y||0) + 0.34 + i*0.06;
+      L.stepT=1; L.lift=0;
+    }
+    a._swayTarget=0; a._stepDip=0; a._flight=-1;
+    return;
+  }
   a._stepCool=(a._stepCool||0)-dt;
   const spd=a.speed||0, run=a._runK||0;
   const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0, vm=Math.hypot(vx,vz)||1;
@@ -2364,8 +2432,11 @@ function solveArmsIK(a, dt, atk){
         tx=lerp(tx, A.sh.x*0.55 + sign*0.02, 0.6); ty=lerp(ty, isFist?1.58:1.44, 0.6); tz=lerp(tz, isFist?0.42:0.30, 0.6);
       }
     }
-    if(a.hurt>0.5 && !atk) ty += Math.sin(GAME.t*26+i)*0.10*((a.hurt-0.5)*2);
-    const rate = atk&&isActive ? 30 : (run>0.3?24:14);
+    const air=a._air||0;
+    if(a.slam){ tx=A.sh.x*0.5; ty=2.05; tz=0.14; }              // both fists overhead, hammering down
+    else if(air>0.12 && !atk){ tx=A.sh.x+sign*0.15; ty=lerp(ty,1.30+air*0.18,air); tz=lerp(tz,0.30,air); }  // jump: arms out for balance
+    if(a.hurt>0.5 && !atk && air<0.1) ty += Math.sin(GAME.t*26+i)*0.10*((a.hurt-0.5)*2);
+    const rate = (a.slam||atk&&isActive) ? 30 : (run>0.3?24:14);
     A.tgt.x=damp(A.tgt.x,tx,rate,dt); A.tgt.y=damp(A.tgt.y,ty,rate,dt); A.tgt.z=damp(A.tgt.z,tz,rate,dt);
     if(atk && isActive && !(atk.thrust&&!isFist) && atk.A.shape){ const bd=atk.A.shape.bend; _bnd2.set(bd[0],bd[1],bd[2]); }
     else if(run>0.3 && !atk){ _bnd2.set(sign*0.5,-0.65,-0.9); }   // elbows bent back, runner's form
@@ -2841,7 +2912,8 @@ function ctrlRows(){
     ['Pick up weapon','Triangle / F','pad'],
     ['Guard','L2 / Space','pad'],
     ['Weave','Right stick / Q E','pad'],
-    ['Dash','R2 + stick / Shift','pad'],
+    ['Jump / vault','R2 / Shift','pad'],
+    ['Overhead slam','Attack in the air','pad'],
     ['Rotate camera','L1 R1 / [ ]','pad'],
     ['Lock-on','R3 / L','pad'],
     ['Switch target','L1 R1 (locked)','pad'],
