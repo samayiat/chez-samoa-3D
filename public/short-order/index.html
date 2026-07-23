@@ -2073,7 +2073,17 @@ function updatePlayer(dt, pad){
   if(P.hold) spd*=0.42;                         // hauling someone slows your walk
   if(P.tackle){
     const T=P.tackle; T.t+=dt; const k=1-T.t/T.dur;
-    P.vel.x=T.dir.x*13*(0.5+k*0.5); P.vel.z=T.dir.z*13*(0.5+k*0.5);
+    if(T.rush){
+      // GRAB RUSH: a committed RUN at the target -- run speed, homing so you
+      // converge even if they drift. (Not the old 13 u/s rocket-lunge.)
+      if(T.tgt && !T.tgt.dead){
+        const hx=T.tgt.pos.x-P.pos.x, hz=T.tgt.pos.z-P.pos.z, hl=Math.hypot(hx,hz)||1;
+        T.dir.set(hx/hl,0,hz/hl); P.facing=Math.atan2(T.dir.x,T.dir.z);
+      }
+      P.vel.x=T.dir.x*7.2; P.vel.z=T.dir.z*7.2;   // ~= run speed (spd 6.7)
+    } else {
+      P.vel.x=T.dir.x*13*(0.5+k*0.5); P.vel.z=T.dir.z*13*(0.5+k*0.5);   // plain tackle lunge (dead path)
+    }
     if(!T.hit){                                 // reach the first person we plow into
       for(const e of enemies){ if(e.dead)continue;
         if(Math.hypot(e.pos.x-P.pos.x,e.pos.z-P.pos.z) < e.r+P.r+0.35){
@@ -2942,7 +2952,9 @@ function startGrabRush(P, tgt){
   else dir=new V3(Math.sin(P.facing),0,Math.cos(P.facing));
   if(dir.lengthSq()<1e-4) dir.set(Math.sin(P.facing),0,Math.cos(P.facing));
   dir.normalize();
-  P.tackle={ t:0, dur:0.42, dir, hit:false, rush:true };
+  // a homing RUN at the target (not a lunge): dur long enough to cross RUSH_RANGE
+  // at run speed; the contact branch ends it early once you reach them.
+  P.tackle={ t:0, dur:1.0, dir, hit:false, rush:true, tgt:tgt||null };
   P.tackleCD=0.7; P.iframe=Math.max(P.iframe,0.16); P.attack=null; P.guard=false;
   sfx.step(); shake(0.2); haptic(0.3,0.4,60);
 }
@@ -2957,7 +2969,7 @@ function rushContact(P,e){
 // WEAPON STEAL: grab an armed enemy and MASH to rip the weapon out of their hands.
 function startWeaponSteal(P,e){
   const ang=Math.atan2(e.pos.x-P.pos.x, e.pos.z-P.pos.z); P.facing=ang;
-  P.steal={ e, wpn:e.wpn, mash:0, need:(e.kind==='tough'?7:4), t:0, max:2.4 };
+  P.steal={ e, wpn:e.wpn, mash:0, need:(e.kind==='tough'?4:2), t:0, max:2.4 };
   e.state='held'; e.stateT=99; e.attack=null; e.vel.set(0,0,0); e.vy=0; e.pos.y=P.pos.y;
   if(e.hasToken){ e.hasToken=false; tokensUsed--; }
   P.tackle=null; P.attack=null; P.guard=false; P.iframe=Math.max(P.iframe,0.25);
