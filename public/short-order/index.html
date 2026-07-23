@@ -1440,7 +1440,7 @@ function makePlayer(){
     guard:false, guardV:0,
     iframe:0, weaveCD:0, dodgeCD:0, dodge:null, tackle:null, tackleCD:0,
     vy:0, jumpCD:0, slam:null, slamHit:0, _air:0,   // vertical jump / air-slam state
-    hold:null, grabCD:0,                            // grab-a-patron / slam-heads / throw-overboard state
+    hold:null, grabCD:0, steal:null,                // grab-a-patron / slam-heads / throw-overboard / weapon-steal state
     stagger:0, hurt:0, dead:false, _sq:0,
     lockOn:null, r:0.34,
     _an:{ idle:Math.random()*10, twist:0, sway:0, toqueX:0, toqueXv:0, toqueZ:0, toqueZv:0, rx:0, rxv:0, rz:0, rzv:0, prevPh:0 }
@@ -1922,6 +1922,7 @@ function updatePlayer(dt, pad){
   const P=player; if(!P) return;
   if(P.dead){ poseChef(P,true,dt); return; }
   if(P.grabbed){ handleGrab(P,dt,pad); poseChef(P,true,dt); return; }
+  if(P.steal){ updateSteal(P,dt,pad); poseChef(P,true,dt); return; }   // wrestling an armed enemy for their weapon
   // ----- squash decay -----
   P._sq=damp(P._sq,0,14,dt);
   // ----- timers -----
@@ -2003,12 +2004,26 @@ function updatePlayer(dt, pad){
   // showed but F whiffed into a tackle -- you literally could not arm up at the
   // pass. 2.0 comfortably clears the counter so you can grab over it, and stays
   // >= the prompt's detection range so anything prompted is actually grabbable.
-  if(pad.pickup||pad.rush||tapK('f')||consume('pickupEdge')){    // R2 (rush) / Triangle / F
-    if(P.hold) throwHeld(P);                                     // holding a patron -> throw them (contextual)
-    else { const g=grabTarget(P);                                // a STAGGERED person in front beats a floor weapon
-      if(g) grabEnemy(P,g);
+  // GRAB (R2 / Triangle / F) -- context-sensitive:
+  //  - holding a patron        -> throw them (drop)
+  //  - MOVING (with a target)  -> GRAB RUSH: charge in; drop your weapon first if armed
+  //  - stationary + armed      -> drop the weapon to bare hands
+  //  - stationary + bare hands -> grab someone in reach (armed enemy = wrestle for their weapon),
+  //                               else pick up a utensil you're standing on
+  if(pad.pickup||pad.rush||tapK('f')||consume('pickupEdge')){
+    if(P.hold){ throwHeld(P); }
+    else if(moving){
+      let ax=mv.x, az=mv.z; const al=Math.hypot(ax,az);
+      if(al>1e-3){ ax/=al; az/=al; } else { ax=Math.sin(P.facing); az=Math.cos(P.facing); }
+      const t = rushTarget(P, ax, az) || grabTarget(P, GRAB_REACH, 1.4);
+      if(t){ if(P.wpn!=='fists') dropWeapon(P); startGrabRush(P, t); }
+    }
+    else if(P.wpn!=='fists'){ dropWeapon(P); }
+    else {
+      const g=grabTarget(P, GRAB_REACH, 1.4);
+      if(g){ if(g.wpn!=='fists') startWeaponSteal(P,g); else grabEnemy(P,g); }
       else if(nearPickup && Math.hypot(nearPickup.x-P.pos.x, nearPickup.z-P.pos.z)<2.0) tryPickup();
-      else startTackle(P); }                                     // else pick up a utensil, else tackle-charge
+    }
   }
 
   // ----- attacks (Cross light / Square heavy / touch) -----
@@ -2059,9 +2074,11 @@ function updatePlayer(dt, pad){
   if(P.tackle){
     const T=P.tackle; T.t+=dt; const k=1-T.t/T.dur;
     P.vel.x=T.dir.x*13*(0.5+k*0.5); P.vel.z=T.dir.z*13*(0.5+k*0.5);
-    if(!T.hit){                                 // slam the first person we plow into
+    if(!T.hit){                                 // reach the first person we plow into
       for(const e of enemies){ if(e.dead)continue;
-        if(Math.hypot(e.pos.x-P.pos.x,e.pos.z-P.pos.z) < e.r+P.r+0.35){ tackleEnemy(P,e); T.hit=true; break; } }
+        if(Math.hypot(e.pos.x-P.pos.x,e.pos.z-P.pos.z) < e.r+P.r+0.35){
+          if(T.rush) rushContact(P,e); else tackleEnemy(P,e);   // rush -> grab/steal; plain tackle -> shove
+          T.hit=true; break; } }
     }
     if(T.t>=T.dur) P.tackle=null;
   } else if(P.dodge){
@@ -2153,7 +2170,7 @@ function updateEnemy(e, dt){
   // HELD: the player authoritatively drives us (updateHold) -- no AI. Invariant #8:
   // if the grab was dropped without clearing us, fall back to engage.
   if(e.state==='held'){
-    if(player.hold && player.hold.e===e){ syncEnemyMesh(e,dt,e.facing); return; }
+    if((player.hold && player.hold.e===e) || (player.steal && player.steal.e===e)){ syncEnemyMesh(e,dt,e.facing); return; }
     e.state='engage'; e.stateT=0.2;
   }
   // THROWN: a freshly tossed patron slides across the floor (light drag, NOT the
@@ -2861,18 +2878,36 @@ function tackleEnemy(P,e){
    into the bay, instant 86); open floor -> a bowling THROW into the crowd. You
    get i-frames through the whole toss. No parry needed -- `stagger` (set by every
    clean hit and by the tackle) IS the off-balance gate. */
-const GRAB_REACH=1.7, GRAB_HOLD_MAX=2.6, THROW_RANGE=3.4;
-function grabTarget(P){
-  if(P.hold||P.grabCD>0||P.attack||P.tackle||P.dodge||P.stagger>0) return null;
-  const air=P.pos.y>restY(P.pos.x,P.pos.z,P.pos.y,P.r)+0.1; if(air) return null;   // grab from the ground only
-  let best=null,bd=GRAB_REACH;
-  for(const e of enemies){ if(e.dead||e.state==='held') continue;
-    if(e.stagger<=0.05) continue;                              // must be off-balance
+const GRAB_REACH=1.9, GRAB_HOLD_MAX=2.6, THROW_RANGE=3.4, RUSH_RANGE=6.5;
+// GRABBABLE: anyone NOT mid-swing, OR a heavy (tough) patron -- the big guys can
+// be grabbed even out of their wind-up. (Replaces the old "must be staggered".)
+function canGrab(e){ return e && !e.dead && e.state!=='held' && (!e.attack || e.kind==='tough'); }
+// nearest grabbable enemy within `reach`, roughly in front (cone). Ground only.
+function grabTarget(P, reach, cone){
+  if(P.hold||P.steal||P.grabbed||P.grabCD>0||P.attack||P.tackle||P.dodge||P.stagger>0) return null;
+  if(P.pos.y>restY(P.pos.x,P.pos.z,P.pos.y,P.r)+0.1) return null;   // ground only
+  reach=reach||GRAB_REACH; cone=(cone==null?1.4:cone);
+  let best=null,bd=reach;
+  for(const e of enemies){ if(!canGrab(e)) continue;
     const dx=e.pos.x-P.pos.x, dz=e.pos.z-P.pos.z, d=Math.hypot(dx,dz);
     if(d>bd) continue;
     const ang=Math.atan2(dx,dz); let da=((ang-P.facing+Math.PI)%TAU)-Math.PI;
-    if(Math.abs(da)>1.4) continue;                             // roughly in front
+    if(Math.abs(da)>cone) continue;                            // roughly in front
     bd=d; best=e; }
+  return best;
+}
+// a target for the RUSH: a grabbable enemy within a wider range, in the move/face
+// direction (aim is a unit vector), so a run-up grab finds someone a few metres off.
+function rushTarget(P, aimx, aimz){
+  if(P.hold||P.steal||P.grabbed||P.tackle||P.dodge||P.stagger>0||P.tackleCD>0) return null;
+  let best=null, bs=-1;
+  for(const e of enemies){ if(!canGrab(e)) continue;
+    const dx=e.pos.x-P.pos.x, dz=e.pos.z-P.pos.z, d=Math.hypot(dx,dz)||1;
+    if(d>RUSH_RANGE) continue;
+    const dot=(dx/d)*aimx+(dz/d)*aimz;          // how "ahead" they are
+    if(dot<0.2) continue;                        // must be roughly the way you're going
+    const score=dot - d*0.06;                    // prefer ahead + near
+    if(score>bs){ bs=score; best=e; } }
   return best;
 }
 function grabEnemy(P,e){
@@ -2888,6 +2923,75 @@ function grabEnemy(P,e){
   const cp=e.pos.clone(); cp.y=1.3;
   shake(0.3); hitstop(0.05); burst(cp,10,0xffe03d,1.0); if(AC) sfx.thud(0.5); haptic(0.5,0.5,90);
   popWord(cp,'GRABBED','#ffe03d',26);
+}
+// DROP whatever weapon you're holding, back to bare hands (it drops behind you as
+// a pickup so it's recoverable). Pressing GRAB with a weapon in hand ditches it.
+function dropWeapon(P){
+  if(P.wpn==='fists') return false;
+  spawnPickup(P.wpn, P.pos.x - Math.sin(P.facing)*0.6, P.pos.z - Math.cos(P.facing)*0.6);
+  P.wpn='fists'; P.dur=Infinity; equip(P.chef,'fists'); updateHUDWeapon();
+  const hp=P.pos.clone(); hp.y=1.2; ring(hp,0xffe03d,1.0); if(AC) sfx.thud(0.4); haptic(0.3,0.3,50);
+  popWord(hp,'BARE HANDS','#ffe03d',22); return true;
+}
+// GRAB RUSH: a committed charge (like the tackle) that ENDS in a grab -- see
+// rushContact. Aims at the given target so you converge onto them.
+function startGrabRush(P, tgt){
+  if(P.tackle||P.dodge||P.attack||P.grabbed||P.hold||P.steal||P.stagger>0||P.tackleCD>0) return;
+  let dir;
+  if(tgt){ dir=new V3(tgt.pos.x-P.pos.x,0,tgt.pos.z-P.pos.z); P.facing=Math.atan2(dir.x,dir.z); }
+  else dir=new V3(Math.sin(P.facing),0,Math.cos(P.facing));
+  if(dir.lengthSq()<1e-4) dir.set(Math.sin(P.facing),0,Math.cos(P.facing));
+  dir.normalize();
+  P.tackle={ t:0, dur:0.42, dir, hit:false, rush:true };
+  P.tackleCD=0.7; P.iframe=Math.max(P.iframe,0.16); P.attack=null; P.guard=false;
+  sfx.step(); shake(0.2); haptic(0.3,0.4,60);
+}
+// what a grab RUSH does on contact: grab an unarmed patron into the hold, wrestle
+// an armed one for their weapon, or just bowl over anyone mid-swing you can't grab.
+function rushContact(P,e){
+  if(!canGrab(e)){ tackleEnemy(P,e); return; }
+  P.tackle=null; P.vel.multiplyScalar(0.3);
+  if(e.wpn!=='fists') startWeaponSteal(P,e);   // armed -> rip their weapon (mash)
+  else grabEnemy(P,e);                          // unarmed -> grab into the hold
+}
+// WEAPON STEAL: grab an armed enemy and MASH to rip the weapon out of their hands.
+function startWeaponSteal(P,e){
+  const ang=Math.atan2(e.pos.x-P.pos.x, e.pos.z-P.pos.z); P.facing=ang;
+  P.steal={ e, wpn:e.wpn, mash:0, need:(e.kind==='tough'?7:4), t:0, max:2.4 };
+  e.state='held'; e.stateT=99; e.attack=null; e.vel.set(0,0,0); e.vy=0; e.pos.y=P.pos.y;
+  if(e.hasToken){ e.hasToken=false; tokensUsed--; }
+  P.tackle=null; P.attack=null; P.guard=false; P.iframe=Math.max(P.iframe,0.25);
+  const cp=e.pos.clone(); cp.y=1.3; shake(0.35); if(AC) sfx.thud(0.5); haptic(0.5,0.5,90);
+  popWord(cp,'RIP THE '+WEAPONS[e.wpn].name.toUpperCase()+' AWAY!','#ffe03d',20);
+}
+function updateSteal(P,dt,pad){
+  const S=P.steal, e=S.e;
+  if(!e || e.dead){ P.steal=null; hideMashUI(); return; }       // soak safety
+  S.t+=dt; P.iframe=Math.max(P.iframe,0.12);
+  const fx=Math.sin(P.facing), fz=Math.cos(P.facing);
+  e.pos.x=P.pos.x+fx*(P.r+e.r+0.15); e.pos.z=P.pos.z+fz*(P.r+e.r+0.15); e.pos.y=P.pos.y;
+  e.vel.set(0,0,0); e.vy=0; e.facing=P.facing+Math.PI; e.state='held'; e.stateT=99;
+  P.vel.multiplyScalar(Math.exp(-10*dt));
+  // count GRAB / any-face-button presses toward ripping it free
+  let m=0;
+  if(pad){ if(pad.pickup)m++; if(pad.rush)m++; if(pad.light)m++; if(pad.heavy)m++; if(pad.grab)m++; }
+  if(tapK('f'))m++; if(consume('pickupEdge'))m++; if(consume('lightEdge'))m++; if(consume('heavyEdge'))m++;
+  if(tapK('j'))m++; if(tapK('k'))m++;
+  S.mash+=m; mashUI(S,'MASH: RIP IT AWAY!');
+  if(S.mash>=S.need){                                            // GOT IT
+    P.wpn=S.wpn; P.dur=WEAPONS[S.wpn].dur; equip(P.chef,S.wpn); updateHUDWeapon();
+    equipEnemy(e,'fists'); e.dur=Infinity; e.stagger=0.9; e.state='engage'; e.stateT=0.2; e.vel.set(-fx*7,0,-fz*7);
+    P.steal=null; hideMashUI(); P.iframe=Math.max(P.iframe,0.4); P.grabCD=0.4;
+    const cp=e.pos.clone(); cp.y=1.3; shake(0.6); impactFrames(3,0xffe03d,0x140c07); hitPost(0.7,0xff8a3a);
+    burst(cp,16,0xffe03d,1.4); ring(cp,COL.flame,1.3); if(AC){ sfx.pickup(); sfx.thud(0.8); } haptic(0.9,0.7,220);
+    popWord(cp,'STOLE THE '+WEAPONS[S.wpn].name.toUpperCase()+'!','#ffe03d',26); addCombo(); return;
+  }
+  if(S.t>=S.max){                                               // failed -- they hold on, shove you off
+    P.steal=null; hideMashUI(); P.stagger=0.4; P.iframe=0.2; P.vel.set(-fx*8,0,-fz*8);
+    e.stagger=0.4; e.state='engage'; e.stateT=0.2;
+    shake(0.5); if(AC) sfx.block(); haptic(0.5,0.5,100);
+    const cp=e.pos.clone(); cp.y=1.3; popWord(cp,'HELD ON!','#7fb2d6',22); return;
+  }
 }
 function updateHold(P,dt){
   const H=P.hold, e=H.e;
@@ -2961,7 +3065,8 @@ function throwHeld(P){
     applyImpact(e, ang, 1.5); popWord(cp,'TOSSED!','#ffe03d',30);
   }
 }
-function mashUI(Gr){ const g=document.getElementById('grabui'); if(!g)return; g.classList.add('on');
+function mashUI(Gr, label){ const g=document.getElementById('grabui'); if(!g)return; g.classList.add('on');
+  if(g.querySelector){ const msg=g.querySelector('.gmsg'); if(msg) msg.textContent=label||'MASH TO BREAK FREE!'; }
   const f=document.getElementById('grabfill'); if(f) f.style.transform='scaleX('+clamp(Gr.mash/Gr.need,0,1)+')'; }
 function hideMashUI(){ const g=document.getElementById('grabui'); if(g) g.classList.remove('on'); }
 function handleGrab(P,dt,pad){
@@ -3008,7 +3113,10 @@ function handleGrab(P,dt,pad){
   }
 }
 function playerDown(){
-  player.dead=true; if(player.hold){ const he=player.hold.e; if(he) he.state='engage'; player.hold=null; } shake(1.2); hitstop(0.15);
+  player.dead=true;
+  if(player.hold){ const he=player.hold.e; if(he) he.state='engage'; player.hold=null; }
+  if(player.steal){ const se=player.steal.e; if(se) se.state='engage'; player.steal=null; hideMashUI(); }
+  shake(1.2); hitstop(0.15);
   impactFrames(4, 0xff3b30, 0x140c07); hitPost(0.9, 0xff3b30);
   buildRagdoll(player); if(player.rag) ragImpulse(player, _rp1.set(-Math.sin(player.facing),0.2,-Math.cos(player.facing)).normalize(), 1.1);
   const p=player.pos.clone(); p.y=1.2; popWord(p,"86'D",'#ff3b30',46);
@@ -3143,7 +3251,7 @@ function startNight(cfg, onEnd){
   player.wpn=cfg.player&&cfg.player.wpn||'fists'; player.dur=WEAPONS[player.wpn].dur; equip(player.chef,player.wpn);
   player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null;
   player.grabbed=null; hideMashUI(); grabCD=0; player.tackle=null; player.tackleCD=0;
-  player.hold=null; player.grabCD=0; player.slam=null; player.vy=0; player.pos.y=0;
+  player.hold=null; player.grabCD=0; player.steal=null; player.slam=null; player.vy=0; player.pos.y=0; hideMashUI();
   resetRagPose(player);
   player._feet=null; player.vel.set(0,0,0);
   CAM.yaw=pfacing; CAM.lockK=0;
