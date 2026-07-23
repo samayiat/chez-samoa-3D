@@ -2060,7 +2060,7 @@ function updatePlayer(dt, pad){
   // takeoff so you can still hop a sweep. -----
   const grounded=P.pos.y<=restY(P.pos.x,P.pos.z,P.pos.y,P.r)+0.03;   // grounded on floor OR a prop top
   const wantJump=pad.jump||tapK('shift')||consume('dodgeEdge');   // Circle / Shift / on-screen JUMP -- R2 no longer jumps
-  if(wantJump && grounded && P.jumpCD<=0 && P.stagger<=0 && !P.tackle){
+  if(wantJump && grounded && P.jumpCD<=0 && P.stagger<=0 && !P.tackle && !P.attack){   // can't jump-cancel a swing
     P.vy=JUMP_V;
     const jx=(mv.lengthSq()>0.02?mv.x:Math.sin(P.facing)), jz=(mv.lengthSq()>0.02?mv.z:Math.cos(P.facing));
     P.vel.x+=jx*2.6; P.vel.z+=jz*2.6;                 // a bit of launch in the input/facing dir
@@ -2081,7 +2081,7 @@ function updatePlayer(dt, pad){
   //  - stationary + armed      -> drop the weapon to bare hands
   //  - stationary + bare hands -> grab someone in reach (armed enemy = wrestle for their weapon),
   //                               else pick up a utensil you're standing on
-  if(pad.pickup||pad.rush||tapK('f')||consume('pickupEdge')){
+  if(!P.attack && (pad.pickup||pad.rush||tapK('f')||consume('pickupEdge'))){   // no grab/throw/drop/pickup mid-swing
     if(P.hold){ throwHeld(P); }
     else if(moving){
       let ax=mv.x, az=mv.z; const al=Math.hypot(ax,az);
@@ -2102,7 +2102,7 @@ function updatePlayer(dt, pad){
   const wantHeavy=pad.heavy||tapK('k')||MOUSE.r||consume('heavyEdge'); MOUSE.r=false;
   const airborne=P.pos.y>restY(P.pos.x,P.pos.z,P.pos.y,P.r)+0.06;   // relative to the floor OR the prop you're standing on
   if(P.hold){ /* carrying a patron: no swings -- the GRAB button throws (handled above) */ }
-  else if(wantHeavy && airborne && !P.slam){
+  else if(wantHeavy && airborne && !P.slam && !P.attack){   // an aerial swing can't be slam-cancelled
     // HEAVY in the air = OVERHEAD SLAM. Hurl yourself down; the ground-pound
     // resolves on landing (slamLand). If you're locked on (or an enemy is close),
     // the fall HOMES onto them so you land on top -- but they can block or move.
@@ -2114,8 +2114,11 @@ function updatePlayer(dt, pad){
   } else if((wantLight||wantHeavy) && !P.slam && !P.dodge && !P.tackle && P.stagger<=0){
     // LIGHT in the air = a lateral aerial swing (just a normal attack while you
     // fall); on the ground, normal light/heavy. (Heavy-in-air was caught above.)
-    // recovery-cancel: once a swing has connected you can chain straight into the next
-    const canStart = !P.attack || (P.attack.hit && P.attack.t >= P.attack.hitAt + 0.03);
+    // UNCANCELLABLE: a swing is a full commitment -- you can only start a new one
+    // once the current animation has completely finished (P.attack cleared at A.dur).
+    // The combo still CYCLES (chainT window below advances comboStep on the next
+    // press) -- you just can't cut a swing short.
+    const canStart = !P.attack;
     if(canStart){
       let tgt=P.lockOn||nearestEnemy(P.pos,P.facing,1.1)||nearestEnemy(P.pos,P.facing,null);
       if(tgt){ const dx=tgt.pos.x-P.pos.x,dz=tgt.pos.z-P.pos.z; P.attackAim=Math.atan2(dx,dz); }
@@ -2724,21 +2727,15 @@ function solveArmsIK(a, dt, atk){
     if(atk){ // clean grip through a swing
       wg.rotation.x=damp(wg.rotation.x,0.15,22,dt); wg.rotation.y=damp(wg.rotation.y,0,22,dt); wg.rotation.z=damp(wg.rotation.z,0,22,dt);
       wg.rotation.x += (a._bite||0);   // bite: blade jolts back on contact (additive transient over the clean grip)
-    } else if(u.weaponKey==='torch'){
-      // carry the torch UPRIGHT -- pole perpendicular to the ground, flame up. No
-      // flourish (you don't twirl a lit torch). Counter-rotate the weapon group
-      // against the hand's world orientation so the pole (+z) always points world-up.
-      const hq=u.armR.hand.getWorldQuaternion(_wq1);
-      _wq2.setFromUnitVectors(FWD, UP);
-      wg.quaternion.copy(hq).invert().multiply(_wq2);
-      wg.rotation.z += Math.sin(GAME.t*2.0 + (a._an?a._an.idle:0))*0.05;   // a little live sway
     } else if(u.weaponKey!=='fists'){
-      const f=GAME.t*2.6 + (a._an?a._an.idle:0);
-      const calm=1 - clamp((a.speed||0)/6,0,1)*0.35;          // a touch calmer at a run
-      const twirl = WEAPONS[u.weaponKey].thrust ? 0.7 : 1.15;  // knives flourish tighter
-      wg.rotation.z=damp(wg.rotation.z, Math.sin(f)*twirl*calm, 7, dt);
-      wg.rotation.x=damp(wg.rotation.x, 0.15 + Math.cos(f*0.7)*0.42*calm, 7, dt);
-      wg.rotation.y=damp(wg.rotation.y, Math.sin(f*0.5)*0.3*calm, 7, dt);
+      // hold the weapon PARALLEL TO THE GROUND at rest -- level, pointing forward,
+      // no twirl. Counter-rotate the weapon group against the hand's world
+      // orientation so the long axis (+z) points world-forward and flat (y=0).
+      const hq=u.armR.hand.getWorldQuaternion(_wq1);
+      _fdir.set(Math.sin(a.facing),0,Math.cos(a.facing));   // horizontal forward
+      _wq2.setFromUnitVectors(FWD, _fdir);
+      wg.quaternion.copy(hq).invert().multiply(_wq2);
+      wg.rotation.z += Math.sin(GAME.t*1.8 + (a._an?a._an.idle:0))*0.035;   // a little live sway
     }
   }
 }
