@@ -1064,11 +1064,11 @@ const LEGLEN=THIGH+SHIN, SWING_KNEE_MIN=18;
 // to ~100deg running and ~115deg at sprint (the high knee drive). Speed-scaled below
 // via _runK / _sprintK. (Biomechanics: race-walk ~60, distance run ~100-125 at mid-swing.)
 const SWING_KNEE_WALK=60, SWING_KNEE_RUN=100, SWING_KNEE_SPRINT=115;
-const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
+const STANCE=[{x:-0.14,z:0.05},{x:0.15,z:-0.05}];   // feet roughly under the hips, only a slight stagger -- a clean upright idle, not a splayed crouch
 // FRONTAL stance (Stage 5): squared, wider side-by-side feet for lateral strafing,
 // blended in by how sideways the travel is relative to the aim (latFrac). Pelvis
 // stays level/square -- the defensive-slide shape from the gait research.
-const STANCE_FRONTAL=[{x:-0.26,z:0.03},{x:0.26,z:-0.03}];
+const STANCE_FRONTAL=[{x:-0.20,z:0.03},{x:0.20,z:-0.03}];
 const KNEE_FWD=new V3(0,0,1);                        // knees break forward
 // PELVIS FRAME tuning (Stage 2, MOVEMENT_OVERHAUL_PLAN.md): transverse-yaw amplitude
 // at walk vs run (radians; ~4deg -> ~13deg) and frontal-roll ("hip drop") amplitude
