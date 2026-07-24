@@ -1041,6 +1041,10 @@ const UP=new V3(0,1,0), FWD=new V3(0,0,1);
 // stride room, so the gait below can take actual steps.
 const THIGH=0.52, SHIN=0.52, ARM_U=0.40, ARM_F=0.40;
 const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
+// FRONTAL stance (Stage 5): squared, wider side-by-side feet for lateral strafing,
+// blended in by how sideways the travel is relative to the aim (latFrac). Pelvis
+// stays level/square -- the defensive-slide shape from the gait research.
+const STANCE_FRONTAL=[{x:-0.26,z:0.03},{x:0.26,z:-0.03}];
 const KNEE_FWD=new V3(0,0,1);                        // knees break forward
 // PELVIS FRAME tuning (Stage 2, MOVEMENT_OVERHAUL_PLAN.md): transverse-yaw amplitude
 // at walk vs run (radians; ~4deg -> ~13deg) and frontal-roll ("hip drop") amplitude
@@ -2665,13 +2669,23 @@ function updateFeet(a, dt, moving){
   const spd=a.speed||0, run=a._runK||0;
   const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0, vm=Math.hypot(vx,vz)||1;
   const lead=Math.min(0.5, spd*0.13) + run*0.2;          // reach further ahead
+  // STRAFE (model A): how sideways the travel is relative to the aim (facing). Only
+  // meaningful when locked on -- facing holds the target and the feet strafe. 0 =
+  // moving along the aim (normal stride), 1 = pure lateral (frontal side-shuffle).
+  let latFrac=0;
+  if(a.lockOn && !a.lockOn.dead && spd>0.3){
+    const fc=Math.cos(a.facing), fs=Math.sin(a.facing);
+    const fwdV=vx*fs+vz*fc, latV=vx*fc-vz*fs;
+    latFrac=Math.abs(latV)/(Math.abs(latV)+Math.abs(fwdV)+1e-3);
+  }
   const stepDur = moving ? clamp(0.17 - spd*0.01, 0.08, 0.17) : 0.2;
   const stepLen = clamp(0.30 + spd*0.11, 0.30, 0.95 + (a._sprintK||0)*0.25);    // stride proportional to speed; sprint raises the ceiling for a longer stride (thigh separation)
   const fast = spd>3.2;                                  // running: let both feet catch up
   let anyStepping=false; for(const L of legs) if(L.stepT<1) anyStepping=true;
   let stepPhase=-1, whichFoot=0;
   for(let i=0;i<2;i++){
-    const L=legs[i], st=STANCE[i]; toGround(a,st.x,st.z,_ideal);
+    const L=legs[i], st=STANCE[i], fst=STANCE_FRONTAL[i];
+    toGround(a, lerp(st.x,fst.x,latFrac), lerp(st.z,fst.z,latFrac), _ideal);   // sagittal -> frontal stance by strafe
     if(spd>0.3){ _ideal.x += vx/vm*lead; _ideal.z += vz/vm*lead; }
     if(L.stepT>=1){
       const off=Math.hypot(L.world.x-_ideal.x, L.world.z-_ideal.z);
