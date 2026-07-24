@@ -217,7 +217,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r8</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r9</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -2861,6 +2861,7 @@ function solveLegsIK(a, b){
 }
 const _bnd2=new V3(), _fdir=new V3();
 const _wq1=new THREE.Quaternion(), _wq2=new THREE.Quaternion();   // torch-upright grip
+const _wpos=new V3(), _wvel=new V3();                             // weapon-hand world pos/vel for weapon inertia
 function solveArmsIK(a, dt, atk){
   const u=a.chef.userData;
   const spd=a.speed||0, ph=a.movePhase, g=a.guardV||0, run=a._runK||0;
@@ -2982,6 +2983,26 @@ function solveArmsIK(a, dt, atk){
   // ---- weapon flourish: twirl the pan, swing the spatula around, sword-style ----
   const wg=u.weaponGroup;
   if(wg){
+    // WEAPON INERTIA (overlapping action / drag): the weapon trails the hand's
+    // motion, then springs back with a little follow-through overshoot -- the
+    // secondary animation that sells a weapon's weight. Driven by the weapon
+    // hand's world velocity in the facing frame; heavier weapons lag more and
+    // settle slower. Purely cosmetic -- the hit test never reads wg -- so it's
+    // free to whip. The lag rotations are added AFTER the grip orientation below.
+    if(u.weaponKey!=='fists'){
+      const wh0=u.arms[WHAND].hand; wh0.getWorldPosition(_wpos);
+      if(!a._wHandPrev) a._wHandPrev=new V3().copy(_wpos);
+      _wvel.subVectors(_wpos, a._wHandPrev).multiplyScalar(1/Math.max(dt,1e-3));
+      a._wHandPrev.copy(_wpos);
+      const cf=Math.cos(a.facing), sf=Math.sin(a.facing);
+      const vFwd=_wvel.x*sf + _wvel.z*cf, vLat=_wvel.x*cf - _wvel.z*sf, vUp=_wvel.y;
+      const hv=heftW||0.3;                                   // heavier -> more lag, slower settle
+      const K=70-hv*30, D=13-hv*4, drag=0.05+hv*0.05;
+      const accP=-K*(a._wLagP||0)-D*(a._wLagPv||0)+(vFwd+vUp)*drag*K;
+      a._wLagPv=(a._wLagPv||0)+accP*dt; a._wLagP=clamp((a._wLagP||0)+a._wLagPv*dt,-0.5,0.5);
+      const accY=-K*(a._wLagY||0)-D*(a._wLagYv||0)+vLat*drag*K;
+      a._wLagYv=(a._wLagYv||0)+accY*dt; a._wLagY=clamp((a._wLagY||0)+a._wLagYv*dt,-0.5,0.5);
+    }
     if(atk){ // clean grip through a swing
       wg.rotation.x=damp(wg.rotation.x,0.15,22,dt); wg.rotation.y=damp(wg.rotation.y,0,22,dt); wg.rotation.z=damp(wg.rotation.z,0,22,dt);
       wg.rotation.x += (a._bite||0);   // bite: blade jolts back on contact (additive transient over the clean grip)
@@ -3003,6 +3024,8 @@ function solveArmsIK(a, dt, atk){
       wg.quaternion.copy(hq).invert().multiply(_wq2);
       wg.rotation.z += Math.sin(GAME.t*1.8 + (a._an?a._an.idle:0))*0.035;   // a little live sway
     }
+    // apply the trailing weapon inertia on top of whatever grip was set above
+    if(u.weaponKey!=='fists'){ wg.rotation.x += (a._wLagP||0); wg.rotation.y += (a._wLagY||0); }
   }
 }
 /* ragdoll-lite death: the torso folds forward over planted feet, limbs go limp */
@@ -3642,7 +3665,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r8';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r9';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
