@@ -2604,7 +2604,12 @@ function poseChef(a, isPlayer, dt){
   } else {
     a._hipY = damp(a._hipY!=null? a._hipY : LEG_HIP_Y, LEG_HIP_Y, 10, dt);  // airborne: the jump arc owns height; relax the vault
   }
-  const bob = (a._hipY - LEG_HIP_Y)*VAULT_SCALE*(1-(a._sprintK||0)*0.3)   // vault (primary vertical), trimmed; shrinks at sprint (the non-monotonic COM 'hump': ~6-9cm jog -> ~4-6cm sprint)
+  // inverted-pendulum vault (primary vertical). Trim ONLY the downward dip (the
+  // running crouch) -- never the standing lift, or the idle legs re-bend (that was
+  // the broken idle). Sprint shrinks it further (the non-monotonic COM 'hump').
+  let vault=a._hipY-LEG_HIP_Y;
+  if(vault<0) vault*=VAULT_SCALE;
+  const bob = vault*(1-(a._sprintK||0)*0.3)
               + Math.sin(t*2.1)*0.011                     // breathing
               + idleK*Math.sin(t*3.3)*0.02                // idle square-up bounce
               + (a._flight>=0 ? Math.sin(a._flight*Math.PI)*0.05*Math.min(1,spd/5) : 0);  // running hop between strides
