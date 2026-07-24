@@ -1047,7 +1047,14 @@ const THIGH=0.52, SHIN=0.52, ARM_U=0.40, ARM_F=0.40;
 // higher hip has less diagonal ground-reach per step (shorter strides), so this is
 // a balance, not a max -- truly straight standing AND big run strides at once needs
 // dynamic hip height / a flight phase (a follow-up). Tune by eye.
-const LEG_HIP_Y=0.94;
+const LEG_HIP_Y=0.97;
+// INVERTED-PENDULUM gait (the dynamic-hip fix): the pelvis vaults over the planted
+// foot at leg length PEND_R, so the stance leg straightens at mid-stance and the
+// pelvis rises/falls -- straight standing legs AND full strides at once (the pelvis
+// dips at double support, where the legs spread widest). PEND_R is the effective
+// near-straight leg length; raise toward THIGH+SHIN (1.04) for straighter, taller
+// standing (watch the reach clamp ~1.008). FOOT_Y = planted-foot IK height. Tune by eye.
+const PEND_R=0.97, FOOT_Y=0.055;
 const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
 // FRONTAL stance (Stage 5): squared, wider side-by-side feet for lateral strafing,
 // blended in by how sideways the travel is relative to the aim (latFrac). Pelvis
@@ -2571,10 +2578,26 @@ function poseChef(a, isPlayer, dt){
   // ---- weight shift: lean onto the planted foot; bob with the step ----
   const idleK=a._idleK||0;
   AN.sway = damp(AN.sway, (a._swayTarget||0) + idleK*Math.sin(t*1.5)*0.045, 10, dt);
-  const bob = (moving? Math.abs(Math.sin(ph))*0.05*Math.min(1,spd/4.5)*(1-(a._sprintK||0)*0.45):0)
-              + Math.sin(t*2.1)*0.011 - (a._stepDip||0)
-              + idleK*Math.sin(t*3.3)*0.02   // a boxer's light square-up bounce
-              + (a._flight>=0 ? Math.sin(a._flight*Math.PI)*0.06*Math.min(1,spd/5) : 0);  // ballistic hop at a run (capped <=0.06 so feet still reach)
+  // INVERTED-PENDULUM PELVIS: vault the body over the planted (support) foot at a
+  // near-constant leg length PEND_R, so the stance leg straightens at mid-stance and
+  // the pelvis rises/falls (the ~5cm gait oscillation). This is what lets the legs be
+  // near-straight standing yet still take a full stride -- the pelvis DIPS at double
+  // support (min over both planted feet), where the legs spread widest and reach far.
+  if(air<0.08){
+    let hipY=Infinity, nP=0;
+    for(let i=0;i<2;i++){ const L=u.legs[i];
+      if(L.stepT>=1){ const hx=L.world.x-a.pos.x, hz=L.world.z-a.pos.z, hor2=hx*hx+hz*hz;
+        if(hor2 < PEND_R*PEND_R){ const h=FOOT_Y + Math.sqrt(PEND_R*PEND_R-hor2); if(h<hipY) hipY=h; nP++; } } }
+    if(nP===0) hipY = (a._hipY!=null? a._hipY : LEG_HIP_Y);       // brief flight: hold height; the hop term adds the bounce
+    hipY = clamp(hipY, 0.80, PEND_R+FOOT_Y);
+    a._hipY = damp(a._hipY!=null? a._hipY : hipY, hipY, 18, dt);
+  } else {
+    a._hipY = damp(a._hipY!=null? a._hipY : LEG_HIP_Y, LEG_HIP_Y, 10, dt);  // airborne: the jump arc owns height; relax the vault
+  }
+  const bob = (a._hipY - LEG_HIP_Y)                       // inverted-pendulum vault (primary vertical)
+              + Math.sin(t*2.1)*0.011                     // breathing
+              + idleK*Math.sin(t*3.3)*0.02                // idle square-up bounce
+              + (a._flight>=0 ? Math.sin(a._flight*Math.PI)*0.05*Math.min(1,spd/5) : 0);  // running hop between strides
 
   // ---- body: gross tilt (weave/stagger/dodge/recoil); waist bend goes on the spine ----
   let leanX=0, leanZ=0;
