@@ -217,7 +217,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r5</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r6</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -2727,8 +2727,16 @@ function updateFeet(a, dt, moving){
   }
   const stepDur = moving ? clamp(0.22 - spd*0.014, 0.11, 0.24) : 0.22;          // slower swing = fewer, bigger steps (was a fast tiny-step shuffle)
   const stepLen = clamp(0.5 + spd*0.17, 0.5, 1.15 + (a._sprintK||0)*0.35);      // longer stride -> wider thigh separation + fewer/bigger steps (the pendulum dip supplies the extra ground-reach; still under 2x reach so no skate)
-  const fast = spd>3.2;                                  // running: let both feet catch up
-  let anyStepping=false; for(const L of legs) if(L.stepT<1) anyStepping=true;
+  const fast = spd>3.2;                                  // running: allow a flight overlap (the trailing foot launches before the lead foot plants)
+  // ENFORCE ALTERNATION. The stepper is reactive (a foot steps when it drifts past
+  // stepLen), so nothing here guaranteed left-right-left. At a walk the anyStepping
+  // gate serialises one foot at a time; at a run the OLD code let both feet trigger
+  // in the same frame and swing IN PHASE -> a two-footed skip, not a stride. Now:
+  //  - consecutive steps must switch feet (_lastStepFoot), and
+  //  - at a run the trailing foot may launch only once the lead foot is past
+  //    mid-swing (swingT>=0.5) -> a proper ~180deg phase offset with a flight overlap.
+  let anyStepping=false, swingFoot=-1, swingT=1;
+  for(let i=0;i<2;i++){ const L=legs[i]; if(L.stepT<1){ anyStepping=true; if(L.stepT<swingT){ swingT=L.stepT; swingFoot=i; } } }
   let stepPhase=-1, whichFoot=0;
   for(let i=0;i<2;i++){
     const L=legs[i], st=STANCE[i], fst=STANCE_FRONTAL[i];
@@ -2736,9 +2744,12 @@ function updateFeet(a, dt, moving){
     if(spd>0.3){ _ideal.x += vx/vm*lead; _ideal.z += vz/vm*lead; }
     if(L.stepT>=1){
       const off=Math.hypot(L.world.x-_ideal.x, L.world.z-_ideal.z);
-      if(off>stepLen && (!anyStepping || fast) && a._stepCool<=0){
+      const way = off>stepLen*1.7;                                 // way out of place (e.g. a hard direction reversal): step regardless of phase so alternation can't deadlock
+      const gate = anyStepping ? (fast && swingFoot!==i && swingT>=0.5)   // run: trailing foot launches once the lead foot passes mid-swing
+                               : (a._lastStepFoot!==i || way);            // both planted: only the foot that didn't just step may launch
+      if(off>stepLen && gate && a._stepCool<=0){
         L.from.copy(L.world); L.to.copy(_ideal);
-        L.stepT=0; a._stepCool = fast?0.02:0.05; anyStepping=true;
+        L.stepT=0; a._stepCool = fast?0.02:0.05; anyStepping=true; swingFoot=i; swingT=0; a._lastStepFoot=i;
         if(a===player && moving) sfx.step();
       }
     } else {
@@ -3582,7 +3593,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r5';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r6';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
