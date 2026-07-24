@@ -1040,6 +1040,14 @@ const UP=new V3(0,1,0), FWD=new V3(0,0,1);
 // and looked stubby. Longer legs bend at the knee when standing and give real
 // stride room, so the gait below can take actual steps.
 const THIGH=0.52, SHIN=0.52, ARM_U=0.40, ARM_F=0.40;
+// Standing leg posture: the leg IK hip socket sits at LEG_HIP_Y. The original 0.8
+// was well BELOW the leg length (THIGH+SHIN=1.04), which geometrically forced a
+// permanent ~90deg knee bend (a half-squat) -- no leg was ever straight. Raised
+// toward the leg length so the legs stand much closer to straight. TRADEOFF: a
+// higher hip has less diagonal ground-reach per step (shorter strides), so this is
+// a balance, not a max -- truly straight standing AND big run strides at once needs
+// dynamic hip height / a flight phase (a follow-up). Tune by eye.
+const LEG_HIP_Y=0.94;
 const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
 // FRONTAL stance (Stage 5): squared, wider side-by-side feet for lateral strafing,
 // blended in by how sideways the travel is relative to the aim (latFrac). Pelvis
@@ -1324,7 +1332,7 @@ function makeChef(o){
     const boot=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.1,0.3),bootMat); boot.castShadow=true;
     root.add(th); root.add(sh); root.add(boot);
     legs.push({ thigh:th, shin:sh, boot,
-      hip:new V3((i===0?-0.16:0.16),0.8,0), knee:new V3(),
+      hip:new V3((i===0?-0.16:0.16),LEG_HIP_Y,0), knee:new V3(),
       world:new V3(), from:new V3(), to:new V3(), stepT:1, lift:0 });
   }
 
@@ -2668,7 +2676,7 @@ function updateFeet(a, dt, moving){
   a._stepCool=(a._stepCool||0)-dt;
   const spd=a.speed||0, run=a._runK||0;
   const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0, vm=Math.hypot(vx,vz)||1;
-  const lead=Math.min(0.5, spd*0.13) + run*0.2;          // reach further ahead
+  const lead=Math.min(0.65, spd*0.16) + run*0.26;        // reach further ahead (bigger so strides aren't tiny)
   // STRAFE (model A): how sideways the travel is relative to the aim (facing). Only
   // meaningful when locked on -- facing holds the target and the feet strafe. 0 =
   // moving along the aim (normal stride), 1 = pure lateral (frontal side-shuffle).
@@ -2678,8 +2686,8 @@ function updateFeet(a, dt, moving){
     const fwdV=vx*fs+vz*fc, latV=vx*fc-vz*fs;
     latFrac=Math.abs(latV)/(Math.abs(latV)+Math.abs(fwdV)+1e-3);
   }
-  const stepDur = moving ? clamp(0.17 - spd*0.01, 0.08, 0.17) : 0.2;
-  const stepLen = clamp(0.30 + spd*0.11, 0.30, 0.95 + (a._sprintK||0)*0.25);    // stride proportional to speed; sprint raises the ceiling for a longer stride (thigh separation)
+  const stepDur = moving ? clamp(0.22 - spd*0.014, 0.11, 0.24) : 0.22;          // slower swing = fewer, bigger steps (was a fast tiny-step shuffle)
+  const stepLen = clamp(0.44 + spd*0.13, 0.44, 0.9 + (a._sprintK||0)*0.25);     // bigger stride trigger: foot travels further before replanting -> real steps, not a shuffle (capped by leg ground-reach)
   const fast = spd>3.2;                                  // running: let both feet catch up
   let anyStepping=false; for(const L of legs) if(L.stepT<1) anyStepping=true;
   let stepPhase=-1, whichFoot=0;
@@ -2697,7 +2705,7 @@ function updateFeet(a, dt, moving){
     } else {
       L.stepT=Math.min(1, L.stepT + dt/stepDur);
       const tt=L.stepT; L.world.lerpVectors(L.from,L.to, tt*tt*(3-2*tt));
-      L.lift=Math.sin(tt*Math.PI)*(0.13+Math.min(0.1,spd*0.02)+run*0.18+(a._sprintK||0)*0.12); L.world.y=L.lift; if(tt>=1){ L.lift=0; L.world.y=0; }  // pick the foot up higher -- a step, not a scuff; sprint = higher knee drive
+      L.lift=Math.sin(tt*Math.PI)*(0.16+Math.min(0.14,spd*0.03)+run*0.22+(a._sprintK||0)*0.15); L.world.y=L.lift; if(tt>=1){ L.lift=0; L.world.y=0; }  // lift the foot clearly off the floor -- a real step, not a scuff; sprint = higher knee drive
       stepPhase=tt; whichFoot=i;
     }
   }
