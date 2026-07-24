@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r10</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r11</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1107,6 +1107,20 @@ const PUNCHES=[
   { name:'upper', hand:1, s:[ 0.28,1.04,0.40], e:[ 0.12,1.78,0.72], bend:[ 0.4,-0.9,0.5],  coil:0.42, follow:-0.55, lean:0.36, drive:0.78 }
 ];
 const PUNCH_FINISH=PUNCHES[3];   // heavy bare-hand = the uppercut
+/* HEAVY combo: distinct, heavier swing shapes that cycle on a chained HEAVY
+   press (bigger arcs, deeper commit/lean, more drive) so mashing heavy reads as
+   a real heavy chain -- overhead -> reverse -> finishing smash -- not one
+   finisher on repeat. Same field layout as SWINGS/PUNCHES. */
+const HEAVY_SWINGS=[
+  { name:'h-overhead', s:[0.30,2.20,-0.22], e:[-0.08,0.94,0.96], bend:[0.45,-1,0.5],   coil:0.42, follow:-0.7,  lean:0.42, drive:1.00 },
+  { name:'h-reverse',  s:[-0.56,1.66,-0.10],e:[0.60,1.24,0.98],  bend:[-1.05,-0.5,0.4], coil:-0.6, follow:0.88,  lean:0.36, drive:1.02 },
+  { name:'h-smash',    s:[0.12,2.24,-0.30], e:[0.00,0.90,1.00],  bend:[0.32,-1,0.5],   coil:0.5,  follow:-0.9,  lean:0.5,  drive:1.15 }
+];
+const HEAVY_PUNCHES=[
+  { name:'h-hook',  hand:0, s:[-0.56,1.52,0.10], e:[0.34,1.44,0.92], bend:[-1.0,-0.35,0.3], coil:0.6,  follow:-0.85, lean:0.32, drive:0.95 },
+  { name:'h-cross', hand:1, s:[0.34,1.46,0.18],  e:[-0.08,1.54,1.10],bend:[0.42,-0.45,0.5], coil:-0.34,follow:0.55,  lean:0.30, drive:0.92 },
+  { name:'h-upper', hand:1, s:[0.30,1.00,0.42],  e:[0.12,1.82,0.74], bend:[0.42,-0.92,0.5], coil:0.46, follow:-0.6,  lean:0.42, drive:1.08 }
+];
 const _tb=new V3(),_dirN=new V3(),_bnd=new V3(),_jnt=new V3(),_om=new V3(),_kt=new V3(),_knee=new V3();
 function orientBone(mesh,a,b){
   mesh.position.copy(a).add(b).multiplyScalar(0.5);
@@ -1857,8 +1871,8 @@ function startAttack(atk){ // atk shared by player/enemy: {heavy}
   A.attack={ wpn:atk.wpn, heavy:atk.heavy, t:0, wind, active, rec, dur:wind+active+rec,
     hitAt:wind, hit:false, side:(A.comboStep%2===0)?1:-1,
     shape:(A.wpn==='fists'
-      ? (atk.heavy?PUNCH_FINISH:PUNCHES[(A.comboStep||0)%PUNCHES.length])
-      : (atk.heavy?FINISH:SWINGS[(A.comboStep||0)%SWINGS.length])), target:atk.target||null };
+      ? (atk.heavy?HEAVY_PUNCHES[(A.comboStep||0)%HEAVY_PUNCHES.length]:PUNCHES[(A.comboStep||0)%PUNCHES.length])
+      : (atk.heavy?HEAVY_SWINGS[(A.comboStep||0)%HEAVY_SWINGS.length]:SWINGS[(A.comboStep||0)%SWINGS.length])), target:atk.target||null };
   if(w.metal) {} // swing sound at hit
   return true;
 }
@@ -3698,7 +3712,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r10';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r11';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -3834,11 +3848,45 @@ function tick(){
   updateLocaleTextures(dt,GAME.t);
 
   updateCamera(dt);
+  updateLockUI();
   postTick(dt);
   renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,camera);
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 
+/* ---- LOCK-ON INDICATOR: a camera-facing white ring "border" around the locked
+   enemy + a floating health bar above them. Overlay materials (depthTest off,
+   high renderOrder) so they read on top of the body; shown only while locked. ---- */
+const lockRing=new THREE.Mesh(new THREE.RingGeometry(0.86,1.0,40),
+  new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.9, side:THREE.DoubleSide, depthTest:false, depthWrite:false, fog:false}));
+lockRing.renderOrder=999; lockRing.visible=false; scene.add(lockRing);
+const HPW=1.15, HPH=0.14;
+const hpBar=new THREE.Group(); hpBar.visible=false; scene.add(hpBar);
+const hpBg=new THREE.Mesh(new THREE.PlaneGeometry(HPW+0.07,HPH+0.07),
+  new THREE.MeshBasicMaterial({color:0x120a08, transparent:true, opacity:0.82, depthTest:false, depthWrite:false, fog:false}));
+hpBg.renderOrder=999; hpBar.add(hpBg);
+const hpFillPivot=new THREE.Group(); hpFillPivot.position.set(-HPW/2,0,0.002); hpBar.add(hpFillPivot);
+const hpFill=new THREE.Mesh(new THREE.PlaneGeometry(HPW,HPH),
+  new THREE.MeshBasicMaterial({color:0x49d05a, transparent:true, opacity:0.96, depthTest:false, depthWrite:false, fog:false}));
+hpFill.position.set(HPW/2,0,0); hpFill.renderOrder=1000; hpFillPivot.add(hpFill);
+function updateLockUI(){
+  const P=player, e=P&&P.lockOn;
+  const on=!!(e && !e.dead && GAME.mode==='play');
+  lockRing.visible=on; hpBar.visible=on;
+  if(!on) return;
+  const s=e.chef.scale.x||1;
+  const cx=e.com?e.com.x:e.pos.x, cz=e.com?e.com.z:e.pos.z;
+  const pulse=1+Math.sin(GAME.t*6)*0.05;
+  lockRing.position.set(cx, 1.35*s, cz);
+  lockRing.quaternion.copy(camera.quaternion);
+  lockRing.scale.set(0.9*s*pulse, 1.45*s*pulse, 1);         // vertical oval framing the standing figure
+  const frac=clamp(e.hp/(e.hpMax||1),0,1);
+  hpBar.position.set(cx, 2.72*s, cz);
+  hpBar.quaternion.copy(camera.quaternion);
+  hpFillPivot.scale.x=Math.max(0.0001,frac);
+  const r=Math.round(255*(frac<0.5?1:(1-frac)*2)), g=Math.round(255*(frac<0.5?0.14+frac*1.4:0.82));
+  hpFill.material.color.setHex((r<<16)|(g<<8)|0x2a);        // green (full) -> red (empty)
+}
 const _camTgt=new V3();
 function updateCamera(dt){
   updateCameraVectors();
@@ -3875,7 +3923,7 @@ function updateCamera(dt){
   else if(dir.z<-1e-4) dist=Math.min(dist,(-mz-target.z)/dir.z);
   dist=Math.max(1.8,dist);
   want.copy(target).addScaledVector(dir,dist);
-  want.addScaledVector(camRight, 0.95*k);        // over the shoulder: slide off-centre
+  want.addScaledVector(camRight, 1.35*k);        // over the shoulder: slide the lens right so the chef sits LEFT of centre (was .95)
   want.y=CAM.height - 0.55*k;                    // drop toward head height
   if(locked){
     // frame BOTH of you: sit the aim between the pair, biased at the enemy
