@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r16</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r17</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -2464,6 +2464,22 @@ function updateEnemy(e, dt){
     } else e._thrown=null;
   }
 
+  // KNOCKDOWN: shoved to the deck -- lie prone briefly, then get up. Overrides AI
+  // (no attacks, no token) and still takes hits, so a downed patron is a free combo.
+  if(e.down>0){
+    e.down-=dt;
+    e.vel.multiplyScalar(Math.exp(-6*dt)); e.pos.addScaledVector(e.vel,dt); collide(e.pos,e.r);
+    e.attack=null; if(e.hasToken){ e.hasToken=false; tokensUsed--; }
+    if(player.grabbed && player.grabbed.by===e){ player.grabbed=null; hideMashUI(); }
+    const rising = e.down<0.45;                                 // last stretch: get back up
+    e._downK = damp(e._downK||0, rising?0:1, rising?7:16, dt);
+    e.chef.position.copy(e.pos); e.chef.rotation.y=e.facing;
+    knockdownPose(e,dt);
+    if(e.down<=0){ e.down=0; e._downK=0; e.state='engage'; e.stateT=0.4; e.stagger=0.25;
+      const b=e.chef.userData.body; b.rotation.x=0; b.rotation.z=0; }
+    return;
+  }
+
   const toP=new V3(player.pos.x-e.pos.x,0,player.pos.z-e.pos.z);
   const dist=toP.length(); const dirP=toP.clone().normalize();
   let wantYaw=Math.atan2(dirP.x,dirP.z);
@@ -2948,6 +2964,7 @@ function solveLegsIK(a, b){
 const _bnd2=new V3(), _fdir=new V3();
 const _wq1=new THREE.Quaternion(), _wq2=new THREE.Quaternion();   // torch-upright grip
 const _wpos=new V3(), _wvel=new V3();                             // weapon-hand world pos/vel for weapon inertia
+const _wristQ=new THREE.Quaternion(), HAND_X=new V3(1,0,0);       // relaxed-wrist curl
 function solveArmsIK(a, dt, atk){
   const u=a.chef.userData;
   const spd=a.speed||0, ph=a.movePhase, g=a.guardV||0, run=a._runK||0;
@@ -3074,7 +3091,15 @@ function solveArmsIK(a, dt, atk){
     solveTwoBone(A.up, A.fore, A.sh, A.tgt, ARM_U, ARM_F, _bnd2, A.elb);
     A.hand.position.copy(A.tgt);
     _fdir.subVectors(A.tgt, A.elb);
-    if(_fdir.lengthSq()>1e-6){ _fdir.normalize(); A.hand.quaternion.setFromUnitVectors(FWD, _fdir); }
+    if(_fdir.lengthSq()>1e-6){ _fdir.normalize(); A.hand.quaternion.setFromUnitVectors(FWD, _fdir);
+      // RELAXED WRIST: a soft eased curl at the wrist -- droops when the hand
+      // hangs free, straightens in combat, cocks a touch on the striking hand.
+      // Kills the rigid 'mannequin' wrist. Local to the hand, kept subtle.
+      const relaxed = (!atk && !a.tackle && !a.hold && (a._combatK||0)<0.4 && (a.guardV||0)<0.2 && (a.slamHit||0)<=0) ? 1 : 0;
+      const wc = (isActive && atk) ? -0.16 : relaxed*0.30 - (run>0.3?0.06:0);
+      A._wristC = damp(A._wristC||0, wc, 9, dt);
+      if(_wristQ.setFromAxisAngle){ _wristQ.setFromAxisAngle(HAND_X, A._wristC); A.hand.quaternion.multiply(_wristQ); }
+    }
   }
   // ---- weapon flourish: twirl the pan, swing the spatula around, sword-style ----
   const wg=u.weaponGroup;
@@ -3147,6 +3172,31 @@ function deathPose(a, dt){
     solveTwoBone(L.thigh,L.shin,_hipV,_footV,THIGH,SHIN,KNEE_FWD,null);
     L.boot.position.set(_footV.x,0.055,_footV.z+0.04); L.boot.rotation.set(0,0,0); }
   springDeform(u.dHead, dt); applyDeform(u.head, u.dHead, a.chef.scale.x||1);
+}
+/* NON-LETHAL KNOCKDOWN: laid out on the deck, then recovers. Modeled on deathPose
+   (which reads well) but driven by e._downK (1 = flat on the back, 0 = upright)
+   so it eases down and gets back up instead of folding into a corpse. */
+function knockdownPose(e, dt){
+  const u=e.chef.userData, b=u.body, k=e._downK||0;
+  b.rotation.x = damp(b.rotation.x, -1.45*k, 12, dt);         // tip back onto the deck
+  b.rotation.z = damp(b.rotation.z, 0, 8, dt);
+  b.position.set(0, damp(b.position.y, -0.30*k, 8, dt), 0);
+  b.scale.set(1,1,1);
+  u.upper.rotation.y = damp(u.upper.rotation.y, 0, 8, dt);
+  u.hips.rotation.y  = damp(u.hips.rotation.y, 0, 8, dt);
+  u.toque.rotation.x = damp(u.toque.rotation.x, 0.5*k, 6, dt);
+  for(let i=0;i<2;i++){ const A=u.arms[i], sign=i===0?-1:1;   // arms sprawl
+    A.tgt.x=damp(A.tgt.x, A.sh.x + sign*(0.35+0.25*k), 9, dt);
+    A.tgt.y=damp(A.tgt.y, 1.0 - 0.35*k, 9, dt);
+    A.tgt.z=damp(A.tgt.z, 0.18, 9, dt);
+    _bnd2.set(sign*0.6,-1,0.3);
+    solveTwoBone(A.up,A.fore,A.sh,A.tgt,ARM_U,ARM_F,_bnd2,A.elb);
+    A.hand.position.copy(A.tgt); _fdir.subVectors(A.tgt,A.elb);
+    if(_fdir.lengthSq()>1e-6){ _fdir.normalize(); A.hand.quaternion.setFromUnitVectors(FWD,_fdir); } }
+  for(let i=0;i<2;i++){ const L=u.legs[i];
+    _hipV.set(L.hip.x,L.hip.y,L.hip.z); toRootLocal(e,L.world,_footV); _footV.y=0.055;
+    solveTwoBone(L.thigh,L.shin,_hipV,_footV,THIGH,SHIN,KNEE_FWD,null);
+    L.boot.position.set(_footV.x,0.055,_footV.z+0.04); L.boot.rotation.set(0,0,0); }
 }
 
 /* ================================================ Verlet ragdoll (ported) */
@@ -3527,9 +3577,9 @@ function grabShove(P){
   shake(0.7); hitstop(0.12); impactFrames(3,0xff8a3a,0x140c07); hitPost(0.7,0xff8a3a);
   burst(cp,16,0xffb060,1.4); ring(cp,COL.flame,1.3); if(AC) sfx.thud(0.9); haptic(0.8,0.6,180);
   if(e.hp<=0){ killChef(e, ang); }
-  else { e.stagger=1.5; e.state='engage'; e.stateT=0.2;
-    e.vel.x=Math.sin(ang)*8; e.vel.z=Math.cos(ang)*8;         // shoved forward onto the deck
-    applyImpact(e, ang, 2.2); }                                // hard hit reaction
+  else { e.down=1.3; e._downK=0; e.state='engage'; e.stateT=0.2;   // KNOCKED DOWN: they hit the deck, then get up
+    e.vel.x=Math.sin(ang)*6; e.vel.z=Math.cos(ang)*6; e.attack=null;
+    if(e.hasToken){ e.hasToken=false; tokensUsed--; } }
   popWord(cp,'SHOVED!','#ff8a3a',28);
 }
 function throwHeld(P){
@@ -3793,7 +3843,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r16';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r17';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
