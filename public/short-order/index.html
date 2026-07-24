@@ -1048,6 +1048,10 @@ const KNEE_FWD=new V3(0,0,1);                        // knees break forward
 // by-eye tuning call this environment can't make). Fed to BOTH the visible pelvis
 // and the leg hip-sockets so pelvic rotation drives the legs, not just the mesh.
 const PELVIS_YAW_WALK=0.07, PELVIS_YAW_RUN=0.22, PELVIS_ROLL=0.09;
+// SPRINT tier band (Stage 3): _sprintK ramps 0->1 across [SPRINT_LO, SPRINT_HI]
+// (game units; base run speed is 6.7) to drive sprint-specific emphasis on top of
+// the run blend, which saturated at ~85% of top speed and left jog/sprint identical.
+const SPRINT_LO=4.8, SPRINT_HI=6.7;
 /* combo cycle: distinct swing shapes so a chain reads as jab->cross->hook, not
    the same swing on repeat. each is a windup point s and a strike point e in
    upper-local space (weapon hand), an elbow pole `bend`, body coil/follow twist,
@@ -2488,6 +2492,11 @@ function poseChef(a, isPlayer, dt){
   const air=a._air||0;                                  // 0 grounded .. 1 apex
   const rk=(!a.attack && !a.guard && !a.dodge && !a.tackle && air<0.1) ? clamp((spd-2.3)/3.4,0,1) : 0;
   a._runK = rk*rk*(3-2*rk);
+  // SPRINT tier: additive emphasis in the top speed band (longer stride, higher
+  // knee, more forward lean, LESS vertical bounce -- the non-monotonic 'hump').
+  // Zero below SPRINT_LO, so the walk/jog range is untouched. (MOVEMENT_OVERHAUL_PLAN.md)
+  { const sk=clamp((spd-SPRINT_LO)/(SPRINT_HI-SPRINT_LO),0,1);
+    a._sprintK=(!a.attack && !a.guard && !a.dodge && !a.tackle && air<0.1) ? sk*sk*(3-2*sk) : 0; }
   a._idleK = (!a.attack && !a.guard && !a.dodge && !a.dead && air<0.1) ? clamp(1-spd/0.9,0,1) : 0;
   // COMBAT READINESS: relaxed when wandering, a ready stance when squared up. Drives
   // the per-weapon stance in solveArmsIK. Hysteresis (4.5 in / 5.5 out) + a soft damp
@@ -2550,7 +2559,7 @@ function poseChef(a, isPlayer, dt){
   // ---- weight shift: lean onto the planted foot; bob with the step ----
   const idleK=a._idleK||0;
   AN.sway = damp(AN.sway, (a._swayTarget||0) + idleK*Math.sin(t*1.5)*0.045, 10, dt);
-  const bob = (moving? Math.abs(Math.sin(ph))*0.05*Math.min(1,spd/4.5):0)
+  const bob = (moving? Math.abs(Math.sin(ph))*0.05*Math.min(1,spd/4.5)*(1-(a._sprintK||0)*0.45):0)
               + Math.sin(t*2.1)*0.011 - (a._stepDip||0)
               + idleK*Math.sin(t*3.3)*0.02   // a boxer's light square-up bounce
               + (a._flight>=0 ? Math.sin(a._flight*Math.PI)*0.06*Math.min(1,spd/5) : 0);  // ballistic hop at a run (capped <=0.06 so feet still reach)
@@ -2573,7 +2582,7 @@ function poseChef(a, isPlayer, dt){
   // ---- spine (waist joint): the upper body flexes forward and undulates ----
   let waist=0;
   if(moving && !atk) waist += Math.min(1,spd/5)*0.14;
-  waist += (a._runK||0)*0.34;                            // drive forward into the run
+  waist += (a._runK||0)*0.34 + (a._sprintK||0)*0.22;    // drive forward into the run; extra trunk lean at sprint
   if(moving) waist += Math.sin(ph*2)*0.035*Math.min(1,spd/4);  // stride undulation
   if(atk){ waist += lerp(0,-0.10,atk.windK); waist = lerp(waist, (atk.A.shape?atk.A.shape.lean:0.28)*atk.heavyMul*0.75, atk.strikeK); }
   if(a.tackle){ waist += 0.5; }                          // shoulder-down charge
@@ -2657,7 +2666,7 @@ function updateFeet(a, dt, moving){
   const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0, vm=Math.hypot(vx,vz)||1;
   const lead=Math.min(0.5, spd*0.13) + run*0.2;          // reach further ahead
   const stepDur = moving ? clamp(0.17 - spd*0.01, 0.08, 0.17) : 0.2;
-  const stepLen = clamp(0.30 + spd*0.11, 0.30, 0.95);    // stride strictly proportional to speed -- a faster body picks its foot up sooner (anti-skate)
+  const stepLen = clamp(0.30 + spd*0.11, 0.30, 0.95 + (a._sprintK||0)*0.25);    // stride proportional to speed; sprint raises the ceiling for a longer stride (thigh separation)
   const fast = spd>3.2;                                  // running: let both feet catch up
   let anyStepping=false; for(const L of legs) if(L.stepT<1) anyStepping=true;
   let stepPhase=-1, whichFoot=0;
@@ -2674,7 +2683,7 @@ function updateFeet(a, dt, moving){
     } else {
       L.stepT=Math.min(1, L.stepT + dt/stepDur);
       const tt=L.stepT; L.world.lerpVectors(L.from,L.to, tt*tt*(3-2*tt));
-      L.lift=Math.sin(tt*Math.PI)*(0.13+Math.min(0.1,spd*0.02)+run*0.18); L.world.y=L.lift; if(tt>=1){ L.lift=0; L.world.y=0; }  // pick the foot up higher -- a step, not a scuff
+      L.lift=Math.sin(tt*Math.PI)*(0.13+Math.min(0.1,spd*0.02)+run*0.18+(a._sprintK||0)*0.12); L.world.y=L.lift; if(tt>=1){ L.lift=0; L.world.y=0; }  // pick the foot up higher -- a step, not a scuff; sprint = higher knee drive
       stepPhase=tt; whichFoot=i;
     }
   }
@@ -2746,8 +2755,8 @@ function solveArmsIK(a, dt, atk){
       // bend -- instead of the old depth-only pump that yo-yo'd the radius and
       // folded the forearm up behind the back on the backswing.
       const s=Math.sin(ph + (i===0?0:Math.PI));   // -1 back .. +1 forward
-      const R=0.52 + Math.min(0.10, spd*0.02);    // radius grows a touch with pace
-      const th=s*0.85;                             // swing angle ~+/-49deg
+      const R=0.52 + Math.min(0.10, spd*0.02) + (a._sprintK||0)*0.06;    // radius grows with pace; sprint pumps wider
+      const th=s*(0.85+(a._sprintK||0)*0.22);      // swing angle ~+/-49deg; bigger arm drive at sprint
       // point on the R-circle about the shoulder (down = -y, forward = +z), then
       // TILT the whole swing plane forward so the hand rides higher in front and
       // drops behind (a runner's diagonal) WITHOUT changing the radius -- a
