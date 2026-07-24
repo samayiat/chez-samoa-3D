@@ -1224,6 +1224,22 @@ function makeChef(o){
     const hair=new THREE.Mesh(new THREE.SphereGeometry(0.245,12,9,0,TAU,0,Math.PI*0.6),hairMat);
     hair.scale.set(1.02,0.92,1.05); toque.add(hair);
     toque.position.set(0,0.04,-0.02);
+  } else if(o.male){
+    // MALE chef (the "male swap") -- his established look ported from
+    // culinary-dash-3d/src/preview/chef.js: deep-teal top (via o.jacket), a big
+    // round AFRO built from a domed puff cluster, with a toque perched ON the hair.
+    const hairMat=M(0x17110d,.9);
+    const afro=(r,x,y,z)=>{ const m=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),hairMat); m.position.set(x,y,z); m.castShadow=true; head.add(m); };
+    afro(0.31,0,0.12,-0.04);                                     // main dome
+    afro(0.2,-0.24,0.06,-0.02); afro(0.2,0.24,0.06,-0.02);       // side volume over the ears
+    afro(0.19,0,0.32,-0.03);                                     // crown
+    afro(0.19,-0.16,0.26,0.05); afro(0.19,0.16,0.26,0.05);       // upper-front bumps
+    afro(0.18,-0.18,0.24,-0.18); afro(0.18,0.18,0.24,-0.18);     // upper-back bumps
+    afro(0.19,0,0.1,-0.2);                                       // back volume
+    afro(0.15,-0.18,-0.06,0.02); afro(0.15,0.18,-0.06,0.02);     // cheek framing
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.25,0.2,12),toqueMat); band.position.set(0,0.5,-0.03); toque.add(band);   // toque perched on the afro
+    const puff=new THREE.Mesh(new THREE.SphereGeometry(0.28,12,9),toqueMat); puff.position.set(0,0.64,-0.03); puff.scale.y=0.9; toque.add(puff);
+    toque.position.set(0,0.06,0);
   } else {
     // the cuff -- the snug band the hat actually sits on -- sized to CAP
     // OVER the dreadlocks (radius well past LR=0.24, the locs' own ring
@@ -1303,6 +1319,7 @@ function makeChef(o){
     dHead: deform(SQUISH.headMax),
     mats:{ skin, jacket:jacketMat, apron:apronMat, scarf:scarf?scarf.material:null },
     weaponGroup:null, weaponKey:'fists',
+    whand: o.male?0:1, grip: o.male?'reverse':'forward',   // handedness + knife grip (male chef = left / icepick)
     rest:{ torso:{p:torso.position.clone(),q:torso.quaternion.clone(),s:torso.scale.clone()},
            head:head.position.clone(), hips:hips.position.clone() }
   };
@@ -1327,10 +1344,11 @@ function resetRagPose(a){
 /* give a chef a weapon in the right hand */
 function equip(chef, key){
   const u=chef.userData;
-  if(u.weaponGroup){ u.armR.hand.remove(u.weaponGroup); }
+  const wh=u.arms[u.whand==null?1:u.whand].hand;    // weapon hand (right by default, left for the male chef)
+  if(u.weaponGroup && u.weaponGroup.parent){ u.weaponGroup.parent.remove(u.weaponGroup); }
   const g=makeWeaponMesh(key);
   g.position.set(0.02,0,0.04); g.rotation.x=0.15;   // slight grip tilt; hand orients along the forearm
-  u.armR.hand.add(g); u.weaponGroup=g; u.weaponKey=key;
+  wh.add(g); u.weaponGroup=g; u.weaponKey=key;
 }
 
 /* ================================================================ FX */
@@ -1482,8 +1500,12 @@ function makePlayer(){
   // chez-samoa-3D's default chef: dark skin, mauve-pink top, cream apron,
   // dreadlocks under the toque (see the `o.locs` block in makeChef above --
   // colors match preview/chef.js's SKIN/TOP/APRON exactly; her established
-  // look is a hard invariant, not a style choice).
-  const chef=makeChef({ skin:0x7a4328, jacket:0xb56a92, apron:0xf1ede2, boot:0x1a1a20, locs:true });
+  // look is a hard invariant, not a style choice). `?chef=male` swaps in her
+  // canonical male counterpart (teal top + afro, left-handed, reverse knife grip).
+  const male = (typeof location!=='undefined' && location.search && /[?&]chef=male\b/.test(location.search));
+  const chef = male
+    ? makeChef({ skin:0x7a4328, jacket:0x356b7a, apron:0xf1ede2, boot:0x1a1a20, male:true })
+    : makeChef({ skin:0x7a4328, jacket:0xb56a92, apron:0xf1ede2, boot:0x1a1a20, locs:true });
   chef.userData.isPlayer=true;
   equip(chef,'fists');
   return {
@@ -2446,6 +2468,23 @@ function poseChef(a, isPlayer, dt){
   const rk=(!a.attack && !a.guard && !a.dodge && !a.tackle && air<0.1) ? clamp((spd-2.3)/3.4,0,1) : 0;
   a._runK = rk*rk*(3-2*rk);
   a._idleK = (!a.attack && !a.guard && !a.dodge && !a.dead && air<0.1) ? clamp(1-spd/0.9,0,1) : 0;
+  // COMBAT READINESS: relaxed when wandering, a ready stance when squared up. Drives
+  // the per-weapon stance in solveArmsIK. Hysteresis (4.5 in / 5.5 out) + a soft damp
+  // stop it flickering as threats cross the threshold.
+  { let ct=0; const thr=(a._combatK>0.5?5.5:4.5), thr2=thr*thr;
+    if(!a.dead){
+      if(isPlayer){
+        if((a.lockOn && !a.lockOn.dead) || a.chainT>0 || (GAME.comboT||0)>0) ct=1;
+        else { const ne=nearestEnemy(a.pos,a.facing,null);
+          if(ne){ const dx=ne.pos.x-a.pos.x, dz=ne.pos.z-a.pos.z; if(dx*dx+dz*dz<thr2) ct=1; } }
+      } else {
+        const st=a.state;
+        if(st==='engage'||st==='press'||st==='attacking'||st==='recover') ct=1;
+        else if(player){ const dx=player.pos.x-a.pos.x, dz=player.pos.z-a.pos.z; if(dx*dx+dz*dz<thr2) ct=1; }
+      }
+    }
+    a._combatK = damp(a._combatK||0, ct, 5, dt);
+  }
 
   if(a.dead){ updateDead(a,dt); return; }
   if(!a._feet) resetFeet(a);
@@ -2642,9 +2681,10 @@ function solveArmsIK(a, dt, atk){
   const u=a.chef.userData;
   const spd=a.speed||0, ph=a.movePhase, g=a.guardV||0, run=a._runK||0;
   const isFist=(a.wpn==='fists');
-  const activeHand = atk ? ((isFist && atk.A.shape && atk.A.shape.hand!=null) ? atk.A.shape.hand : 1) : -1;
+  const WHAND=(u.whand==null?1:u.whand);                 // weapon hand: 1=right (default), 0=left (male chef)
+  const activeHand = atk ? ((isFist && atk.A.shape && atk.A.shape.hand!=null) ? atk.A.shape.hand : WHAND) : -1;
   for(let i=0;i<2;i++){
-    const A=u.arms[i]; const isWeapon=(i===1); const isActive=(i===activeHand); const sign=(i===0?-1:1);
+    const A=u.arms[i]; const isWeapon=(i===WHAND); const isActive=(i===activeHand); const sign=(i===0?-1:1);
     // default: arms HANG, extended down and a touch out -- was a tucked guard
     // (ty 1.34 / tz 0.36) so close to the shoulder the forearms read as T-Rex
     // stubs. Dropping the hands lets the arms actually extend; guard/attack
@@ -2652,9 +2692,11 @@ function solveArmsIK(a, dt, atk){
     let tx=A.sh.x + sign*0.06, ty=0.98, tz=0.16;
     const idleK=a._idleK||0;
     if(idleK>0.01 && !atk && g<0.1){
-      // a little breathing float, not a full square-up
-      ty += idleK*(0.05 + Math.sin(GAME.t*3.3 + i*1.7)*0.03);
-      tz += idleK*(0.03 + Math.sin(GAME.t*2.6 + i)*0.025);
+      // relaxed idle: a slow, EASED weight-shift (arms sway out of phase) + a gentle
+      // breathing rise -- not the old stiff symmetric bob that read as a flex.
+      tx += idleK*Math.sin(GAME.t*1.4 + i*Math.PI)*0.02;
+      ty += idleK*(0.03 + Math.sin(GAME.t*2.0)*0.02);
+      tz += idleK*(0.02 + Math.sin(GAME.t*1.1 + i)*0.02);
     }
     if(a.state==='holding'){ tx=A.sh.x*0.4; ty=1.40; tz=0.72 + Math.sin(GAME.t*18+i)*0.03; }  // clamped onto the player
     if(a.state==='held'){ tx=A.sh.x*0.75 + Math.sin(GAME.t*22+i*2)*0.05; ty=1.12 + Math.sin(GAME.t*19+i)*0.06; tz=0.30 + Math.sin(GAME.t*17+i*3)*0.07; }  // limp/struggling, gripped by the chef
@@ -2684,6 +2726,31 @@ function solveArmsIK(a, dt, atk){
       tx=lerp(tx, A.sh.x + sign*0.04, sw*0.5);
       ty=lerp(ty, 1.54 + (dz0*Math.sin(tl) + dy0*Math.cos(tl)), sw*0.6);
       tz=lerp(tz, dz0*Math.cos(tl) - dy0*Math.sin(tl), sw*0.7);
+    }
+    // COMBAT STANCE: a per-weapon ready hold, blended in by combat readiness. Fades
+    // out at a full run and while hard-guarding (those own the pose). Each weapon has
+    // its own grip archetype (greatsword / bo-staff / dagger / short-sword / shield /
+    // boxer); two-handers bring the off-hand onto the weapon. All sign-relative so a
+    // lefty mirrors for free.
+    const ck = (a._combatK||0) * (1-Math.min(run,0.8)) * (1-g);
+    if(ck>0.01 && !atk && !a.slam && (a.slamHit||0)<=0 && a.state!=='holding' && a.state!=='held' && !a.tackle){
+      const WH=(u.whand==null?1:u.whand), isWH=(i===WH), wk=a.wpn;
+      let sx=tx, sy=ty, sz=tz;
+      if(wk==='castiron'){                                   // GREATSWORD (two-handed, low)
+        if(isWH){ sx=A.sh.x*0.5; sy=0.98; sz=0.36; } else { sx=A.sh.x*0.25; sy=0.92; sz=0.40; }   // OH onto the hilt
+      } else if(wk==='torch'){                               // BO STAFF (two-handed, diagonal)
+        if(isWH){ sx=A.sh.x*0.6; sy=0.98; sz=0.30; } else { sx=A.sh.x*0.15; sy=1.36; sz=0.56; }   // OH out on the pole in front
+      } else if(wk==='knife'){                               // DAGGER
+        if(u.grip==='reverse'){ if(isWH){ sx=A.sh.x*0.7; sy=1.02; sz=0.20; } else { sx=A.sh.x*0.55; sy=1.34; sz=0.50; } }   // icepick: WH tucked
+        else { if(isWH){ sx=A.sh.x*0.55; sy=1.16; sz=0.56; } else { sx=A.sh.x*0.6; sy=1.34; sz=0.48; } }                    // forward: checking off-hand
+      } else if(wk==='spatula'||wk==='nonstick'){            // SHORT SWORD (one-handed)
+        if(isWH){ sx=A.sh.x*0.7; sy=1.24; sz=0.54; } else { sx=A.sh.x*1.0; sy=1.08; sz=0.22; }
+      } else if(wk==='potlid'){                              // SHIELD (lid up front)
+        if(isWH){ sx=A.sh.x*0.4; sy=1.40; sz=0.50; } else { sx=A.sh.x*1.05; sy=1.06; sz=0.18; }
+      } else {                                               // FISTS -> boxer guard
+        sx=sign*0.15 + A.sh.x*0.2; sy=1.54; sz=0.42;
+      }
+      tx=lerp(tx,sx,ck); ty=lerp(ty,sy,ck); tz=lerp(tz,sz,ck);
     }
     if(g>0.02){ tx=lerp(tx, sign*0.17, g); ty=lerp(ty,1.62,g); tz=lerp(tz,0.36,g); }
     if(atk){
@@ -2728,11 +2795,19 @@ function solveArmsIK(a, dt, atk){
       wg.rotation.x=damp(wg.rotation.x,0.15,22,dt); wg.rotation.y=damp(wg.rotation.y,0,22,dt); wg.rotation.z=damp(wg.rotation.z,0,22,dt);
       wg.rotation.x += (a._bite||0);   // bite: blade jolts back on contact (additive transient over the clean grip)
     } else if(u.weaponKey!=='fists'){
-      // hold the weapon PARALLEL TO THE GROUND at rest -- level, pointing forward,
-      // no twirl. Counter-rotate the weapon group against the hand's world
-      // orientation so the long axis (+z) points world-forward and flat (y=0).
-      const hq=u.armR.hand.getWorldQuaternion(_wq1);
-      _fdir.set(Math.sin(a.facing),0,Math.cos(a.facing));   // horizontal forward
+      // Counter-rotate the weapon group against the WEAPON hand's world orientation so
+      // the long axis points a chosen world direction. At REST that's level-forward
+      // (parallel to the ground); at COMBAT-READY it angles by archetype — tip-up for
+      // blades/pole (more for the greatsword), the SHIELD stays level, and the male
+      // chef's REVERSE knife grip points the blade down/back along the forearm.
+      const wh=u.arms[u.whand==null?1:u.whand].hand;
+      const hq=wh.getWorldQuaternion(_wq1);
+      const ck=a._combatK||0, fwd=Math.sin(a.facing), fz=Math.cos(a.facing);
+      let up=0;
+      if(u.weaponKey==='knife' && u.grip==='reverse') up=lerp(0,-0.95,ck);   // icepick: point down
+      else if(u.weaponKey==='potlid') up=0;                                   // shield stays face-forward
+      else up=lerp(0, (u.weaponKey==='castiron'?0.7:0.5), ck);                // tip up in combat
+      _fdir.set(fwd,up,fz).normalize();
       _wq2.setFromUnitVectors(FWD, _fdir);
       wg.quaternion.copy(hq).invert().multiply(_wq2);
       wg.rotation.z += Math.sin(GAME.t*1.8 + (a._an?a._an.idle:0))*0.035;   // a little live sway
