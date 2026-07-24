@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r12</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r13</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -3726,7 +3726,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r12';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r13';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -3863,6 +3863,7 @@ function tick(){
 
   updateCamera(dt);
   updateLockUI();
+  updateWeaponTrail();
   postTick(dt);
   renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,camera);
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
@@ -3900,6 +3901,52 @@ function updateLockUI(){
   hpFillPivot.scale.x=Math.max(0.0001,frac);
   const r=Math.round(255*(frac<0.5?1:(1-frac)*2)), g=Math.round(255*(frac<0.5?0.14+frac*1.4:0.82));
   hpFill.material.color.setHex((r<<16)|(g<<8)|0x2a);        // green (full) -> red (empty)
+}
+/* ---- WEAPON SWING TRAIL: a fading ribbon that follows the blade through a
+   swing. Two points on the weapon (inner + tip) are sampled each frame while a
+   weapon swing is in its fast window; a triangle strip is rebuilt from the last
+   N samples with per-vertex brightness fading down the tail. Additive blending
+   so the dark tail reads as transparent. Player only (the camera's on them). ---- */
+const TIPZ={spatula:0.9, nonstick:0.92, castiron:0.92, knife:1.02, potlid:0.5, torch:1.45};
+const TRAIL_N=10, TRAIL_MAXV=(TRAIL_N-1)*6;
+const trailPos=new Float32Array(TRAIL_MAXV*3), trailCol=new Float32Array(TRAIL_MAXV*3);
+const trailGeo=new THREE.BufferGeometry();
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos,3));
+trailGeo.setAttribute('color', new THREE.BufferAttribute(trailCol,3));
+const trailMesh=new THREE.Mesh(trailGeo, new THREE.MeshBasicMaterial({
+  vertexColors:true, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, fog:false }));
+trailMesh.frustumCulled=false; trailMesh.renderOrder=998; trailMesh.visible=false; scene.add(trailMesh);
+const trailSamples=[]; const _tl=new V3(), _bl=new V3();
+function updateWeaponTrail(){
+  const P=player;
+  if(!P || GAME.mode!=='play'){ trailMesh.visible=false; trailSamples.length=0; return; }
+  const u=P.chef.userData, wg=u.weaponGroup, atk=P.attack;
+  const swinging = !!(atk && wg && u.weaponKey!=='fists'
+    && atk.t>=atk.wind*0.7 && atk.t < atk.wind+atk.active+atk.rec*0.55);
+  if(swinging){
+    P.chef.updateMatrixWorld(true);                       // current blade transform this frame
+    const tz=TIPZ[u.weaponKey]||0.9;
+    _tl.set(0,0.02,tz);       wg.localToWorld(_tl);
+    _bl.set(0,0.02,tz*0.35);  wg.localToWorld(_bl);
+    trailSamples.unshift({tx:_tl.x,ty:_tl.y,tz:_tl.z, ix:_bl.x,iy:_bl.y,iz:_bl.z});
+    if(trailSamples.length>TRAIL_N) trailSamples.pop();
+  } else if(trailSamples.length){ trailSamples.pop(); }    // retract when the swing ends
+  const len=trailSamples.length;
+  if(len<2){ trailMesh.visible=false; return; }
+  trailMesh.visible=true;
+  const w=WEAPONS[u.weaponKey]||{}, metal=w.metal;
+  const cr=metal?0.8:1.0, cg=metal?0.86:0.7, cb=metal?1.0:0.4;   // cool steel vs warm
+  let v=0;
+  const push=(x,y,z,b)=>{ const j=v*3; trailPos[j]=x; trailPos[j+1]=y; trailPos[j+2]=z;
+    trailCol[j]=cr*b; trailCol[j+1]=cg*b; trailCol[j+2]=cb*b; v++; };
+  for(let i=0;i<len-1;i++){ const a=trailSamples[i], b=trailSamples[i+1];
+    const ba=(1-i/(len-1)), bb=(1-(i+1)/(len-1));          // newest bright, tail fades to dark(=transparent)
+    push(a.ix,a.iy,a.iz,ba); push(a.tx,a.ty,a.tz,ba); push(b.tx,b.ty,b.tz,bb);
+    push(a.ix,a.iy,a.iz,ba); push(b.tx,b.ty,b.tz,bb); push(b.ix,b.iy,b.iz,bb);
+  }
+  if(trailGeo.setDrawRange) trailGeo.setDrawRange(0, v);
+  trailGeo.attributes.position.needsUpdate=true;
+  trailGeo.attributes.color.needsUpdate=true;
 }
 const _camTgt=new V3();
 function updateCamera(dt){
