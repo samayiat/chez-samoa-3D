@@ -260,3 +260,32 @@ strafe leg-crossing inevitability (Soxware/Kubold, Unity Discussions); TPS straf
 
 **Prior:** `MOVEMENT_FEEL_RESEARCH.md` (SLIP/inverted-pendulum, Unreal/Godot/Unity hips-as-anchor
 convergence, the seven original jank findings).
+
+---
+
+## 6. Implementation status (what actually landed)
+
+Built stage-by-stage on `claude/movement-feel-research-vttyjo`, one commit each, every commit
+harness-green (`node harness.js` soak + `SCENARIO=weapon` + `node --check`). **Mechanically verified
+only** — the harness catches exceptions / NaN / non-finite IK; it stubs world transforms, so it does
+NOT validate geometry, and nothing here validates *feel*. All feel/tuning needs eyes on `/brawl/`.
+
+| Stage | Status | Notes |
+|---|---|---|
+| 0 — loop/camera | **Partial** | Camera smoothing → exponential form; harness gained a player-IK assertion. The full fixed-step + render-interpolation loop refactor is **deferred** (input double-processing hazard across sub-steps; changes combat timing; unverifiable here). |
+| 1 — COM primitive | **Done** | `updateCOM()` → `P.com` (≈60% hips / 40% chest), sampled after the pose settles. |
+| 2 — pelvis feeds IK | **Done** | Pelvis frame (yaw + roll) drives the leg hip-sockets in `solveLegsIK`; hip rotation is no longer decorative. |
+| 3 — sprint tier | **Done** | `_sprintK` adds longer stride / higher knee / more lean / wider arm pump / less bounce in the top band; additive, walk/jog unchanged. |
+| 4 — torso decouple | **Re-scoped → folded** | First tried "legs follow travel, torso twists" (model B) — reverted, because it can't produce crossover. Under the chosen **model A** (lock-on strafe) facing holds the aim and the feet strafe, so no torso-vs-hip twist is needed. |
+| 5 — strafe gait | **Done (model A)** | Locked-on lateral travel blends the stance sagittal→frontal (squared side-shuffle). Free-roam unchanged. |
+| 6 — crossover | **Done** | Knee pole tilts toward the foot's lateral offset so a midline-crossing foot doesn't invert the knee. Continuous, ~0 for normal stance. |
+| 7 — camera trails COM | **Done (minimal)** | Camera trails `P.com`'s ground position. Propagating COM/lean through the non-gait animations, and reframing lean as COM-drift-from-support, are **deferred** (feel-sensitive, unverifiable here). |
+
+**Tuning dials** (constants near the top of the CHEFS/POSE code, tune by running `/brawl/`):
+`PELVIS_YAW_WALK`, `PELVIS_YAW_RUN` (negate to flip which hip leads), `PELVIS_ROLL`, `SPRINT_LO`,
+`SPRINT_HI`, `STANCE_FRONTAL`, plus the inline sprint-emphasis factors and the crossover pole tilt
+(`*1.8`) in `solveLegsIK`.
+
+**Known unverified-by-eye risks:** pelvis-yaw phase/sign (Stage 2), whether the sprint emphasis reads
+right (Stage 3), the frontal-stance shape and how hard it blends in (Stage 5), and knee behaviour at
+extreme crossover angles (Stage 6). All are single-constant adjustments.
