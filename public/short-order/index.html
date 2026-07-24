@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r20</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r21</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1604,7 +1604,7 @@ function makePlayer(){
     facing:Math.PI, movePhase:0, speed:0,
     wpn:'fists', dur:Infinity,
     attack:null, combo:0, comboStep:0, chainT:0, comboTarget:null, bufferedHeavy:null, bufferT:0,
-    drinks:0, wastedT:0, drinkCD:0, _drunk:0,
+    drinks:0, wastedT:0, drinkCD:0, _drunk:0, _drinkT:0,
     guard:false, guardV:0, parryT:0, _guardPrev:false,
     iframe:0, weaveCD:0, dodgeCD:0, dodge:null, tackle:null, tackleCD:0,
     vy:0, jumpCD:0, slam:null, slamHit:0, _air:0,   // vertical jump / air-slam state
@@ -2752,6 +2752,10 @@ function poseChef(a, isPlayer, dt){
   // ---- weight shift: lean onto the planted foot; bob with the step ----
   const idleK=a._idleK||0;
   const drunk=a._drunk||0;                              // 0 for enemies (never drink)
+  // DRINKING animation: a hump (0->1->0) over the chug; raises a hand to the mouth
+  // (solveArmsIK) and tips the head back here. Player-only.
+  a._drinkRaise = (a===player && (a._drinkT||0)>0) ? Math.sin(clamp(1-(a._drinkT/DRINK_ANIM_TIME),0,1)*Math.PI) : 0;
+  const drink=a._drinkRaise;
   AN.sway = damp(AN.sway, (a._swayTarget||0) + idleK*Math.sin(t*1.5)*0.045 + drunk*Math.sin(t*1.05)*0.06, 10, dt);
   // INVERTED-PENDULUM PELVIS: vault the body over the planted (support) foot at a
   // near-constant leg length PEND_R, so the stance leg straightens at mid-stance and
@@ -2791,6 +2795,7 @@ function poseChef(a, isPlayer, dt){
     leanZ += Math.sin(t*1.25)*0.17*drunk + Math.sin(t*0.53+2.1)*0.09*drunk;   // the hat/head follow via toque.rotation.z below
     leanX += Math.sin(t*0.9+1.3)*0.11*drunk;
   }
+  if(drink>0.001) leanX += -0.18*drink;              // tip back to down the drink
   if(a.slam) leanX += -0.24;                        // descent: torso arches back, cocking the overhead wind-up
   else if((a.slamHit||0)>0) leanX += 0.7*((a.slamHit||0)/SLAM_HIT);  // strike: fold forward hard, driving the pound down on contact
   else if(air>0.1) leanX += -0.12*air;              // jump: a slight tuck-back on the rise
@@ -2842,7 +2847,7 @@ function poseChef(a, isPlayer, dt){
   u.toque.rotation.x = AN.toqueX*0.5 + 0.02*Math.sin(t*2.1);
   u.toque.rotation.z = -b.rotation.z*0.5 + AN.toqueZ*0.4;                 // hat leads the body's roll
   u.head.rotation.z = damp(u.head.rotation.z, AN.toqueZ*0.8, 16, dt);    // head whiplashes sideways
-  u.head.rotation.x = damp(u.head.rotation.x, AN.rx*0.6 + AN.toqueX*0.35 - (a.hurt>0.3?0.2*a.hurt:0) + (a._runK||0)*0.32, 14, dt);
+  u.head.rotation.x = damp(u.head.rotation.x, AN.rx*0.6 + AN.toqueX*0.35 - (a.hurt>0.3?0.2*a.hurt:0) + (a._runK||0)*0.32 - (a._drinkRaise||0)*0.6, 14, dt);   // chin up to drink
 
   // ---- solve the limbs with IK ----
   solveLegsIK(a, b);
@@ -3122,7 +3127,10 @@ function solveArmsIK(a, dt, atk){
       tx=A.sh.x*0.5+sign*0.02; ty=1.30; tz=0.66;
       if(i===WHAND){ tx=lerp(tx,sign*0.06,jb); ty=lerp(1.30,1.42,jb); tz=lerp(0.66,1.14,jb); }
     }
+    const drk=a._drinkRaise||0;                                 // DRINKING: raise the weapon hand to the mouth
+    if(drk>0.001 && i===WHAND && !a.hold){ tx=lerp(tx, sign*0.05, drk); ty=lerp(ty, 1.66, drk); tz=lerp(tz, 0.30, drk); }
     const rate = (a===player&&a.hold) ? (a._holdJab>0?34:16)
+               : drk>0.001 ? 26
                : (a.slam||atk&&isActive) ? 34 : (slamHit>0?40 : (run>0.3?24:14));
     A.tgt.x=damp(A.tgt.x,tx,rate,dt); A.tgt.y=damp(A.tgt.y,ty,rate,dt); A.tgt.z=damp(A.tgt.z,tz,rate,dt);
     if(a.slam){ _bnd2.set(sign*0.95, 0.5, -0.55); }                // overhead cock: elbows splay out and back into a wide V
@@ -3448,11 +3456,12 @@ const PARRY_WINDOW=0.2;   // seconds after a fresh guard tap that an incoming hi
 // are, the harder you hit -- but the room swims (camera + pose sway) and your feet
 // wander (movement drift). player._drunk is the 0..1 source of truth every drunk
 // visual/feel reads (ported from the 2D game's wastedAmt). ----
-const DRINK_BUZZ_AT=2, DRINK_WASTED_AT=4, WASTED_TIME=14, DRINK_CD=0.5;
-function atBar(P){ return Math.abs(P.pos.x-BAR.x)<BAR.w/2+0.4 && Math.abs(P.pos.z-BAR.z)<BAR.d/2+1.5; }
+const DRINK_BUZZ_AT=2, DRINK_WASTED_AT=4, WASTED_TIME=14, DRINK_CD=0.7, DRINK_ANIM_TIME=0.7;
+// generous zone in FRONT of the bar so you don't have to hunt for the exact spot
+function atBar(P){ return Math.abs(P.pos.x-BAR.x)<BAR.w/2+1.4 && Math.abs(P.pos.z-BAR.z)<BAR.d/2+3.0; }
 function chugDrink(P){
   if((P.drinkCD||0)>0) return;
-  P.drinks=(P.drinks||0)+1; P.wastedT=WASTED_TIME; P.drinkCD=DRINK_CD; P._sq=Math.max(P._sq||0,0.22);
+  P.drinks=(P.drinks||0)+1; P.wastedT=WASTED_TIME; P.drinkCD=DRINK_CD; P._drinkT=DRINK_ANIM_TIME; P._sq=Math.max(P._sq||0,0.18);
   const hp=P.pos.clone(); hp.y=1.65;
   const lvl=P.drinks>=DRINK_WASTED_AT?'WASTED':P.drinks>=DRINK_BUZZ_AT?'BUZZED':'SIP';
   const col=P.drinks>=DRINK_WASTED_AT?'#ff6a9a':P.drinks>=DRINK_BUZZ_AT?'#ffd23d':'#bfe0ff';
@@ -3461,6 +3470,7 @@ function chugDrink(P){
 }
 function updateDrunk(P,dt){
   if(P.drinkCD>0) P.drinkCD-=dt;
+  if(P._drinkT>0) P._drinkT-=dt;                                 // drinking-animation clock
   if(P.wastedT>0){ P.wastedT-=dt; if(P.wastedT<=0){ P.wastedT=0; P.drinks=0; } }   // the window lapses -> sober up
   const depth=clamp((P.drinks||0)/DRINK_WASTED_AT,0,1), fade=clamp((P.wastedT||0)/3,0,1);
   P._drunk=damp(P._drunk||0, depth*fade, 2.2, dt);
@@ -3915,7 +3925,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r20';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r21';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
