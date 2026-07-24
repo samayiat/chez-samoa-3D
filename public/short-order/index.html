@@ -217,7 +217,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r7</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r8</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -2805,6 +2805,21 @@ function updateFeet(a, dt, moving){
   }
   a._swayTarget = stepPhase>=0 ? (whichFoot===0? 0.09 : -0.09) : 0;   // weight shifts onto the planted foot
   a._stepDip = stepPhase>=0 ? Math.sin(stepPhase*Math.PI)*0.05 : 0;    // body bobs down as the foot swings (gravity read)
+  // CONTRALATERAL ARM DRIVE: a signed fore/aft leg-swing signal (+1 = right foot
+  // ahead) that solveArmsIK reads, so the arm swing stays LOCKED to the real foot
+  // phase (opposite arm to the forward leg) instead of a free-running movePhase
+  // clock that drifts out of sync now that the legs step reactively. Smoothed so
+  // the reactive stepper's plant-snaps don't jerk the arms.
+  { const fwx=Math.sin(a.facing), fwz=Math.cos(a.facing);
+    const ff0=(legs[0].world.x-a.pos.x)*fwx + (legs[0].world.z-a.pos.z)*fwz;
+    const ff1=(legs[1].world.x-a.pos.x)*fwx + (legs[1].world.z-a.pos.z)*fwz;
+    const raw=(ff1-ff0);                                     // signed fore/aft foot split (metres); +1 = right foot ahead
+    // normalise by a slow-decaying envelope of its own peak so the arm swing keeps
+    // a full, punchy amplitude at every stride length -- while staying phase-locked
+    // to the feet (no independent clock). Decays when you slow/stop.
+    a._gaitPeak = Math.max((a._gaitPeak||0)*0.99, Math.abs(raw));
+    const norm = clamp(raw/Math.max(0.28, a._gaitPeak), -1, 1);
+    a._gaitSwing = damp(a._gaitSwing||0, norm, 20, dt); }
   // FLIGHT PHASE: at a run, both feet leave the ground between plants -- track it
   // for the ballistic hop in poseChef (phase 0..1 across the airborne window)
   const airborne = legs[0].stepT<1 && legs[1].stepT<1;
@@ -2850,6 +2865,8 @@ function solveArmsIK(a, dt, atk){
   const u=a.chef.userData;
   const spd=a.speed||0, ph=a.movePhase, g=a.guardV||0, run=a._runK||0;
   const isFist=(a.wpn==='fists');
+  const heftW=(!isFist && WEAPONS[a.wpn]) ? (WEAPONS[a.wpn].heft||0.3) : 0;   // a loaded weapon hand swings less freely
+  const gs=a._gaitSwing||0;                              // contralateral leg-swing signal (from updateFeet)
   const WHAND=(u.whand==null?1:u.whand);                 // weapon hand: 1=right (default), 0=left (male chef)
   const activeHand = atk ? ((isFist && atk.A.shape && atk.A.shape.hand!=null) ? atk.A.shape.hand : WHAND) : -1;
   for(let i=0;i<2;i++){
@@ -2876,7 +2893,10 @@ function solveArmsIK(a, dt, atk){
       // so |hand-shoulder| stays ~R across the cycle and the elbow holds ONE
       // bend -- instead of the old depth-only pump that yo-yo'd the radius and
       // folded the forearm up behind the back on the backswing.
-      const s=Math.sin(ph + (i===0?0:Math.PI));   // -1 back .. +1 forward
+      // contralateral: the arm OPPOSITE the forward leg leads (arm0=left leads when
+      // the right foot is ahead). Locked to the real foot phase, not a free clock.
+      let s = (i===0? gs : -gs);                  // -1 back .. +1 forward
+      if(i===WHAND) s *= (1 - Math.min(0.5, heftW*0.5));   // heavy weapon: the carrying arm pumps less
       const R=0.52 + Math.min(0.10, spd*0.02) + (a._sprintK||0)*0.06;    // radius grows with pace; sprint pumps wider
       const th=s*(0.85+(a._sprintK||0)*0.22);      // swing angle ~+/-49deg; bigger arm drive at sprint
       // point on the R-circle about the shoulder (down = -y, forward = +z), then
@@ -2889,8 +2909,10 @@ function solveArmsIK(a, dt, atk){
       const rty=1.54 + (dz0*Math.sin(tl) + dy0*Math.cos(tl));
       tx=lerp(tx,rtx,run); ty=lerp(ty,rty,run); tz=lerp(tz,rtz,run);
     } else if(spd>0.6 && !atk && g<0.1){ const sw=Math.min(1,spd/4);
-      // WALK: same pendulum, gentler -- a small tilted arc about the shoulder
-      const s=Math.sin(ph + (i===0?0:Math.PI)), R=0.42, th=s*0.5*sw, tl=0.2;
+      // WALK: same pendulum, gentler -- a small tilted arc about the shoulder,
+      // contralateral to the legs (leg-locked signal, weapon hand damped by heft)
+      let s = (i===0? gs : -gs); if(i===WHAND) s *= (1 - Math.min(0.5, heftW*0.5));
+      const R=0.42, th=s*0.5*sw, tl=0.2;
       const dz0=R*Math.sin(th), dy0=-R*Math.cos(th);
       tx=lerp(tx, A.sh.x + sign*0.04, sw*0.5);
       ty=lerp(ty, 1.54 + (dz0*Math.sin(tl) + dy0*Math.cos(tl)), sw*0.6);
@@ -3620,7 +3642,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r7';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r8';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
