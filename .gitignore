@@ -16,8 +16,12 @@ extracted/
 *.local
 public/short-order/game.js
 
-# Local Claude Code preview config
-.claude/
+# Local Claude Code preview config (keep local state out, but track the
+# committed SessionStart hook that installs the img2threejs skill)
+.claude/*
+!.claude/settings.json
+!.claude/hooks
+!.claude/hooks/**
 
 # Editor directories and files
 .vscode/*
