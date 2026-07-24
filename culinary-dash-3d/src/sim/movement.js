@@ -30,19 +30,32 @@ export function resolveCollision(ent, obstacles, r = CHEF.r) {
   ent.y = CLAMP(ent.y, r, WORLD.h - r);
 }
 
+// Move `cur` toward `target` at a rate that closes the gap in `time` seconds
+// (frame-rate independent, never overshoots).
+const approach = (cur, target, dt, time) => {
+  const maxDelta = (Math.abs(target - cur) / Math.max(time, 1e-4)) * dt;
+  const diff = target - cur;
+  return Math.abs(diff) <= maxDelta ? target : cur + Math.sign(diff) * maxDelta;
+};
+
 // Analog movement for the chef. `speed` lets combat slow/root; `faceLock` keeps
-// the current facing (used mid-punch so a swing commits to its direction).
+// the current facing (used mid-punch so a swing commits to its direction) AND
+// snaps velocity instantly instead of easing — dodges/lunges/the post-swing
+// stop all need frame-exact distance, not a ramp eating into their duration.
 export function moveChef(state, dt, mx, my, speed = CHEF.speed, faceLock = false) {
   const chef = state.chef;
   const quick = (state.mods && state.mods.speed) || 1;   // Quick Feet (the shop)
   const mag = Math.hypot(mx, my);
   if (mag > 1) { mx /= mag; my /= mag; }
-  if (mag > 0.001) {
-    chef.vx = mx * speed * quick;
-    chef.vy = my * speed * quick;
-    if (!faceLock) chef.facing = Math.atan2(mx, -my);
+  const targetVx = mag > 0.001 ? mx * speed * quick : 0;
+  const targetVy = mag > 0.001 ? my * speed * quick : 0;
+  if (faceLock) {
+    chef.vx = targetVx; chef.vy = targetVy;
   } else {
-    chef.vx = 0; chef.vy = 0;
+    const time = mag > 0.001 ? CHEF.accelTime : CHEF.decelTime;
+    chef.vx = approach(chef.vx, targetVx, dt, time);
+    chef.vy = approach(chef.vy, targetVy, dt, time);
+    if (mag > 0.001) chef.facing = Math.atan2(mx, -my);
   }
   chef.x += chef.vx * dt;
   chef.y += chef.vy * dt;

@@ -65,6 +65,8 @@ export const TABLE_R = 8;   // solid radius, px (src line 578)
 export const CHEF = {
   r: 6,               // collision radius, px
   speed: 156,         // px/s — doubled: the bigger floor needs a chef who MOVES
+  accelTime: 0.07,    // s to reach top speed from a stop — starting the snap
+  decelTime: 0.10,    // s to coast to a stop from top speed — a touch of glide
 };
 
 // --- Service timing (ported: src lines 1348-1354) --------------------------
