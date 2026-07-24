@@ -1042,6 +1042,12 @@ const UP=new V3(0,1,0), FWD=new V3(0,0,1);
 const THIGH=0.52, SHIN=0.52, ARM_U=0.40, ARM_F=0.40;
 const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
 const KNEE_FWD=new V3(0,0,1);                        // knees break forward
+// PELVIS FRAME tuning (Stage 2, MOVEMENT_OVERHAUL_PLAN.md): transverse-yaw amplitude
+// at walk vs run (radians; ~4deg -> ~13deg) and frontal-roll ("hip drop") amplitude
+// (radians, ~5deg). NEGATE the yaw consts to flip which hip leads the swing (a
+// by-eye tuning call this environment can't make). Fed to BOTH the visible pelvis
+// and the leg hip-sockets so pelvic rotation drives the legs, not just the mesh.
+const PELVIS_YAW_WALK=0.07, PELVIS_YAW_RUN=0.22, PELVIS_ROLL=0.09;
 /* combo cycle: distinct swing shapes so a chain reads as jab->cross->hook, not
    the same swing on repeat. each is a windup point s and a strike point e in
    upper-local space (weapon hand), an elbow pole `bend`, body coil/follow twist,
@@ -2589,7 +2595,16 @@ function poseChef(a, isPlayer, dt){
   }
   AN.twist = damp(AN.twist, twist, atk?26:9, dt);
   up.rotation.y = AN.twist;
-  u.hips.rotation.y = damp(u.hips.rotation.y, -AN.twist*0.35, 12, dt);
+  // PELVIS FRAME: a real transverse yaw + frontal roll, phase-locked to the gait
+  // and speed-scaled. Applied here to the visible pelvis AND (in solveLegsIK) to
+  // the leg hip-sockets, so the rotation drives the legs instead of being the old
+  // decorative counter-twist. The shoulders still counter-rotate (up.rotation.y
+  // above), giving the real pelvis-vs-shoulder counter-rotation of a gait.
+  { const gk = moving ? Math.min(1, spd/5) : 0;
+    a._pelvisYaw  = Math.sin(ph) * lerp(PELVIS_YAW_WALK, PELVIS_YAW_RUN, a._runK||0) * gk;
+    a._pelvisRoll = Math.sin(ph) * PELVIS_ROLL * gk; }
+  u.hips.rotation.y = damp(u.hips.rotation.y, a._pelvisYaw, 14, dt);
+  u.hips.rotation.z = damp(u.hips.rotation.z, a._pelvisRoll, 14, dt);
 
   // ---- toque secondary motion + head whiplash ----
   AN.toqueXv += (-80*AN.toqueX - 12*AN.toqueXv)*dt; AN.toqueX += AN.toqueXv*dt;
@@ -2676,7 +2691,15 @@ function solveLegsIK(a, b){
   const c=Math.cos(a.facing), s=Math.sin(a.facing);
   for(let i=0;i<2;i++){
     const L=legs[i];
-    _hipV.set(L.hip.x + b.position.x*0.5, L.hip.y + b.position.y, L.hip.z + b.position.z*0.5);
+    // hip socket transformed through the pelvis frame (yaw about Y + frontal roll)
+    // so the leg roots ride the rotating/rolling pelvis. This is what makes pelvic
+    // rotation actually drive the legs -- the socket was a fixed offset before,
+    // which is exactly why hip rotation used to be purely decorative. Bones stay
+    // length-locked (solveTwoBone always draws them at THIGH/SHIN); only the socket
+    // origin moves, never a bone length.
+    const py=a._pelvisYaw||0, pr=a._pelvisRoll||0, cy=Math.cos(py), sy=Math.sin(py);
+    const hrx=L.hip.x*cy - L.hip.z*sy, hrz=L.hip.x*sy + L.hip.z*cy;
+    _hipV.set(hrx + b.position.x*0.5, L.hip.y - Math.sin(pr)*hrx + b.position.y, hrz + b.position.z*0.5);
     // world planted foot -> root-LOCAL (undo pos, yaw, AND the root's scale)
     const dx=L.world.x-a.pos.x, dz=L.world.z-a.pos.z;
     _footV.set((dx*c - dz*s)*inv, L.world.y*inv + 0.055, (dx*s + dz*c)*inv);
