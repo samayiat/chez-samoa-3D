@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r13</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r14</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -3726,7 +3726,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r13';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r14';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -3869,12 +3869,9 @@ function tick(){
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 
-/* ---- LOCK-ON INDICATOR: a camera-facing white ring "border" around the locked
-   enemy + a floating health bar above them. Overlay materials (depthTest off,
-   high renderOrder) so they read on top of the body; shown only while locked. ---- */
-const lockRing=new THREE.Mesh(new THREE.RingGeometry(0.86,1.0,40),
-  new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.9, side:THREE.DoubleSide, depthTest:false, depthWrite:false, fog:false}));
-lockRing.renderOrder=999; lockRing.visible=false; scene.add(lockRing);
+/* ---- LOCK-ON INDICATOR: a floating health bar above the locked enemy. Overlay
+   materials (depthTest off, high renderOrder) so they read on top of the body;
+   shown only while locked. ---- */
 const HPW=1.15, HPH=0.14;
 const hpBar=new THREE.Group(); hpBar.visible=false; scene.add(hpBar);
 const hpBg=new THREE.Mesh(new THREE.PlaneGeometry(HPW+0.07,HPH+0.07),
@@ -3887,14 +3884,10 @@ hpFill.position.set(HPW/2,0,0); hpFill.renderOrder=1000; hpFillPivot.add(hpFill)
 function updateLockUI(){
   const P=player, e=P&&P.lockOn;
   const on=!!(e && !e.dead && GAME.mode==='play');
-  lockRing.visible=on; hpBar.visible=on;
+  hpBar.visible=on;
   if(!on) return;
   const s=e.chef.scale.x||1;
   const cx=e.com?e.com.x:e.pos.x, cz=e.com?e.com.z:e.pos.z;
-  const pulse=1+Math.sin(GAME.t*6)*0.05;
-  lockRing.position.set(cx, 1.35*s, cz);
-  lockRing.quaternion.copy(camera.quaternion);
-  lockRing.scale.set(0.9*s*pulse, 1.45*s*pulse, 1);         // vertical oval framing the standing figure
   const frac=clamp(e.hp/(e.hpMax||1),0,1);
   hpBar.position.set(cx, 2.72*s, cz);
   hpBar.quaternion.copy(camera.quaternion);
