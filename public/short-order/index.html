@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r19</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r20</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1604,6 +1604,7 @@ function makePlayer(){
     facing:Math.PI, movePhase:0, speed:0,
     wpn:'fists', dur:Infinity,
     attack:null, combo:0, comboStep:0, chainT:0, comboTarget:null, bufferedHeavy:null, bufferT:0,
+    drinks:0, wastedT:0, drinkCD:0, _drunk:0,
     guard:false, guardV:0, parryT:0, _guardPrev:false,
     iframe:0, weaveCD:0, dodgeCD:0, dodge:null, tackle:null, tackleCD:0,
     vy:0, jumpCD:0, slam:null, slamHit:0, _air:0,   // vertical jump / air-slam state
@@ -1937,7 +1938,7 @@ function attackDrive(a){
 function resolveHit(A, isPlayer){
   const w=WEAPONS[A.attack.wpn], heavy=A.attack.heavy;
   const reach=w.reach + (isPlayer?0.25:0.1);
-  const dmg=(heavy?w.heavy:w.light) * (isPlayer? (1+Math.min(GAME.combo,8)*0.03) : 1);
+  const dmg=(heavy?w.heavy:w.light) * (isPlayer? (1+Math.min(GAME.combo,8)*0.03)*(1+0.45*(player._drunk||0)) : 1);   // drunk hits harder
   const facing=A.facing;
   const origin=A.pos;
   let landed=false;
@@ -2175,6 +2176,7 @@ function updatePlayer(dt, pad){
   // buffered-attack lifetime + combo-target upkeep (see beginSwing / the attack integrate)
   P.bufferT=Math.max(0,(P.bufferT||0)-dt); if(P.bufferT<=0) P.bufferedHeavy=null;
   P.parryT=Math.max(0,(P.parryT||0)-dt);                         // parry window countdown
+  updateDrunk(P,dt);                                             // drink ladder + the 0..1 _drunk meter
   if(P.comboTarget && P.comboTarget.dead) P.comboTarget=null;    // the enemy we were comboing dropped -> release the lock
   P.iframe=Math.max(0,P.iframe-dt); P.stagger=Math.max(0,P.stagger-dt); P.hurt=damp(P.hurt,0,8,dt);
 
@@ -2200,6 +2202,13 @@ function updatePlayer(dt, pad){
     mv.addScaledVector(camRight, ix); mv.addScaledVector(camFwd, -iz);
   }
   if(mv.lengthSq()>1) mv.normalize();
+  // DRUNK DRIFT: your feet wander -- veer the intended heading by a slow wobble
+  // that grows with how drunk you are, so a straight input weaves down the room.
+  { const dk=P._drunk||0;
+    if(dk>0.01 && (mv.x||mv.z)){
+      const wob=(Math.sin(GAME.t*1.7)+Math.sin(GAME.t*0.9+1.3)*0.6)*0.55*dk;
+      const cs=Math.cos(wob), sn=Math.sin(wob);
+      const nx=mv.x*cs - mv.z*sn, nz=mv.x*sn + mv.z*cs; mv.x=nx; mv.z=nz; } }
   const moving=mv.lengthSq()>0.02;
 
   // camera rotate (L1/R1 unlocked)  |  target switch (locked). keyboard: [ ]
@@ -2268,6 +2277,7 @@ function updatePlayer(dt, pad){
   //                               else pick up a utensil you're standing on
   if(!P.attack && (pad.pickup||pad.rush||tapK('f')||consume('pickupEdge'))){   // no grab/throw/drop/pickup mid-swing
     if(P.hold){ throwHeld(P); }
+    else if(atBar(P)){ chugDrink(P); }                          // at the bar: GRAB = chug a drink
     else if(moving){
       let ax=mv.x, az=mv.z; const al=Math.hypot(ax,az);
       if(al>1e-3){ ax/=al; az/=al; } else { ax=Math.sin(P.facing); az=Math.cos(P.facing); }
@@ -2355,6 +2365,7 @@ function updatePlayer(dt, pad){
   if(P.guard) spd*=0.42;
   if(P.attack) spd*=0.14;
   if(P.hold) spd*=0.85;                         // hauling someone barely slows you -- you can RUN them to the rail
+  spd *= 1 - 0.28*(P._drunk||0);                // wasted = sluggish feet
   if(P.tackle){
     const T=P.tackle; T.t+=dt; const k=1-T.t/T.dur;
     if(T.rush){
@@ -2740,7 +2751,8 @@ function poseChef(a, isPlayer, dt){
 
   // ---- weight shift: lean onto the planted foot; bob with the step ----
   const idleK=a._idleK||0;
-  AN.sway = damp(AN.sway, (a._swayTarget||0) + idleK*Math.sin(t*1.5)*0.045, 10, dt);
+  const drunk=a._drunk||0;                              // 0 for enemies (never drink)
+  AN.sway = damp(AN.sway, (a._swayTarget||0) + idleK*Math.sin(t*1.5)*0.045 + drunk*Math.sin(t*1.05)*0.06, 10, dt);
   // INVERTED-PENDULUM PELVIS: vault the body over the planted (support) foot at a
   // near-constant leg length PEND_R, so the stance leg straightens at mid-stance and
   // the pelvis rises/falls (the ~5cm gait oscillation). This is what lets the legs be
@@ -2775,6 +2787,10 @@ function poseChef(a, isPlayer, dt){
   if(a.stagger>0) leanZ += Math.sin(GAME.t*30)*0.15*clamp(a.stagger,0,1);
   leanX += clamp(AN.rx,-0.9,0.9); leanZ += clamp(AN.rz,-0.85,0.85) + AN.sway*0.4;   // raised so the hit reaction reads
   leanX += leanAf; leanZ += leanAl;                                                  // tip into accel (momentum read)
+  if(drunk>0.001){                                   // DRUNK idle/walk: a lazy woozy roll + fore/aft loll
+    leanZ += Math.sin(t*1.25)*0.17*drunk + Math.sin(t*0.53+2.1)*0.09*drunk;   // the hat/head follow via toque.rotation.z below
+    leanX += Math.sin(t*0.9+1.3)*0.11*drunk;
+  }
   if(a.slam) leanX += -0.24;                        // descent: torso arches back, cocking the overhead wind-up
   else if((a.slamHit||0)>0) leanX += 0.7*((a.slamHit||0)/SLAM_HIT);  // strike: fold forward hard, driving the pound down on contact
   else if(air>0.1) leanX += -0.12*air;              // jump: a slight tuck-back on the rise
@@ -3428,6 +3444,27 @@ function tackleEnemy(P,e){
    clean hit and by the tackle) IS the off-balance gate. */
 const GRAB_REACH=1.9, GRAB_HOLD_MAX=2.6, THROW_RANGE=3.4, RUSH_RANGE=6.5;
 const PARRY_WINDOW=0.2;   // seconds after a fresh guard tap that an incoming hit is parried
+// ---- DRUNK MECHANIC: chug at the bar (GRAB) to climb the ladder. The drunker you
+// are, the harder you hit -- but the room swims (camera + pose sway) and your feet
+// wander (movement drift). player._drunk is the 0..1 source of truth every drunk
+// visual/feel reads (ported from the 2D game's wastedAmt). ----
+const DRINK_BUZZ_AT=2, DRINK_WASTED_AT=4, WASTED_TIME=14, DRINK_CD=0.5;
+function atBar(P){ return Math.abs(P.pos.x-BAR.x)<BAR.w/2+0.4 && Math.abs(P.pos.z-BAR.z)<BAR.d/2+1.5; }
+function chugDrink(P){
+  if((P.drinkCD||0)>0) return;
+  P.drinks=(P.drinks||0)+1; P.wastedT=WASTED_TIME; P.drinkCD=DRINK_CD; P._sq=Math.max(P._sq||0,0.22);
+  const hp=P.pos.clone(); hp.y=1.65;
+  const lvl=P.drinks>=DRINK_WASTED_AT?'WASTED':P.drinks>=DRINK_BUZZ_AT?'BUZZED':'SIP';
+  const col=P.drinks>=DRINK_WASTED_AT?'#ff6a9a':P.drinks>=DRINK_BUZZ_AT?'#ffd23d':'#bfe0ff';
+  popWord(hp, lvl+' ×'+P.drinks, col, 24);
+  const r=P.pos.clone(); r.y=0.06; ring(r,0xffd23d,0.6); if(AC) sfx.pickup(); haptic(0.4,0.3,60);
+}
+function updateDrunk(P,dt){
+  if(P.drinkCD>0) P.drinkCD-=dt;
+  if(P.wastedT>0){ P.wastedT-=dt; if(P.wastedT<=0){ P.wastedT=0; P.drinks=0; } }   // the window lapses -> sober up
+  const depth=clamp((P.drinks||0)/DRINK_WASTED_AT,0,1), fade=clamp((P.wastedT||0)/3,0,1);
+  P._drunk=damp(P._drunk||0, depth*fade, 2.2, dt);
+}
 // GRABBABLE: anyone NOT mid-swing, OR a heavy (tough) patron -- the big guys can
 // be grabbed even out of their wind-up. (Replaces the old "must be staggered".)
 function canGrab(e){ return e && !e.dead && e.state!=='held' && (!e.attack || e.kind==='tough'); }
@@ -3841,6 +3878,7 @@ function startNight(cfg, onEnd){
   player.wpn=cfg.player&&cfg.player.wpn||'fists'; player.dur=WEAPONS[player.wpn].dur; equip(player.chef,player.wpn);
   player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null;
   player.comboTarget=null; player.bufferedHeavy=null; player.bufferT=0;
+  player.drinks=0; player.wastedT=0; player.drinkCD=0; player._drunk=0;   // start each night sober
   player.grabbed=null; hideMashUI(); grabCD=0; player.tackle=null; player.tackleCD=0;
   player.hold=null; player.grabCD=0; player.steal=null; player.slam=null; player.vy=0; player.pos.y=0; hideMashUI();
   resetRagPose(player);
@@ -3877,7 +3915,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r19';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r20';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4149,11 +4187,18 @@ function updateCamera(dt){
   camera.position.x+=(Math.random()-0.5)*s*0.7;
   camera.position.y+=(Math.random()-0.5)*s*0.55;
   camera.position.z+=(Math.random()-0.5)*s*0.7;
+  // DRUNK: the room swims -- a slow woozy drift on the lens + aim, and a lazy roll
+  const dk=P?(P._drunk||0):0, gt=GAME.t;
+  if(dk>0.01){
+    camera.position.x += Math.sin(gt*0.9)*0.16*dk;
+    camera.position.y += Math.sin(gt*1.3+1.1)*0.09*dk;
+  }
   CAM.look.lerp(look, 1-Math.exp(-9*dt));
   _shl.copy(CAM.look);
   _shl.x+=(Math.random()-0.5)*s*0.28; _shl.y+=(Math.random()-0.5)*s*0.24;   // jitter the aim too — reads as a harder hit
+  if(dk>0.01){ _shl.x+=Math.sin(gt*0.7+2.0)*0.55*dk; _shl.z+=Math.cos(gt*0.6)*0.55*dk; }
   camera.lookAt(_shl);
-  camera.rotation.z+=(Math.random()-0.5)*s*0.095;
+  camera.rotation.z+=(Math.random()-0.5)*s*0.095 + Math.sin(gt*0.8)*0.045*dk;   // slow drunken roll
   camera.fov=lerp(camera.fov, 55 - 9*k + s*5, 1-Math.exp(-7*dt));   // zoom in on lock (tighter)
   camera.updateProjectionMatrix();
 }
