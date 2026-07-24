@@ -1059,7 +1059,11 @@ const PEND_R=1.0, FOOT_Y=0.055;
 // SWING_KNEE_MAX degrees at mid-swing, then extends toward SWING_KNEE_MIN at the
 // plant. We drive the foot's distance-from-hip to the leg span for that knee angle,
 // so the knee visibly ARTICULATES (bend-and-extend) instead of a stiff slide.
-const LEGLEN=THIGH+SHIN, SWING_KNEE_MIN=20, SWING_KNEE_MAX=62;
+const LEGLEN=THIGH+SHIN, SWING_KNEE_MIN=18;
+// Swing-phase mid-swing knee flexion, from the gait research: ~60deg walking, rising
+// to ~100deg running and ~115deg at sprint (the high knee drive). Speed-scaled below
+// via _runK / _sprintK. (Biomechanics: race-walk ~60, distance run ~100-125 at mid-swing.)
+const SWING_KNEE_WALK=60, SWING_KNEE_RUN=100, SWING_KNEE_SPRINT=115;
 const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
 // FRONTAL stance (Stage 5): squared, wider side-by-side feet for lateral strafing,
 // blended in by how sideways the travel is relative to the aim (latFrac). Pelvis
@@ -1071,7 +1075,7 @@ const KNEE_FWD=new V3(0,0,1);                        // knees break forward
 // (radians, ~5deg). NEGATE the yaw consts to flip which hip leads the swing (a
 // by-eye tuning call this environment can't make). Fed to BOTH the visible pelvis
 // and the leg hip-sockets so pelvic rotation drives the legs, not just the mesh.
-const PELVIS_YAW_WALK=0.07, PELVIS_YAW_RUN=0.22, PELVIS_ROLL=0.09;
+const PELVIS_YAW_WALK=0.07, PELVIS_YAW_RUN=0.30, PELVIS_ROLL=0.09;   // ~4deg walk -> ~17deg run (research: 15-20deg/stride at faster running)
 // SPRINT tier band (Stage 3): _sprintK ramps 0->1 across [SPRINT_LO, SPRINT_HI]
 // (game units; base run speed is 6.7) to drive sprint-specific emphasis on top of
 // the run blend, which saturated at ~85% of top speed and left jog/sprint identical.
@@ -2743,7 +2747,8 @@ function updateFeet(a, dt, moving){
       // visibly bends and extends every step (animated), while the foot still lands
       // at L.to, keeping planting/direction/strafe IK-correct and skate-free.
       const flex=Math.sin(tt*Math.PI);
-      const kneeDeg=SWING_KNEE_MIN + (SWING_KNEE_MAX-SWING_KNEE_MIN)*Math.pow(flex,0.7);
+      const kneeMax=SWING_KNEE_WALK + (SWING_KNEE_RUN-SWING_KNEE_WALK)*(a._runK||0) + (SWING_KNEE_SPRINT-SWING_KNEE_RUN)*(a._sprintK||0);
+      const kneeDeg=SWING_KNEE_MIN + (kneeMax-SWING_KNEE_MIN)*Math.pow(flex,0.7);
       const span=LEGLEN*Math.cos(kneeDeg*Math.PI/360);
       const c2=Math.cos(a.facing), s2=Math.sin(a.facing);
       const hipWX=a.pos.x + L.hip.x*c2, hipWZ=a.pos.z - L.hip.x*s2, hipWY=(a._hipY!=null? a._hipY : LEG_HIP_Y);
