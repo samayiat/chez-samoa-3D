@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r17</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r18</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1967,12 +1967,9 @@ function resolveHit(A, isPlayer){
     if(!isPlayer && (player.iframe>0)) { taken=0; blocked=false; continue; }
     if(parried){
       // PARRY: no damage (Invariant #3 -- adds no damage door); deflect the blow
-      // and leave the attacker WIDE OPEN for a counter (long stagger, cancelled
-      // swing, knocked back). The reward is the punish window, not chip damage.
-      A.attack=null; A.stagger=Math.max(A.stagger,1.4); A.state='engage'; A.stateT=0.3;
-      if(A.hasToken){ A.hasToken=false; tokensUsed--; }
+      // and put the attacker on the DECK -- a clean parry is a hard counter opening.
       const pang=Math.atan2(A.pos.x-player.pos.x, A.pos.z-player.pos.z);
-      A.vel.x=Math.sin(pang)*7; A.vel.z=Math.cos(pang)*7; applyImpact(A, pang, 1.6);
+      knockDown(A, pang, 1.1); applyImpact(A, pang, 1.6);
       player.iframe=Math.max(player.iframe,0.35); player.parryT=0;   // consume the window
       const cp=new V3(lerp(origin.x,player.pos.x,0.5),1.4,lerp(origin.z,player.pos.z,0.5));
       hitstop(0.14); shake(0.5); impactFrames(3,0xbfe0ff,0x0a1420); hitPost(0.75,0x7fb2d6);
@@ -1980,6 +1977,7 @@ function resolveHit(A, isPlayer){
       popWord(cp,'PARRY!','#bfe0ff',30);
       continue;
     }
+    const preStag=T.stagger;                                      // reeling already? (for the heavy knockdown)
     T.hp-=taken;
     T.hurt=1;
     // knockback
@@ -2000,6 +1998,9 @@ function resolveHit(A, isPlayer){
     // is a reasonable body/head split; a tuning dial -- could read the attacker
     // swing shape's strike-Y for a per-swing height later)
     applyImpact(T, ang, (heavy?1.4:0.85)*(blocked?0.4:1)*Emul, 1.4, weight);
+    // HEAVY KNOCKDOWN: a decisive heavy blow floors them -- a hefty weapon on its
+    // own, or any heavy that follows up an already-reeling foe. Not on a kill/block.
+    if(isPlayer && heavy && !blocked && T.hp>0 && (weight>0.6 || preStag>0.45)) knockDown(T, ang, 1.1);
     // weapon BITE: the attacker's blade jolts back on contact instead of sailing
     // through -- a short recoil kick on the weaponGroup (integrated in poseChef)
     if(!blocked){ A._biteV = (A._biteV||0) - (0.7 + weight*1.5); }
@@ -2472,6 +2473,8 @@ function updateEnemy(e, dt){
     e.attack=null; if(e.hasToken){ e.hasToken=false; tokensUsed--; }
     if(player.grabbed && player.grabbed.by===e){ player.grabbed=null; hideMashUI(); }
     const rising = e.down<0.45;                                 // last stretch: get back up
+    if(rising && !e._roseCue){ e._roseCue=true;                 // TELEGRAPH: they're getting up (last chance to combo)
+      const cp=e.pos.clone(); cp.y=0.5; ring(cp,0xffd23d,0.9); burst(cp,5,0xffd23d,0.7); if(AC) sfx.step(); }
     e._downK = damp(e._downK||0, rising?0:1, rising?7:16, dt);
     e.chef.position.copy(e.pos); e.chef.rotation.y=e.facing;
     knockdownPose(e,dt);
@@ -3553,6 +3556,16 @@ function throwContext(P){
   }
   return { mode:'throw', x:P.pos.x+fx*THROW_RANGE, z:P.pos.z+fz*THROW_RANGE, ang:P.facing };
 }
+// KNOCK an enemy to the deck (non-lethal): sets the prone timer + a shove away.
+// Shared by the shove, a clean parry, and a decisive heavy hit. updateEnemy's
+// knockdown branch drives the prone pose + getup.
+function knockDown(e, ang, time){
+  if(!e || e.dead) return;
+  e.down=time||1.3; e._downK=0; e._roseCue=false; e.state='engage'; e.stateT=0.2; e.attack=null;
+  if(e.hasToken){ e.hasToken=false; tokensUsed--; }
+  e.vel.x=Math.sin(ang)*6; e.vel.z=Math.cos(ang)*6;
+  if(player.grabbed && player.grabbed.by===e){ player.grabbed=null; hideMashUI(); }
+}
 // JAB the patron you're holding: a quick free-hand punch, damage + juice, keeps
 // the grip. Repeatable on a short cadence; a lethal jab drops them out of the hold.
 function grabJab(P){
@@ -3577,9 +3590,7 @@ function grabShove(P){
   shake(0.7); hitstop(0.12); impactFrames(3,0xff8a3a,0x140c07); hitPost(0.7,0xff8a3a);
   burst(cp,16,0xffb060,1.4); ring(cp,COL.flame,1.3); if(AC) sfx.thud(0.9); haptic(0.8,0.6,180);
   if(e.hp<=0){ killChef(e, ang); }
-  else { e.down=1.3; e._downK=0; e.state='engage'; e.stateT=0.2;   // KNOCKED DOWN: they hit the deck, then get up
-    e.vel.x=Math.sin(ang)*6; e.vel.z=Math.cos(ang)*6; e.attack=null;
-    if(e.hasToken){ e.hasToken=false; tokensUsed--; } }
+  else knockDown(e, ang, 1.3);                                     // KNOCKED DOWN: they hit the deck, then get up
   popWord(cp,'SHOVED!','#ff8a3a',28);
 }
 function throwHeld(P){
@@ -3843,7 +3854,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r17';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r18';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
