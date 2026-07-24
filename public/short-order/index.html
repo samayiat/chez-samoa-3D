@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r18</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r19</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -790,10 +790,33 @@ const BAR={ x:0, z:-HALFD+1.1, w:8, d:1.5 };
   body.position.y=0.58; body.castShadow=body.receiveShadow=true; g.add(body);
   const top=new THREE.Mesh(new THREE.BoxGeometry(BAR.w+0.2,0.12,BAR.d+0.1),
     new THREE.MeshStandardMaterial({color:0xd8cbb0,roughness:.55})); top.position.y=1.2; top.castShadow=true; g.add(top);
-  for(let i=0;i<6;i++){
-    const bottle=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,0.36,8),
-      new THREE.MeshStandardMaterial({color:0x7a4e2e,roughness:.4,emissive:0x2a1408,emissiveIntensity:.5}));
-    bottle.position.set(-BAR.w/2+0.6+i*(BAR.w-1.2)/5,1.44,-0.25); bottle.castShadow=true; g.add(bottle);
+  // THE LIQUOR: a lit back-bar against the wall, stocked with a full row of
+  // varied glass bottles (greens/ambers/blues/clears) that catch the light.
+  const backMat=new THREE.MeshStandardMaterial({color:0x3a2a1a,roughness:.8,flatShading:true});
+  const backPanel=new THREE.Mesh(new THREE.BoxGeometry(BAR.w-0.4,1.5,0.12),backMat);
+  backPanel.position.set(0,1.95,-BAR.d/2+0.12); g.add(backPanel);                 // cabinet backing
+  const mirror=new THREE.Mesh(new THREE.BoxGeometry(BAR.w-0.9,1.15,0.03),
+    new THREE.MeshStandardMaterial({color:0x20303a,roughness:.25,metalness:.5,emissive:0x0a151c,emissiveIntensity:.4}));
+  mirror.position.set(0,2.0,-BAR.d/2+0.19); g.add(mirror);                        // dim back mirror so bottles read
+  const shelfMat=new THREE.MeshStandardMaterial({color:0x6a4a28,roughness:.7,flatShading:true});
+  const LIQUOR=[0x2f7d46,0xb5651d,0x8a2a2a,0x2a5f92,0xcfe0e6,0xc79a3a,0x5a2a6a,0x1f8a8a];
+  function bottle(x,y,col,h){
+    const b=new THREE.Group(); b.position.set(x,y,-BAR.d/2+0.34);
+    const glass=new THREE.MeshStandardMaterial({color:col,roughness:.25,metalness:.1,emissive:col,emissiveIntensity:.35,transparent:true,opacity:.92});
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.08,h,10),glass); body.position.y=h/2; body.castShadow=true; b.add(body);
+    const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.05,0.14,8),glass); neck.position.y=h+0.06; b.add(neck);
+    return b;
+  }
+  for(let tier=0;tier<2;tier++){
+    const sy=1.42+tier*0.5;
+    const shelf=new THREE.Mesh(new THREE.BoxGeometry(BAR.w-0.6,0.05,0.34),shelfMat);
+    shelf.position.set(0,sy-0.02,-BAR.d/2+0.34); shelf.castShadow=true; g.add(shelf);
+    const n=9;
+    for(let i=0;i<n;i++){
+      const x=-BAR.w/2+0.7+i*(BAR.w-1.4)/(n-1);
+      const col=LIQUOR[(i+tier*3)%LIQUOR.length];
+      g.add(bottle(x, sy, col, 0.30+((i*7+tier*3)%4)*0.035));   // varied heights so the row isn't uniform
+    }
   }
   const stovebox=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.5,0.7),
     new THREE.MeshStandardMaterial({color:0x3a3f45,metalness:.4,roughness:.6})); stovebox.position.set(-BAR.w/2+0.9,1.5,0); g.add(stovebox);
@@ -3854,7 +3877,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r18';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r19';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
