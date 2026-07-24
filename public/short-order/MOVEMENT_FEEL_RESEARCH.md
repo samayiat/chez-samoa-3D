@@ -158,6 +158,49 @@ Sources for this section:
 [DSLIP bipedal extension / musculoskeletal robot (Frontiers)](https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2024.1296706/full),
 [SLIP two-cycle stance-phase dynamics (PMC)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6602329/).
 
+### Independent confirmation: this is literally how Unity's humanoid pipeline is built
+Checked how a shipped, industry-standard engine handles this, as a second, unrelated data point next
+to the biomechanics/SLIP research above. Unity's Mecanim isn't just similar in spirit — it makes the
+mass center a **named, first-class transform**, not an emergent side effect:
+
+- Every Humanoid rig has a **Body Transform** — Unity's own docs define it as "the mass center of the
+  character" — computed via **Muscle Space**: a human-average body-part mass distribution (the same
+  weighted-segment-mass approximation biomechanics uses), assumed consistent across any humanoid
+  character after scale adjustment.
+- **Body Orientation** is derived FROM the hips and shoulders (an average of upper/lower body
+  orientation relative to T-pose; "up" = the hips/shoulders midpoint axis, "front" = the cross product
+  of that up vector and the left/right hip-shoulder vectors) — orientation is computed from the body,
+  not assigned to one arbitrary root bone.
+- **Root Transform** — the thing that actually moves the character through the world (root motion) —
+  is a runtime projection of the Body Transform onto the ground plane. In Unity, root motion isn't a
+  separate translation system that happens to look similar to body movement; it's *literally derived
+  from the mass center's position*.
+- Muscle curves and IK goals (hands, feet) are stored **relative to the Body Transform**, not to raw
+  bone hierarchy — which is specifically what makes Mecanim's retargeting engine work across different
+  skeletons: a mass-center-relative reference frame is character-agnostic in a way bone-relative data
+  isn't.
+
+So two completely independent domains — biomechanics/robotics research (SLIP) and a shipped AAA/indie
+production engine's animation architecture (Mecanim) — converge on the identical idea: one real mass
+center, everything else (orientation, root motion, IK targets) computed relative to it. That's about
+as strong a confirmation as this diagnosis is going to get.
+
+**One important caveat from Unity's own ecosystem**, via its modern Animation Rigging package (the
+runtime IK layer built on top of Mecanim): pelvis adjustment driven off foot IK error is standard for
+**idle/stationary** poses, but practitioners explicitly warn against leaving it fully on during
+**locomotion and combat** — running and fighting animations already contain intentionally
+stretched/extended legs, and blind pelvis compensation fights the authored motion instead of
+supporting it. Applied here: a `com`-driven hip/lean system should be weighted down (or handed off
+entirely) during committed states the same way Short Order's own `ck` combat-stance blend already
+fades out during `run`/`atk`/`slam`/`tackle` — not a new problem, the file already has the pattern for
+gating a system by state, it would just need to apply to the new `com`-derived signals too.
+
+Sources: [Unity Manual — How Root Motion Works](https://docs.unity3d.com/Manual/RootMotion.html),
+[Unity Manual — Muscle setup / Avatar Muscle & Settings](https://docs.unity3d.com/Manual/MuscleDefinitions.html),
+[Unity Manual — Retarget Humanoid animations](https://docs.unity3d.com/Manual/Retargeting.html),
+[Unity Animation Rigging — Two Bone IK Constraint](https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.1/manual/constraints/TwoBoneIKConstraint.html),
+[Unity Discussions — pelvis IK setup thread](https://discussions.unity.com/t/rigging-package-how-to-setup-the-pelvis-as-ik/864784).
+
 ## Not yet fixed
 Nothing in this file has been changed. This is a diagnosis document; implementation is a separate
 step.
