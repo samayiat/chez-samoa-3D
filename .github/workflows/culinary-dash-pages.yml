@@ -58,6 +58,10 @@ jobs:
           mkdir -p site/brawl
           cp public/short-order/index.html site/brawl/index.html
           cp public/short-order/manifest.webmanifest site/brawl/manifest.webmanifest
+          # /brawltesting/ — same single-file build, second route for cache-free testing
+          mkdir -p site/brawltesting
+          cp public/short-order/index.html site/brawltesting/index.html
+          cp public/short-order/manifest.webmanifest site/brawltesting/manifest.webmanifest
           # one hub that routes to both previews at /play/
           mkdir -p site/play
           cp culinary-dash-3d/hub.html site/play/index.html
