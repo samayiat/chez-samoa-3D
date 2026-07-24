@@ -3602,7 +3602,7 @@ function updateCamera(dt){
   if(locked){
     const t=P.lockOn.pos;
     const desired=Math.atan2(t.x-P.pos.x, t.z-P.pos.z);
-    CAM.yaw=angLerp(CAM.yaw, desired, Math.min(1,dt*7));
+    CAM.yaw=angLerp(CAM.yaw, desired, 1-Math.exp(-7*dt));
     updateCameraVectors();                       // re-derive fwd/right after the swing
   }
 
@@ -3631,7 +3631,7 @@ function updateCamera(dt){
     const ne=nearestEnemy(P.pos,P.facing,null);
     if(ne){ look.lerp(new V3(ne.pos.x,1.4,ne.pos.z),0.12); }
   }
-  CAM.pos.lerp(want, Math.min(1,dt*(7+3*k)));
+  CAM.pos.lerp(want, 1-Math.exp(-(7+3*k)*dt));
   CAM.pos.x=clamp(CAM.pos.x,-mx,mx); CAM.pos.z=clamp(CAM.pos.z,-mz,mz);
   // trauma shake
   FX.trauma=Math.max(0,FX.trauma-dt*2.4);
@@ -3640,12 +3640,12 @@ function updateCamera(dt){
   camera.position.x+=(Math.random()-0.5)*s*0.7;
   camera.position.y+=(Math.random()-0.5)*s*0.55;
   camera.position.z+=(Math.random()-0.5)*s*0.7;
-  CAM.look.lerp(look, Math.min(1,dt*9));
+  CAM.look.lerp(look, 1-Math.exp(-9*dt));
   _shl.copy(CAM.look);
   _shl.x+=(Math.random()-0.5)*s*0.28; _shl.y+=(Math.random()-0.5)*s*0.24;   // jitter the aim too — reads as a harder hit
   camera.lookAt(_shl);
   camera.rotation.z+=(Math.random()-0.5)*s*0.095;
-  camera.fov=lerp(camera.fov, 55 - 7*k + s*5, Math.min(1,dt*7));   // zoom in on lock
+  camera.fov=lerp(camera.fov, 55 - 7*k + s*5, 1-Math.exp(-7*dt));   // zoom in on lock
   camera.updateProjectionMatrix();
 }
 
