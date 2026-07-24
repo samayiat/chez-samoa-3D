@@ -217,7 +217,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver">MOVEMENT BUILD r3 &middot; upright jog</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r4</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -3582,8 +3582,10 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
+const BUILD_VERSION='MOVEMENT BUILD r4';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
+  { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
   document.getElementById('card').innerHTML =
     '<div class="kick">AFTER HOURS · THE PATRONS CAME BACK, AND THEY WANT A REFUND</div>'+
     '<div class="title">SHORT<br><span class="b">ORDER</span></div>'+
@@ -3591,6 +3593,7 @@ function showTitle(){
     'a spatula, a nonstick, the cast iron if HR isn\u2019t around \u2014 and clear the line. '+
     'Everything breaks. Everything is heavy in its own way. Tips are not guaranteed.</div>'+
     '<button class="btn" id="playBtn">STEP TO THE PASS</button>'+
+    '<div style="margin-top:18px;color:#ff8a3a;letter-spacing:.14em;font-size:14px">'+BUILD_VERSION+'</div>'+
     '<div id="ctrls">'+ctrlRows()+'</div>';
   document.getElementById('playBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startNight(SLICE, onNightEnd); };
   document.getElementById('veil').classList.remove('hide');
