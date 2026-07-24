@@ -217,7 +217,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r6</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r7</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -1552,7 +1552,7 @@ function makePlayer(){
     chef, pos:new V3(0,0,4), vel:new V3(), yaw:Math.PI, hp:150, hpMax:150,   // was 100 -- too fragile, the brawl read as unfair
     facing:Math.PI, movePhase:0, speed:0,
     wpn:'fists', dur:Infinity,
-    attack:null, combo:0, comboStep:0, chainT:0,
+    attack:null, combo:0, comboStep:0, chainT:0, comboTarget:null, bufferedHeavy:null, bufferT:0,
     guard:false, guardV:0,
     iframe:0, weaveCD:0, dodgeCD:0, dodge:null, tackle:null, tackleCD:0,
     vy:0, jumpCD:0, slam:null, slamHit:0, _air:0,   // vertical jump / air-slam state
@@ -1898,6 +1898,9 @@ function resolveHit(A, isPlayer){
     ang=Math.atan2(T.pos.x-origin.x, T.pos.z-origin.z);   // reaction direction from the present instant
     // hit!
     landed=true;
+    // COMBO LOCK: the first enemy this player-combo connects with becomes the
+    // committed target for the rest of the chain (aim + step-in track it).
+    if(isPlayer && (!A.comboTarget || A.comboTarget.dead)) A.comboTarget=T;
     const cpos=new V3(lerp(origin.x,T.pos.x,0.6),1.4,lerp(origin.z,T.pos.z,0.6));
     let taken=dmg*(1 + movingIntoHit*0.35), blocked=false;   // momentum adds up to +35% (base numbers stay tuned; only committed lunges hit harder)
     if(!isPlayer && player.guard && player.guardV>0.5){
@@ -2076,6 +2079,9 @@ function updatePlayer(dt, pad){
   P.comboT=GAME.comboT; if(GAME.comboT>0){ GAME.comboT-=dt; if(GAME.comboT<=0){ GAME.combo=0;
     document.getElementById('combo').classList.remove('on'); } }
   P.weaveCD=Math.max(0,P.weaveCD-dt); P.dodgeCD=Math.max(0,P.dodgeCD-dt); P.chainT=Math.max(0,P.chainT-dt); P.tackleCD=Math.max(0,P.tackleCD-dt); P.jumpCD=Math.max(0,P.jumpCD-dt); P.slamHit=Math.max(0,P.slamHit-dt); P.grabCD=Math.max(0,P.grabCD-dt);
+  // buffered-attack lifetime + combo-target upkeep (see beginSwing / the attack integrate)
+  P.bufferT=Math.max(0,(P.bufferT||0)-dt); if(P.bufferT<=0) P.bufferedHeavy=null;
+  if(P.comboTarget && P.comboTarget.dead) P.comboTarget=null;    // the enemy we were comboing dropped -> release the lock
   P.iframe=Math.max(0,P.iframe-dt); P.stagger=Math.max(0,P.stagger-dt); P.hurt=damp(P.hurt,0,8,dt);
 
   updateCameraVectors();
@@ -2177,6 +2183,22 @@ function updatePlayer(dt, pad){
   const wantLight=pad.light||tapK('j')||MOUSE.l||consume('lightEdge'); MOUSE.l=false;
   const wantHeavy=pad.heavy||tapK('k')||MOUSE.r||consume('heavyEdge'); MOUSE.r=false;
   const airborne=P.pos.y>restY(P.pos.x,P.pos.z,P.pos.y,P.r)+0.06;   // relative to the floor OR the prop you're standing on
+  // Begin one swing of the chain. Mid-combo it STAYS committed to the enemy we
+  // locked onto (comboTarget, set on the first landed hit) so the whole combo
+  // aims and steps in at that exact enemy; a fresh swing (chain window lapsed)
+  // picks the nearest thing in front and releases the old lock until we connect.
+  function beginSwing(heavy){
+    const chaining = P.chainT>0;
+    let tgt = (chaining && P.comboTarget && !P.comboTarget.dead) ? P.comboTarget
+            : (P.lockOn||nearestEnemy(P.pos,P.facing,1.1)||nearestEnemy(P.pos,P.facing,null));
+    if(tgt){ const dx=tgt.pos.x-P.pos.x,dz=tgt.pos.z-P.pos.z; P.attackAim=Math.atan2(dx,dz); }
+    else P.attackAim=P.facing;
+    P.comboStep = chaining ? (P.comboStep+1) : 0;   // cycle the swing shape
+    if(!chaining) P.comboTarget=null;                // new chain: forget the last target until this combo connects
+    P.attack=null;
+    startAttack({ actor:P, wpn:P.wpn, heavy, target:tgt, isPlayer:true });
+    if(P.attack){ P.attack.aim=P.attackAim; P.chainT=P.attack.dur+0.4; }
+  }
   if(P.hold){ /* carrying a patron: no swings -- the GRAB button throws (handled above) */ }
   else if(wantHeavy && airborne && !P.slam && !P.attack){   // an aerial swing can't be slam-cancelled
     // HEAVY in the air = OVERHEAD SLAM. Hurl yourself down; the ground-pound
@@ -2190,30 +2212,34 @@ function updatePlayer(dt, pad){
   } else if((wantLight||wantHeavy) && !P.slam && !P.dodge && !P.tackle && P.stagger<=0){
     // LIGHT in the air = a lateral aerial swing (just a normal attack while you
     // fall); on the ground, normal light/heavy. (Heavy-in-air was caught above.)
-    // UNCANCELLABLE: a swing is a full commitment -- you can only start a new one
-    // once the current animation has completely finished (P.attack cleared at A.dur).
-    // The combo still CYCLES (chainT window below advances comboStep on the next
-    // press) -- you just can't cut a swing short.
-    const canStart = !P.attack;
-    if(canStart){
-      let tgt=P.lockOn||nearestEnemy(P.pos,P.facing,1.1)||nearestEnemy(P.pos,P.facing,null);
-      if(tgt){ const dx=tgt.pos.x-P.pos.x,dz=tgt.pos.z-P.pos.z; P.attackAim=Math.atan2(dx,dz); }
-      else P.attackAim=P.facing;
-      P.comboStep=(P.chainT>0)?(P.comboStep+1):0;   // cycle the swing shape
-      P.attack=null;                                 // clear the one we're canceling
-      startAttack({ actor:P, wpn:P.wpn, heavy:wantHeavy, target:tgt, isPlayer:true });
-      if(P.attack){ P.attack.aim=P.attackAim; P.chainT=P.attack.dur+0.4; }
-    }
+    // UNCANCELLABLE: a swing is a full commitment -- you can only START a new one
+    // once the current animation finishes. But a press mid-swing is BUFFERED and
+    // auto-fires the instant this swing ends (fluid combos without frame-perfect
+    // timing) -- accepted only past the wind-up so it queues the NEXT hit, and
+    // with a short life so a stale early tap doesn't fire.
+    if(!P.attack) beginSwing(wantHeavy);
+    else if(P.attack.t > P.attack.wind*0.5){ P.bufferedHeavy=wantHeavy; P.bufferT=0.5; }
   }
 
   // ----- integrate attack -----
   if(P.attack){
     const A=P.attack; A.t+=dt;
+    // PHYSICAL COMBO LOCK: until this swing has thrown its hit, keep re-aiming at
+    // the committed enemy as it moves (within lunge range) so the step-in and the
+    // strike track the exact enemy we're comboing -- not whoever wandered in front.
+    if(!A.hit && P.comboTarget && !P.comboTarget.dead){
+      const dx=P.comboTarget.pos.x-P.pos.x, dz=P.comboTarget.pos.z-P.pos.z;
+      if(dx*dx+dz*dz < 3.6*3.6) A.aim=Math.atan2(dx,dz);
+    }
     // snap facing to aim
     P.facing=angLerp(P.facing, A.aim!=null?A.aim:P.facing, Math.min(1,dt*18));
     if(!A.hit && A.t>=A.hitAt){ A.hit=true; P.facing=A.aim!=null?A.aim:P.facing;
       P.actorSync(); resolveHit(P,true); }
-    if(A.t>=A.dur){ P.attack=null; }
+    if(A.t>=A.dur){ P.attack=null;
+      // flush a buffered press: fire the next swing immediately (chainT still open,
+      // so it advances the combo and stays locked on comboTarget)
+      if(P.bufferedHeavy!=null && P.bufferT>0){ const h=P.bufferedHeavy; P.bufferedHeavy=null; P.bufferT=0; beginSwing(h); }
+    }
   }
 
   // ----- movement integrate -----
@@ -3557,6 +3583,7 @@ function startNight(cfg, onEnd){
   player.pos.set(ppos.x,0,ppos.z); player.vel.set(0,0,0); player.facing=pfacing; player.hp=player.hpMax; player._feet=false;
   player.wpn=cfg.player&&cfg.player.wpn||'fists'; player.dur=WEAPONS[player.wpn].dur; equip(player.chef,player.wpn);
   player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null;
+  player.comboTarget=null; player.bufferedHeavy=null; player.bufferT=0;
   player.grabbed=null; hideMashUI(); grabCD=0; player.tackle=null; player.tackleCD=0;
   player.hold=null; player.grabCD=0; player.steal=null; player.slam=null; player.vy=0; player.pos.y=0; hideMashUI();
   resetRagPose(player);
@@ -3593,7 +3620,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r6';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r7';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
