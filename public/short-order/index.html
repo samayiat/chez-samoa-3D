@@ -1054,7 +1054,12 @@ const LEG_HIP_Y=0.97;
 // dips at double support, where the legs spread widest). PEND_R is the effective
 // near-straight leg length; raise toward THIGH+SHIN (1.04) for straighter, taller
 // standing (watch the reach clamp ~1.008). FOOT_Y = planted-foot IK height. Tune by eye.
-const PEND_R=0.97, FOOT_Y=0.055;
+const PEND_R=1.0, FOOT_Y=0.055;
+// FK GAIT CYCLE (Unity-style authored swing): during swing the KNEE flexes to
+// SWING_KNEE_MAX degrees at mid-swing, then extends toward SWING_KNEE_MIN at the
+// plant. We drive the foot's distance-from-hip to the leg span for that knee angle,
+// so the knee visibly ARTICULATES (bend-and-extend) instead of a stiff slide.
+const LEGLEN=THIGH+SHIN, SWING_KNEE_MIN=20, SWING_KNEE_MAX=62;
 const STANCE=[{x:-0.19,z:0.14},{x:0.21,z:-0.12}];   // lead (left) foot forward (+z)
 // FRONTAL stance (Stage 5): squared, wider side-by-side feet for lateral strafing,
 // blended in by how sideways the travel is relative to the aim (latFrac). Pelvis
@@ -2727,8 +2732,24 @@ function updateFeet(a, dt, moving){
       }
     } else {
       L.stepT=Math.min(1, L.stepT + dt/stepDur);
-      const tt=L.stepT; L.world.lerpVectors(L.from,L.to, tt*tt*(3-2*tt));
-      L.lift=Math.sin(tt*Math.PI)*(0.16+Math.min(0.14,spd*0.03)+run*0.22+(a._sprintK||0)*0.15); L.world.y=L.lift; if(tt>=1){ L.lift=0; L.world.y=0; }  // lift the foot clearly off the floor -- a real step, not a scuff; sprint = higher knee drive
+      const tt=L.stepT;
+      // horizontal: ease from -> to (world), direction-correct so strafe/turn/plant stay right
+      const ease=tt*tt*(3-2*tt);
+      const fxp=L.from.x+(L.to.x-L.from.x)*ease, fzp=L.from.z+(L.to.z-L.from.z)*ease;
+      // AUTHORED KNEE FLEX (the FK swing): the knee flexes to SWING_KNEE_MAX at
+      // mid-swing then extends toward SWING_KNEE_MIN at the plant. We realize the
+      // authored knee angle by driving the foot's DISTANCE from the hip (= the leg
+      // span for that knee angle) and solving the foot height for it -- so the knee
+      // visibly bends and extends every step (animated), while the foot still lands
+      // at L.to, keeping planting/direction/strafe IK-correct and skate-free.
+      const flex=Math.sin(tt*Math.PI);
+      const kneeDeg=SWING_KNEE_MIN + (SWING_KNEE_MAX-SWING_KNEE_MIN)*Math.pow(flex,0.7);
+      const span=LEGLEN*Math.cos(kneeDeg*Math.PI/360);
+      const c2=Math.cos(a.facing), s2=Math.sin(a.facing);
+      const hipWX=a.pos.x + L.hip.x*c2, hipWZ=a.pos.z - L.hip.x*s2, hipWY=(a._hipY!=null? a._hipY : LEG_HIP_Y);
+      const hdx=fxp-hipWX, hdz=fzp-hipWZ;
+      const fy=Math.max(0.02, hipWY - Math.sqrt(Math.max(0.02, span*span - (hdx*hdx+hdz*hdz))));
+      L.world.set(fxp, tt>=1?0:fy, fzp);
       stepPhase=tt; whichFoot=i;
     }
   }
@@ -2760,7 +2781,7 @@ function solveLegsIK(a, b){
     // clamp foot within leg reach so the leg can never stretch thin
     const dxh=_footV.x-_hipV.x, dzh=_footV.z-_hipV.z, dyh=_footV.y-_hipV.y;
     const horiz=Math.hypot(dxh,dzh);
-    const maxH=Math.sqrt(Math.max(0.04, (THIGH+SHIN)*(THIGH+SHIN)*0.94 - dyh*dyh));
+    const maxH=Math.sqrt(Math.max(0.04, (THIGH+SHIN)*(THIGH+SHIN)*0.965 - dyh*dyh));   // 0.965: let the leg get closer to straight so the knee has room to articulate
     if(horiz>maxH){ const k=maxH/horiz; _footV.x=_hipV.x+dxh*k; _footV.z=_hipV.z+dzh*k; }
     // CROSSOVER: tilt the knee's break direction toward wherever the foot sits
     // laterally relative to its hip. A foot that crosses the body midline (a strafe
