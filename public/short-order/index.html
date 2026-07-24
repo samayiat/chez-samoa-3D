@@ -1054,7 +1054,7 @@ const LEG_HIP_Y=0.97;
 // dips at double support, where the legs spread widest). PEND_R is the effective
 // near-straight leg length; raise toward THIGH+SHIN (1.04) for straighter, taller
 // standing (watch the reach clamp ~1.008). FOOT_Y = planted-foot IK height. Tune by eye.
-const PEND_R=1.0, FOOT_Y=0.055;
+const PEND_R=1.0, FOOT_Y=0.055, VAULT_SCALE=0.7;   // VAULT_SCALE trims the pendulum COM oscillation toward the researched ~6-9cm
 // FK GAIT CYCLE (Unity-style authored swing): during swing the KNEE flexes to
 // SWING_KNEE_MAX degrees at mid-swing, then extends toward SWING_KNEE_MIN at the
 // plant. We drive the foot's distance-from-hip to the leg span for that knee angle,
@@ -1075,7 +1075,8 @@ const KNEE_FWD=new V3(0,0,1);                        // knees break forward
 // (radians, ~5deg). NEGATE the yaw consts to flip which hip leads the swing (a
 // by-eye tuning call this environment can't make). Fed to BOTH the visible pelvis
 // and the leg hip-sockets so pelvic rotation drives the legs, not just the mesh.
-const PELVIS_YAW_WALK=0.07, PELVIS_YAW_RUN=0.30, PELVIS_ROLL=0.09;   // ~4deg walk -> ~17deg run (research: 15-20deg/stride at faster running)
+const PELVIS_YAW_WALK=0.07, PELVIS_YAW_RUN=0.30;      // pelvic yaw ~4deg walk -> ~17deg run (research: 15-20deg/stride)
+const PELVIS_ROLL_WALK=0.09, PELVIS_ROLL_RUN=0.18;   // pelvic drop/roll ~5deg walk -> ~10deg run (research: 6-11deg with speed/effort)
 // SPRINT tier band (Stage 3): _sprintK ramps 0->1 across [SPRINT_LO, SPRINT_HI]
 // (game units; base run speed is 6.7) to drive sprint-specific emphasis on top of
 // the run blend, which saturated at ~85% of top speed and left jog/sprint identical.
@@ -2603,7 +2604,7 @@ function poseChef(a, isPlayer, dt){
   } else {
     a._hipY = damp(a._hipY!=null? a._hipY : LEG_HIP_Y, LEG_HIP_Y, 10, dt);  // airborne: the jump arc owns height; relax the vault
   }
-  const bob = (a._hipY - LEG_HIP_Y)                       // inverted-pendulum vault (primary vertical)
+  const bob = (a._hipY - LEG_HIP_Y)*VAULT_SCALE          // inverted-pendulum vault (primary vertical), trimmed to a realistic COM oscillation
               + Math.sin(t*2.1)*0.011                     // breathing
               + idleK*Math.sin(t*3.3)*0.02                // idle square-up bounce
               + (a._flight>=0 ? Math.sin(a._flight*Math.PI)*0.05*Math.min(1,spd/5) : 0);  // running hop between strides
@@ -2655,7 +2656,7 @@ function poseChef(a, isPlayer, dt){
   // above), giving the real pelvis-vs-shoulder counter-rotation of a gait.
   { const gk = moving ? Math.min(1, spd/5) : 0;
     a._pelvisYaw  = Math.sin(ph) * lerp(PELVIS_YAW_WALK, PELVIS_YAW_RUN, a._runK||0) * gk;
-    a._pelvisRoll = Math.sin(ph) * PELVIS_ROLL * gk; }
+    a._pelvisRoll = Math.sin(ph) * lerp(PELVIS_ROLL_WALK, PELVIS_ROLL_RUN, a._runK||0) * gk; }
   u.hips.rotation.y = damp(u.hips.rotation.y, a._pelvisYaw, 14, dt);
   u.hips.rotation.z = damp(u.hips.rotation.z, a._pelvisRoll, 14, dt);
 
@@ -2755,6 +2756,7 @@ function updateFeet(a, dt, moving){
       const hdx=fxp-hipWX, hdz=fzp-hipWZ;
       const fy=Math.max(0.02, hipWY - Math.sqrt(Math.max(0.02, span*span - (hdx*hdx+hdz*hdz))));
       L.world.set(fxp, tt>=1?0:fy, fzp);
+      L.lift=(tt>=1?0:Math.max(0,fy-0.02));   // foot height above ground -> drives ankle dorsiflexion (foot roll) in solveLegsIK
       stepPhase=tt; whichFoot=i;
     }
   }
@@ -2796,7 +2798,7 @@ function solveLegsIK(a, b){
     _bendKnee.set(clamp((_footV.x-_hipV.x)*1.8, -1.2, 1.2), 0, 1);
     solveTwoBone(L.thigh, L.shin, _hipV, _footV, THIGH, SHIN, _bendKnee, L.knee);
     L.boot.position.set(_footV.x, Math.max(0.03, _footV.y-0.02), _footV.z+0.04);
-    L.boot.rotation.set(-L.lift*2.4, 0, 0);
+    L.boot.rotation.set(clamp(-L.lift*1.6, -0.5, 0.15), 0, 0);   // ankle: toe up as the foot clears (dorsiflex), capped so a high knee-drive foot doesn't over-point
   }
 }
 const _bnd2=new V3(), _fdir=new V3();
