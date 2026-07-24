@@ -2708,7 +2708,7 @@ function updateFeet(a, dt, moving){
   const airborne = legs[0].stepT<1 && legs[1].stepT<1;
   a._flight = airborne ? (legs[0].stepT+legs[1].stepT)*0.5 : -1;
 }
-const _hipV=new V3(), _footV=new V3();
+const _hipV=new V3(), _footV=new V3(), _bendKnee=new V3();
 function solveLegsIK(a, b){
   const legs=a.chef.userData.legs, inv=1/(a.chef.scale.x||1);
   const c=Math.cos(a.facing), s=Math.sin(a.facing);
@@ -2731,7 +2731,13 @@ function solveLegsIK(a, b){
     const horiz=Math.hypot(dxh,dzh);
     const maxH=Math.sqrt(Math.max(0.04, (THIGH+SHIN)*(THIGH+SHIN)*0.94 - dyh*dyh));
     if(horiz>maxH){ const k=maxH/horiz; _footV.x=_hipV.x+dxh*k; _footV.z=_hipV.z+dzh*k; }
-    solveTwoBone(L.thigh, L.shin, _hipV, _footV, THIGH, SHIN, KNEE_FWD, L.knee);
+    // CROSSOVER: tilt the knee's break direction toward wherever the foot sits
+    // laterally relative to its hip. A foot that crosses the body midline (a strafe
+    // cross-step) would otherwise pop/invert the knee, because the fixed forward
+    // pole assumes the foot stays on its own side. ~0 tilt for a normal stance, so
+    // ordinary walking/running is unchanged. Bones stay length-locked.
+    _bendKnee.set(clamp((_footV.x-_hipV.x)*1.8, -1.2, 1.2), 0, 1);
+    solveTwoBone(L.thigh, L.shin, _hipV, _footV, THIGH, SHIN, _bendKnee, L.knee);
     L.boot.position.set(_footV.x, Math.max(0.03, _footV.y-0.02), _footV.z+0.04);
     L.boot.rotation.set(-L.lift*2.4, 0, 0);
   }
