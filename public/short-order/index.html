@@ -2604,7 +2604,7 @@ function poseChef(a, isPlayer, dt){
   } else {
     a._hipY = damp(a._hipY!=null? a._hipY : LEG_HIP_Y, LEG_HIP_Y, 10, dt);  // airborne: the jump arc owns height; relax the vault
   }
-  const bob = (a._hipY - LEG_HIP_Y)*VAULT_SCALE          // inverted-pendulum vault (primary vertical), trimmed to a realistic COM oscillation
+  const bob = (a._hipY - LEG_HIP_Y)*VAULT_SCALE*(1-(a._sprintK||0)*0.3)   // vault (primary vertical), trimmed; shrinks at sprint (the non-monotonic COM 'hump': ~6-9cm jog -> ~4-6cm sprint)
               + Math.sin(t*2.1)*0.011                     // breathing
               + idleK*Math.sin(t*3.3)*0.02                // idle square-up bounce
               + (a._flight>=0 ? Math.sin(a._flight*Math.PI)*0.05*Math.min(1,spd/5) : 0);  // running hop between strides
@@ -2709,7 +2709,7 @@ function updateFeet(a, dt, moving){
   a._stepCool=(a._stepCool||0)-dt;
   const spd=a.speed||0, run=a._runK||0;
   const vx=a.vel?a.vel.x:0, vz=a.vel?a.vel.z:0, vm=Math.hypot(vx,vz)||1;
-  const lead=Math.min(0.65, spd*0.16) + run*0.26;        // reach further ahead (bigger so strides aren't tiny)
+  const lead=Math.min(0.85, spd*0.20) + run*0.35;        // reach further ahead -> wider thigh swing (bigger leg scissor)
   // STRAFE (model A): how sideways the travel is relative to the aim (facing). Only
   // meaningful when locked on -- facing holds the target and the feet strafe. 0 =
   // moving along the aim (normal stride), 1 = pure lateral (frontal side-shuffle).
@@ -2720,7 +2720,7 @@ function updateFeet(a, dt, moving){
     latFrac=Math.abs(latV)/(Math.abs(latV)+Math.abs(fwdV)+1e-3);
   }
   const stepDur = moving ? clamp(0.22 - spd*0.014, 0.11, 0.24) : 0.22;          // slower swing = fewer, bigger steps (was a fast tiny-step shuffle)
-  const stepLen = clamp(0.44 + spd*0.13, 0.44, 0.9 + (a._sprintK||0)*0.25);     // bigger stride trigger: foot travels further before replanting -> real steps, not a shuffle (capped by leg ground-reach)
+  const stepLen = clamp(0.5 + spd*0.17, 0.5, 1.15 + (a._sprintK||0)*0.35);      // longer stride -> wider thigh separation + fewer/bigger steps (the pendulum dip supplies the extra ground-reach; still under 2x reach so no skate)
   const fast = spd>3.2;                                  // running: let both feet catch up
   let anyStepping=false; for(const L of legs) if(L.stepT<1) anyStepping=true;
   let stepPhase=-1, whichFoot=0;
