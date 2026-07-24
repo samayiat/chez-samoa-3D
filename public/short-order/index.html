@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r11</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r12</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1439,6 +1439,18 @@ function ring(pos,col,scale){ const r=RINGS.find(r=>r.life<=0); if(!r)return;
 function ringTick(dt){ for(const r of RINGS){ if(r.life<=0)continue; r.life-=dt;
   const k=1-r.life/r.max; r.m.scale.setScalar(r.s0*(0.4+k*1.4)); r.m.material.opacity=(1-k)*0.7;
   if(r.life<=0)r.m.visible=false; } }
+/* FOOTFALL DUST: a low tan puff kicked back off a running footfall -- ground
+   contact you can feel, tied to the gait. Reuses the spark pool (low, short,
+   dusty) plus a small ground ring. Kept subtle and only at pace. */
+function footDust(x,z,vx,vz){
+  ring(new V3(x,0,z), 0x6b5a44, 0.42);
+  for(let i=0;i<3;i++){ const s=SPARKS.find(s=>s.life<=0); if(!s)break;
+    s.m.visible=true; s.m.position.set(x,0.06,z);
+    s.m.material.color.setHex(0x7a6a4e); s.m.material.emissive.setHex(0x1c150c);
+    const a=Math.random()*TAU;
+    s.v.set(Math.cos(a)*rand(0.4,1.1)-vx*0.28, rand(0.5,1.5), Math.sin(a)*rand(0.4,1.1)-vz*0.28);
+    s.life=s.max=rand(0.22,0.4); s.m.scale.setScalar(rand(0.4,0.8)); }
+}
 
 /* floating words (DOM) */
 const wordsEl=document.getElementById('words');
@@ -2822,7 +2834,9 @@ function updateFeet(a, dt, moving){
         if(a===player && moving) sfx.step();
       }
     } else {
+      const preT=L.stepT;
       L.stepT=Math.min(1, L.stepT + dt/stepDur);
+      if(preT<1 && L.stepT>=1 && a===player && spd>3.4) footDust(L.to.x, L.to.z, vx, vz);   // dust kick as the foot lands (only at a run)
       const tt=L.stepT;
       // horizontal: ease from -> to (world), direction-correct so strafe/turn/plant stay right
       const ease=tt*tt*(3-2*tt);
@@ -3712,7 +3726,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r11';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r12';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
