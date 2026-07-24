@@ -201,6 +201,56 @@ Sources: [Unity Manual — How Root Motion Works](https://docs.unity3d.com/Manua
 [Unity Animation Rigging — Two Bone IK Constraint](https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.1/manual/constraints/TwoBoneIKConstraint.html),
 [Unity Discussions — pelvis IK setup thread](https://discussions.unity.com/t/rigging-package-how-to-setup-the-pelvis-as-ik/864784).
 
+## How other engines do it — Unreal and Godot cross-check
+
+Same question, two more independent engines. The pattern holds a third and fourth time.
+
+### Unreal Engine
+- **Root motion**: displacement comes from the pre-animated mesh itself (e.g., a lunging attack),
+  specifically so the visible mesh and the collision capsule never disagree — the alternative
+  (code-driven velocity divorced from the animation) is exactly what Unreal's own docs warn causes a
+  character to "step outside their collision capsule... then slide back unrealistically" once the clip
+  ends. That's the same class of bug as Short Order's decoupled hip-rotation/foot-target problem: two
+  systems disagreeing about where the body actually is.
+- **Control Rig Full-Body IK (FBIK)**: an effector-based whole-body solve where "the Root bone
+  property on the Full Body IK node should be set, typically to the hips or pelvis bone" — Unreal's
+  modern full-body IK is, by convention, anchored at the pelvis. Same anchor point as Unity's Body
+  Transform, arrived at independently.
+
+### Godot
+- **Root motion**: `AnimationTree`'s Root Motion Track is pointed at "your root bone (usually `Root`
+  or `Hips`)" — the engine extracts that bone's translation/rotation per frame and applies it to the
+  `CharacterBody3D`/`RigidBody3D`. Same hips-as-anchor convention a third time.
+- **IK history is directly relevant to this repo.** Godot removed IK entirely in the Godot 4.0
+  rewrite and shipped **no replacement for over five years** — `SkeletonIK3D` was gone with nothing
+  standing in for it. A proper modular framework only returned in **Godot 4.6** (this year): a stack of
+  `SkeletonModifier3D`-based nodes — `TwoBoneIK3D`, `FABRIK3D`, `CCDIK3D`, `SplineIK3D`,
+  `IterateIK3D`, `JacobianIK3D`, `LookAtModifier3D`, `RetargetModifier3D`, `SpringBoneSimulator3D` —
+  evaluated in order on top of the `AnimationTree`'s FK base pose.
+- **This repo's parked `godot-port/` predates that.** Its own README explains it hand-rolled
+  `scripts/ik.gd` (a from-scratch length-locked two-bone IK) specifically *because* "nothing here uses
+  4.6/4.7-only APIs" was a constraint at the time — Godot's own IK wasn't available yet. As of Godot
+  4.6, `TwoBoneIK3D` is now a native, engine-supported modifier that does the same job. If the Godot
+  port is ever picked back up, that's a concrete, low-risk simplification available now that wasn't
+  when the scaffold was authored — swap the bespoke `ik.gd` solve for the native modifier rather than
+  maintaining a parallel hand-rolled one.
+
+### The convergence, stated plainly
+Four independent sources — biomechanics/robotics research (SLIP), Unity, Unreal, and Godot — all
+converge on the same structure: **the pelvis/hips is the anchor everything else (root motion,
+orientation, full-body IK) is computed relative to.** None of the shipped engines treat this as
+optional polish; it's load-bearing in how their retargeting and IK systems are architected at all.
+Short Order's hip joint rotates for show but has no causal effect on anything else in the rig — that
+puts it structurally out of step with how every other system surveyed here (biological, academic, and
+three separate production engines) actually builds a locomotion rig.
+
+Sources: [Epic Dev Community — Root Motion (UE 4.27)](https://docs.unrealengine.com/4.27/en-US/AnimatingObjects/SkeletalMeshAnimation/RootMotion),
+[Epic Dev Community — Control Rig Full-Body IK (UE 5.8)](https://dev.epicgames.com/documentation/en-us/unreal-engine/control-rig-full-body-ik-in-unreal-engine),
+[Godot Engine — Inverse Kinematics Returns to Godot 4.6](https://godotengine.org/article/inverse-kinematics-returns-to-godot-4-6/),
+[GameFromScratch — IK Returns to Godot](https://gamefromscratch.com/inverse-kinematics-ik-return-to-godot/),
+[StraySpark — Godot 4.6 IK Guide](https://www.strayspark.studio/blog/godot-46-inverse-kinematics-procedural-animation),
+[BitSoul — Godot 4 AnimationTree Guide](https://bitsoulhosting.com/marketplace/blog/godot-4-animationtree-character-animation-guide).
+
 ## Not yet fixed
 Nothing in this file has been changed. This is a diagnosis document; implementation is a separate
 step.
