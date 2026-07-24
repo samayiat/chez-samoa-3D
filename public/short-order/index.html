@@ -3655,10 +3655,15 @@ function tick(){
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 
+const _camTgt=new V3();
 function updateCamera(dt){
   updateCameraVectors();
   const P=player;
-  const target = P? P.pos : new V3();
+  // trail the COM's ground position (body centre, incl. lean/sway) rather than the
+  // raw foot point, closing the loop: COM now feeds hips, legs AND camera. Vertical
+  // bob is deliberately NOT coupled in (keep the ground Y) so a hop/duck doesn't
+  // jerk the camera -- P.com.y stays a rig-only channel for now.
+  const target = P? _camTgt.set(P.com?P.com.x:P.pos.x, P.pos.y, P.com?P.com.z:P.pos.z) : new V3();
   const locked = !!(P && P.lockOn && !P.lockOn.dead);
   CAM.lockK = damp(CAM.lockK, locked?1:0, 5, dt);
   const k = CAM.lockK;
