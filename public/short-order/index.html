@@ -152,11 +152,24 @@
   #grabui #grabfill{display:block;height:100%;width:100%;transform-origin:left;transform:scaleX(0);
     background:linear-gradient(90deg,#ff8a3a,#ffe03d)}
   #dmgflash{position:fixed;inset:0;pointer-events:none;z-index:8;background:var(--tomato);opacity:0}
+  /* DRUNK VISION overlay: blurs + colour-shifts the world behind it (backdrop-filter),
+     washes a shifting neon tint, and darkens the edges. Sits UNDER the HUD (z-index)
+     so health stays readable while the room swims. Opacity + blur are driven from
+     player._drunk each frame in the loop. */
+  #drunk{position:absolute;inset:0;pointer-events:none;z-index:8;opacity:0;will-change:opacity;
+    background:
+      radial-gradient(120% 90% at 50% 42%, rgba(255,110,205,.16) 0%, rgba(140,60,210,.14) 38%, rgba(20,4,40,0) 60%),
+      radial-gradient(150% 130% at 50% 55%, rgba(0,0,0,0) 46%, rgba(24,0,44,.62) 100%);
+    animation:drunksway 7s ease-in-out infinite}
+  @keyframes drunksway{
+    0%,100%{ transform:scale(1.03) translate(0,0); filter:hue-rotate(0deg) }
+    30%{ transform:scale(1.06) translate(1.2%,-0.7%); filter:hue-rotate(28deg) }
+    60%{ transform:scale(1.045) translate(-1.2%,0.7%); filter:hue-rotate(-22deg) }}
 
   /* ---------- stage: always-landscape rotation ---------- */
   html,body{background:#000;overscroll-behavior:none}
   #stage{position:fixed;top:0;left:0;overflow:hidden;transform-origin:top left;background:var(--char)}
-  #app,#dmgflash,#vign,#hud,#veil,#touch,.hint{position:absolute}
+  #app,#dmgflash,#drunk,#vign,#hud,#veil,#touch,.hint{position:absolute}
 
   /* ---------- touch controls ---------- */
   #touch{inset:0;z-index:15;pointer-events:none;display:none;font-family:"DM Mono",monospace}
@@ -202,6 +215,7 @@
 <div id="stage">
 <div id="app"></div>
 <div id="dmgflash"></div>
+<div id="drunk"></div>
 <div id="vign"></div>
 
 <div id="hud">
@@ -221,7 +235,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r21</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r22</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -264,6 +278,7 @@ const angLerp=(a,b,t)=>{let d=((b-a+Math.PI)%TAU)-Math.PI; if(d<-Math.PI)d+=TAU;
 const COL = { cream:0xf4e4c1, flame:0xff6a1e, copper:0xc77b3b, steel:0x7fb2d6,
   herb:0x8fc866, tomato:0xff3b30, ink:0x2a1c10, steelmat:0xb9c4cc, dark:0x0d0906 };
 
+const drunkEl = document.getElementById('drunk');   // CSS drunk-vision overlay (driven from player._drunk)
 /* ---------------------------------------------------------------- renderer */
 const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
@@ -1713,6 +1728,7 @@ function pollPad(){
   out.light=tap(0);         // cross
   out.heavy=tap(2);         // square
   out.pickup=tap(3);        // triangle
+  out.pickupHeld=pressed(3);   // held state (hold-to-chug at the bar)
   const circ=tap(1);        // circle -- one edge read, shared by grapple-mash + JUMP
   out.grab=circ;            // circle: counts toward the grapple mash
   out.jump=circ;            // circle: JUMP (moved off R2)
@@ -1805,8 +1821,8 @@ if(lookZone){
 /* buttons: data-b = tap (edge), data-hold = held */
 (document.querySelectorAll('#touch [data-b]')||[]).forEach(el=>{
   el.addEventListener('pointerdown',ev=>{ ev.preventDefault(); audioInit(); if(AC&&AC.state==='suspended')AC.resume();
-    TOUCH[el.dataset.b+'Edge']=true; el.classList.add('press'); });
-  const up=()=>el.classList.remove('press');
+    TOUCH[el.dataset.b+'Edge']=true; TOUCH[el.dataset.b+'Held']=true; el.classList.add('press'); });
+  const up=()=>{ TOUCH[el.dataset.b+'Held']=false; el.classList.remove('press'); };
   el.addEventListener('pointerup',ev=>{ ev.preventDefault(); up(); });
   el.addEventListener('pointercancel',up); el.addEventListener('pointerleave',up);
 });
@@ -2275,6 +2291,8 @@ function updatePlayer(dt, pad){
   //  - stationary + armed      -> drop the weapon to bare hands
   //  - stationary + bare hands -> grab someone in reach (armed enemy = wrestle for their weapon),
   //                               else pick up a utensil you're standing on
+  // HOLD the grab button at the bar to keep chugging (chugDrink self-throttles via drinkCD)
+  if(!P.attack && !P.hold && atBar(P) && (KEY['f']||pad.pickupHeld||TOUCH.pickupHeld)) chugDrink(P);
   if(!P.attack && (pad.pickup||pad.rush||tapK('f')||consume('pickupEdge'))){   // no grab/throw/drop/pickup mid-swing
     if(P.hold){ throwHeld(P); }
     else if(atBar(P)){ chugDrink(P); }                          // at the bar: GRAB = chug a drink
@@ -3925,7 +3943,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r21';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r22';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4063,6 +4081,13 @@ function tick(){
   updateCamera(dt);
   updateLockUI();
   updateWeaponTrail();
+  // DRUNK VISION: drive the CSS overlay -- blur + colour-shift the world, wash a
+  // shifting tint, darken the edges. Scales with player._drunk; HUD stays crisp.
+  if(drunkEl){ const d=player?(player._drunk||0):0;
+    drunkEl.style.opacity = Math.min(1, d*1.15).toFixed(3);
+    if(d>0.01){ const f='blur('+(d*3.2).toFixed(2)+'px) saturate('+(1+d*1.0).toFixed(2)+') hue-rotate('+(Math.sin(GAME.t*0.5)*d*28).toFixed(1)+'deg) contrast('+(1+d*0.12).toFixed(2)+')';
+      drunkEl.style.backdropFilter=f; drunkEl.style.webkitBackdropFilter=f; }
+    else { drunkEl.style.backdropFilter='none'; drunkEl.style.webkitBackdropFilter='none'; } }
   postTick(dt);
   renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,camera);
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
