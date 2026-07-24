@@ -217,7 +217,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver">MOVEMENT BUILD r2 &middot; jog/run tiers</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver">MOVEMENT BUILD r3 &middot; upright jog</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -2632,8 +2632,8 @@ function poseChef(a, isPlayer, dt){
 
   // ---- spine (waist joint): the upper body flexes forward and undulates ----
   let waist=0;
-  if(moving && !atk) waist += Math.min(1,spd/5)*0.14;
-  waist += (a._sprintK||0)*0.5;    // forward trunk lean ONLY at sprint -- a jog stays upright (no leaning down for a jog)
+  if(moving && !atk) waist += Math.min(1,spd/5)*0.05;   // only a subtle forward inclination while moving -- a jog stays nearly upright
+  waist += (a._sprintK||0)*0.5;    // the real forward lean comes in ONLY at sprint, matching the leg effort (no sprint-lean over jogging legs)
   if(moving) waist += Math.sin(ph*2)*0.035*Math.min(1,spd/4);  // stride undulation
   if(atk){ waist += lerp(0,-0.10,atk.windK); waist = lerp(waist, (atk.A.shape?atk.A.shape.lean:0.28)*atk.heavyMul*0.75, atk.strikeK); }
   if(a.tackle){ waist += 0.5; }                          // shoulder-down charge
