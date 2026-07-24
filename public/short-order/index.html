@@ -217,7 +217,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver">MOVEMENT BUILD r1 &middot; fk-gait + idle</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver">MOVEMENT BUILD r2 &middot; jog/run tiers</div></div></div>
 
 <div id="touch">
   <div id="tstick" class="tzone"><div id="tnub"></div></div>
@@ -1064,7 +1064,7 @@ const LEGLEN=THIGH+SHIN, SWING_KNEE_MIN=18;
 // Swing-phase mid-swing knee flexion, from the gait research: ~60deg walking, rising
 // to ~100deg running and ~115deg at sprint (the high knee drive). Speed-scaled below
 // via _runK / _sprintK. (Biomechanics: race-walk ~60, distance run ~100-125 at mid-swing.)
-const SWING_KNEE_WALK=60, SWING_KNEE_RUN=100, SWING_KNEE_SPRINT=115;
+const SWING_KNEE_WALK=60, SWING_KNEE_RUN=75, SWING_KNEE_SPRINT=115;   // jog tier ~75deg (moderate), sprint tier drives up to ~115deg
 const STANCE=[{x:-0.14,z:0.05},{x:0.15,z:-0.05}];   // feet roughly under the hips, only a slight stagger -- a clean upright idle, not a splayed crouch
 // FRONTAL stance (Stage 5): squared, wider side-by-side feet for lateral strafing,
 // blended in by how sideways the travel is relative to the aim (latFrac). Pelvis
@@ -1081,7 +1081,7 @@ const PELVIS_ROLL_WALK=0.09, PELVIS_ROLL_RUN=0.18;   // pelvic drop/roll ~5deg w
 // SPRINT tier band (Stage 3): _sprintK ramps 0->1 across [SPRINT_LO, SPRINT_HI]
 // (game units; base run speed is 6.7) to drive sprint-specific emphasis on top of
 // the run blend, which saturated at ~85% of top speed and left jog/sprint identical.
-const SPRINT_LO=4.8, SPRINT_HI=6.7;
+const SPRINT_LO=5.5, SPRINT_HI=6.7;   // run/sprint tier starts at 5.5 -> a JOG plateau (dead zone) below it before it becomes a run
 /* combo cycle: distinct swing shapes so a chain reads as jab->cross->hook, not
    the same swing on repeat. each is a windup point s and a strike point e in
    upper-local space (weapon hand), an elbow pole `bend`, body coil/follow twist,
@@ -2520,7 +2520,7 @@ function poseChef(a, isPlayer, dt){
   // full-body RUN blend — anyone moving fast and not busy (enemies included,
   // so the mob takes real strides instead of shuffling stiff)
   const air=a._air||0;                                  // 0 grounded .. 1 apex
-  const rk=(!a.attack && !a.guard && !a.dodge && !a.tackle && air<0.1) ? clamp((spd-2.3)/3.4,0,1) : 0;
+  const rk=(!a.attack && !a.guard && !a.dodge && !a.tackle && air<0.1) ? clamp((spd-2.3)/2.5,0,1) : 0;   // reaches the jog plateau by ~4.8, then holds (dead zone) until the sprint tier
   a._runK = rk*rk*(3-2*rk);
   // SPRINT tier: additive emphasis in the top speed band (longer stride, higher
   // knee, more forward lean, LESS vertical bounce -- the non-monotonic 'hump').
@@ -2633,7 +2633,7 @@ function poseChef(a, isPlayer, dt){
   // ---- spine (waist joint): the upper body flexes forward and undulates ----
   let waist=0;
   if(moving && !atk) waist += Math.min(1,spd/5)*0.14;
-  waist += (a._runK||0)*0.34 + (a._sprintK||0)*0.22;    // drive forward into the run; extra trunk lean at sprint
+  waist += (a._sprintK||0)*0.5;    // forward trunk lean ONLY at sprint -- a jog stays upright (no leaning down for a jog)
   if(moving) waist += Math.sin(ph*2)*0.035*Math.min(1,spd/4);  // stride undulation
   if(atk){ waist += lerp(0,-0.10,atk.windK); waist = lerp(waist, (atk.A.shape?atk.A.shape.lean:0.28)*atk.heavyMul*0.75, atk.strikeK); }
   if(a.tackle){ waist += 0.5; }                          // shoulder-down charge
