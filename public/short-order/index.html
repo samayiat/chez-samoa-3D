@@ -221,7 +221,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r15</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r16</div></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1581,7 +1581,7 @@ function makePlayer(){
     facing:Math.PI, movePhase:0, speed:0,
     wpn:'fists', dur:Infinity,
     attack:null, combo:0, comboStep:0, chainT:0, comboTarget:null, bufferedHeavy:null, bufferT:0,
-    guard:false, guardV:0,
+    guard:false, guardV:0, parryT:0, _guardPrev:false,
     iframe:0, weaveCD:0, dodgeCD:0, dodge:null, tackle:null, tackleCD:0,
     vy:0, jumpCD:0, slam:null, slamHit:0, _air:0,   // vertical jump / air-slam state
     hold:null, grabCD:0, steal:null,                // grab-a-patron / slam-heads / throw-overboard / weapon-steal state
@@ -1954,15 +1954,32 @@ function resolveHit(A, isPlayer){
     // committed target for the rest of the chain (aim + step-in track it).
     if(isPlayer && (!A.comboTarget || A.comboTarget.dead)) A.comboTarget=T;
     const cpos=new V3(lerp(origin.x,T.pos.x,0.6),1.4,lerp(origin.z,T.pos.z,0.6));
-    let taken=dmg*(1 + movingIntoHit*0.35), blocked=false;   // momentum adds up to +35% (base numbers stay tuned; only committed lunges hit harder)
-    if(!isPlayer && player.guard && player.guardV>0.5){
-      const gAng=Math.abs(((facing+Math.PI-player.facing+Math.PI)%TAU)-Math.PI);
-      // block if player roughly faces the incoming hit
+    let taken=dmg*(1 + movingIntoHit*0.35), blocked=false, parried=false;   // momentum adds up to +35% (base numbers stay tuned; only committed lunges hit harder)
+    if(!isPlayer && (player.parryT>0 || (player.guard && player.guardV>0.5))){
+      // block/parry only if the player roughly faces the incoming hit
       const toAtt=Math.atan2(origin.x-player.pos.x,origin.z-player.pos.z);
       let fa=((toAtt-player.facing+Math.PI)%TAU)-Math.PI;
-      if(Math.abs(fa)<1.2){ blocked=true; taken*=w.gbreak?0.55:0.12; }
+      if(Math.abs(fa)<1.2){
+        if(player.parryT>0){ parried=true; blocked=true; taken=0; }   // fresh tap in the window -> deflect
+        else { blocked=true; taken*=w.gbreak?0.55:0.12; }             // passive hold -> chip block
+      }
     }
     if(!isPlayer && (player.iframe>0)) { taken=0; blocked=false; continue; }
+    if(parried){
+      // PARRY: no damage (Invariant #3 -- adds no damage door); deflect the blow
+      // and leave the attacker WIDE OPEN for a counter (long stagger, cancelled
+      // swing, knocked back). The reward is the punish window, not chip damage.
+      A.attack=null; A.stagger=Math.max(A.stagger,1.4); A.state='engage'; A.stateT=0.3;
+      if(A.hasToken){ A.hasToken=false; tokensUsed--; }
+      const pang=Math.atan2(A.pos.x-player.pos.x, A.pos.z-player.pos.z);
+      A.vel.x=Math.sin(pang)*7; A.vel.z=Math.cos(pang)*7; applyImpact(A, pang, 1.6);
+      player.iframe=Math.max(player.iframe,0.35); player.parryT=0;   // consume the window
+      const cp=new V3(lerp(origin.x,player.pos.x,0.5),1.4,lerp(origin.z,player.pos.z,0.5));
+      hitstop(0.14); shake(0.5); impactFrames(3,0xbfe0ff,0x0a1420); hitPost(0.75,0x7fb2d6);
+      burst(cp,15,0xbfe0ff,1.3); ring(cp,0xbfe0ff,1.6); if(AC) sfx.block(); haptic(0.7,0.5,150);
+      popWord(cp,'PARRY!','#bfe0ff',30);
+      continue;
+    }
     T.hp-=taken;
     T.hurt=1;
     // knockback
@@ -2133,6 +2150,7 @@ function updatePlayer(dt, pad){
   P.weaveCD=Math.max(0,P.weaveCD-dt); P.dodgeCD=Math.max(0,P.dodgeCD-dt); P.chainT=Math.max(0,P.chainT-dt); P.tackleCD=Math.max(0,P.tackleCD-dt); P.jumpCD=Math.max(0,P.jumpCD-dt); P.slamHit=Math.max(0,P.slamHit-dt); P.grabCD=Math.max(0,P.grabCD-dt);
   // buffered-attack lifetime + combo-target upkeep (see beginSwing / the attack integrate)
   P.bufferT=Math.max(0,(P.bufferT||0)-dt); if(P.bufferT<=0) P.bufferedHeavy=null;
+  P.parryT=Math.max(0,(P.parryT||0)-dt);                         // parry window countdown
   if(P.comboTarget && P.comboTarget.dead) P.comboTarget=null;    // the enemy we were comboing dropped -> release the lock
   P.iframe=Math.max(0,P.iframe-dt); P.stagger=Math.max(0,P.stagger-dt); P.hurt=damp(P.hurt,0,8,dt);
 
@@ -2173,8 +2191,14 @@ function updatePlayer(dt, pad){
   if(pad.lock||tapK('l')||consume('lockEdge')){ toggleLock(); }
   if(P.lockOn&&(P.lockOn.dead)) P.lockOn=nearestEnemy(P.pos,P.facing,null);
 
-  // ----- guard (hold L2 / hold space / GUARD button) -----
-  P.guard = (pad.guard||KEY[' ']||TOUCH.guard) && P.stagger<=0 && !P.attack && !P.dodge;
+  // ----- guard (hold L2 / hold space / GUARD button) + PARRY -----
+  // A FRESH guard tap opens a brief parry window: an incoming hit that lands
+  // inside it is deflected (no damage) and staggers the attacker wide open for a
+  // counter -- rewarding a timed press over a passive hold-block. (See resolveHit.)
+  const guardHeld = (pad.guard||KEY[' ']||TOUCH.guard) && P.stagger<=0 && !P.attack && !P.dodge;
+  if(guardHeld && !P._guardPrev) P.parryT=PARRY_WINDOW;   // rising edge -> parry window
+  P._guardPrev=guardHeld;
+  P.guard=guardHeld;
   P.guardV=damp(P.guardV, P.guard?1:0, 16, dt);
 
   // ----- weave (right stick / Q,E) -----
@@ -3327,6 +3351,7 @@ function tackleEnemy(P,e){
    get i-frames through the whole toss. No parry needed -- `stagger` (set by every
    clean hit and by the tackle) IS the off-balance gate. */
 const GRAB_REACH=1.9, GRAB_HOLD_MAX=2.6, THROW_RANGE=3.4, RUSH_RANGE=6.5;
+const PARRY_WINDOW=0.2;   // seconds after a fresh guard tap that an incoming hit is parried
 // GRABBABLE: anyone NOT mid-swing, OR a heavy (tough) patron -- the big guys can
 // be grabbed even out of their wind-up. (Replaces the old "must be staggered".)
 function canGrab(e){ return e && !e.dead && e.state!=='held' && (!e.attack || e.kind==='tough'); }
@@ -3768,7 +3793,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r15';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r16';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
