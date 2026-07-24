@@ -2011,6 +2011,20 @@ function slamLand(P, landV){
   }
   GAME.hitsLanded=(GAME.hitsLanded||0)+1;
 }
+/* CENTER OF MASS: one tracked 3D point that hips/legs/lean/camera all read from,
+   instead of each system independently approximating body position (see
+   MOVEMENT_OVERHAUL_PLAN.md). Weighted toward the pelvis (which dominates the
+   human COM) and sampled from the settled rig so it reflects real body state
+   (bob, lean, roll). `a.pos` stays the ground-plane root used by collision/feet;
+   `a.com` is the 3D body centre every other system upgrades to consuming. */
+const _comH=new V3(), _comC=new V3();
+function updateCOM(a){
+  if(!a.com) a.com=new V3();
+  const u=a.chef.userData;
+  u.hips.getWorldPosition(_comH);
+  (u.torso||u.upper).getWorldPosition(_comC);
+  a.com.set(lerp(_comH.x,_comC.x,0.4), lerp(_comH.y,_comC.y,0.4), lerp(_comH.z,_comC.z,0.4));
+}
 function updatePlayer(dt, pad){
   const P=player; if(!P) return;
   if(P.dead){ poseChef(P,true,dt); return; }
@@ -2248,6 +2262,7 @@ function updatePlayer(dt, pad){
   P.movePhase+=dt*P.speed*2.4;
 
   poseChef(P, true, dt);
+  updateCOM(P);                                 // body centre, sampled after the pose settles
   // prompt for nearby pickup
   updatePrompt();
 }

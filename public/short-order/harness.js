@@ -204,6 +204,7 @@ try{
     if(!finite(T.player.pos)){ fail='player.pos NaN at frame '+f; break; }
     { const PA=T.player.chef.userData.armR;   // player IK finiteness (every rig change below touches the player)
       if(!finite(PA.tgt)||!Number.isFinite(PA.up.scale.y)||!Number.isFinite(T.player.chef.userData.legs[0].thigh.scale.y)){ fail='player IK NaN at frame '+f; break; } }
+    if(T.player.com && !finite(T.player.com)){ fail='player.com NaN at frame '+f; break; }
     for(const e of T.enemies){ if(!finite(e.pos)){ fail='enemy.pos NaN at frame '+f; break; }
       const A=e.chef.userData.armR;
       if(!finite(A.tgt)||!Number.isFinite(A.up.scale.y)||!Number.isFinite(e.chef.userData.legs[0].thigh.scale.y)){ fail='enemy IK NaN at frame '+f; break; } }
