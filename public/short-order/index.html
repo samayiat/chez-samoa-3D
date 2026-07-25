@@ -326,7 +326,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r40</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r41</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4189,7 +4189,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r40';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r41';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4397,15 +4397,21 @@ const CAST=[
 ];
 // stations along the kitchen line. `dish` on a cook station = what it produces,
 // so which station you cook at IS the routing choice (ticket says FRIES -> fryer).
+// Overcooked/PlateUp build on a UNIFORM counter grid: every station is the same
+// footprint/height, edges flush so the worktop reads as one continuous run, with
+// a distinct appliance on top. CELL is that footprint; cellX tiles them centred
+// on the day camera, in a logical prep->cook->plate->wash order.
+const CELL=2.5, KX0=-1.5;
+function cellX(i){ return KX0 + (i-3.5)*CELL; }
 const STATIONS=[
-  { id:'icebox',  kind:'source',  x:-11.0, z:KZ, col:0x8fb7d6 },
-  { id:'sink',    kind:'sink',    x:-8.4,  z:KZ, col:0x6f909a },
-  { id:'prep',    kind:'prep',    x:-5.8,  z:KZ, col:0x9a7a4a },                  // cutboard: raw -> chopped
-  { id:'pot',     kind:'cook',    dish:'soup',   needs:'chopped', x:-3.0, z:KZ, col:0x9a5a2a },
-  { id:'griddle', kind:'cook',    dish:'burger', needs:'raw',     x:-0.4, z:KZ, col:0x545a60 },
-  { id:'fryer',   kind:'cook',    dish:'fries',  needs:'raw',     x: 2.2, z:KZ, col:0xc9a23a },
-  { id:'saladbar',kind:'assemble',dish:'salad',                   x: 5.0, z:KZ, col:0x6fae54 },  // chopped -> salad (no cook)
-  { id:'plate',   kind:'plate',   x: 8.0,  z:KZ, col:0xece5d6 },
+  { id:'icebox',  kind:'source',  x:cellX(0), z:KZ, col:0x8fb7d6 },
+  { id:'prep',    kind:'prep',    x:cellX(1), z:KZ, col:0x9a7a4a },
+  { id:'pot',     kind:'cook',    dish:'soup',   needs:'chopped', x:cellX(2), z:KZ, col:0x9a5a2a },
+  { id:'griddle', kind:'cook',    dish:'burger', needs:'raw',     x:cellX(3), z:KZ, col:0x545a60 },
+  { id:'fryer',   kind:'cook',    dish:'fries',  needs:'raw',     x:cellX(4), z:KZ, col:0xc9a23a },
+  { id:'saladbar',kind:'assemble',dish:'salad',                   x:cellX(5), z:KZ, col:0x6fae54 },
+  { id:'plate',   kind:'plate',   x:cellX(6), z:KZ, col:0xece5d6 },
+  { id:'sink',    kind:'sink',    x:cellX(7), z:KZ, col:0x6f909a },
 ];
 const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m==null?.12:m,flatShading:true});
 const STATION_LABEL={ icebox:'ICEBOX', sink:'SINK', prep:'PREP', pot:'SOUP POT', griddle:'GRIDDLE', fryer:'FRYER', saladbar:'SALAD', plate:'PLATES' };
@@ -4463,41 +4469,67 @@ function nightCfgFor(){
   return Object.assign({}, SLICE, { waves, waveSizes:chunkSizes(count), roster, player });
 }
 let kitchenGrp=null;
+const SURF=1.12;    // shared worktop surface height -- every appliance sits on THIS
+// one uniform counter unit (cabinet + flush worktop) so the run reads as one
+// continuous countertop, Overcooked/PlateUp style.
+function buildCounter(g){
+  const cab=new THREE.Mesh(new THREE.BoxGeometry(CELL,1.0,1.5),dmat(0x39414b,.7,.25));
+  cab.position.y=0.5; cab.castShadow=true; cab.receiveShadow=true; g.add(cab);
+  const kick=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.16,1.42),dmat(0x2b323b,.8,.2)); kick.position.y=0.08; g.add(kick);
+  const top=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.12,1.56),dmat(0xd9d3c6,.55,.05));   // flush -> continuous
+  top.position.y=SURF-0.06; top.castShadow=true; g.add(top);
+  const lip=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.06,0.07),dmat(0xb7b0a0,.6,.05)); lip.position.set(0,SURF-0.1,0.79); g.add(lip);
+  return top;
+}
+// the distinct appliance that sits on the worktop, so each station reads at a glance
+function buildAppliance(s,g){
+  if(s.kind==='source'){                       // ingredient fridge
+    const box=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.9,1.2),dmat(0xcfe6f2,.5,.1)); box.position.y=SURF+0.45; box.castShadow=true; g.add(box);
+    const lid=new THREE.Mesh(new THREE.BoxGeometry(1.76,0.14,1.26),dmat(0xeaf4fa,.4,.1)); lid.position.y=SURF+0.92; g.add(lid);
+    const hn=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.08,0.1),dmat(0x9fb8c6,.4,.4)); hn.position.set(0,SURF+0.55,0.62); g.add(hn);
+  } else if(s.kind==='prep'){                   // wooden board + knife
+    const board=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.12,0.95),dmat(0xcaa46a,.7,.05)); board.position.y=SURF+0.06; g.add(board);
+    const grip=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.06,0.32),dmat(0x2a1c10,.6,.1)); grip.position.set(0.42,SURF+0.13,-0.2); g.add(grip);
+    const blade=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.03,0.4),dmat(0xcfd6da,.3,.7)); blade.position.set(0.42,SURF+0.13,0.18); g.add(blade);
+  } else if(s.kind==='cook'){
+    if(s.dish==='fries'){                        // fryer: oil vat + basket handle
+      const vat=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.5,1.0),dmat(0x2a2d32,.5,.5)); vat.position.y=SURF+0.25; g.add(vat);
+      const oil=new THREE.Mesh(new THREE.BoxGeometry(1.0,0.06,0.8),dmat(0xd9a83a,.3,.2)); oil.position.y=SURF+0.44; g.add(oil);
+      const hb=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.5),dmat(0x1a1a1e,.5,.5)); hb.position.set(0,SURF+0.55,0.6); g.add(hb);
+    } else if(s.dish==='burger'){                // griddle: ridged flat top
+      const gr=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.16,1.1),dmat(0x24262b,.4,.6)); gr.position.y=SURF+0.1; g.add(gr);
+      for(let i=-2;i<=2;i++){ const rr=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.03,0.06),dmat(0x14151a,.4,.6)); rr.position.set(0,SURF+0.19,i*0.16); g.add(rr); }
+    } else {                                     // soup: pot on a burner
+      const burner=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.1,16),dmat(0x1a1a1e,.5,.5)); burner.position.y=SURF+0.06; g.add(burner);
+      const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.36,0.5,16),dmat(0x3a3f47,.4,.5)); pot.position.y=SURF+0.36; g.add(pot);
+      const lid=new THREE.Mesh(new THREE.CylinderGeometry(0.44,0.44,0.06,16),dmat(0x4a5057,.4,.5)); lid.position.y=SURF+0.63; g.add(lid);
+    }
+    const glow=new THREE.Mesh(new THREE.SphereGeometry(0.34,12,10),
+      new THREE.MeshBasicMaterial({color:0xff7a1e,transparent:true,opacity:0,depthWrite:false}));
+    glow.position.y=SURF+0.5; g.add(glow); s._glow=glow;
+    const flame=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.36,0.85,10),
+      new THREE.MeshBasicMaterial({color:0xff551e,transparent:true,opacity:0.92,depthWrite:false}));
+    flame.position.y=SURF+0.85; flame.visible=false; g.add(flame); s._flame=flame;
+  } else if(s.kind==='assemble'){               // salad bar bowl of greens
+    const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.32,0.34,18),dmat(0xe8e2d4,.5,.05)); bowl.position.y=SURF+0.17; g.add(bowl);
+    const greens=new THREE.Mesh(new THREE.SphereGeometry(0.42,14,10,0,TAU,0,Math.PI*0.5),dmat(0x74bb4e,.8,0)); greens.position.y=SURF+0.3; g.add(greens);
+  } else if(s.kind==='plate'){                  // a stack of clean plates
+    for(let i=0;i<5;i++){ const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.035,18),dmat(0xf4efe4,.4,.05)); pl.position.y=SURF+0.05+i*0.045; g.add(pl); }
+  } else if(s.kind==='sink'){                   // basin + gooseneck faucet
+    const basin=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.34,1.0),dmat(0x2f363c,.5,.4)); basin.position.y=SURF+0.1; g.add(basin);
+    const water=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.05,0.8),dmat(0x4a7f96,.2,.3)); water.position.y=SURF+0.26; g.add(water);
+    const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.5,10),dmat(0xb8c2c8,.3,.6)); neck.position.set(0,SURF+0.5,-0.4); g.add(neck);
+    const spout=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.3,10),dmat(0xb8c2c8,.3,.6)); spout.rotation.x=Math.PI/2; spout.position.set(0,SURF+0.72,-0.28); g.add(spout);
+  }
+}
 function buildKitchen(){
   if(kitchenGrp) return;
   kitchenGrp=new THREE.Group(); arena.add(kitchenGrp);
   for(const s of STATIONS){
     const g=new THREE.Group(); g.position.set(s.x,0,s.z); kitchenGrp.add(g); s._g=g;
-    const base=new THREE.Mesh(new THREE.BoxGeometry(1.6,1.12,1.4),dmat(0x2b3037,.75,.2));
-    base.position.y=0.56; base.castShadow=true; base.receiveShadow=true; g.add(base);
-    const top=new THREE.Mesh(new THREE.BoxGeometry(1.66,0.16,1.46),dmat(s.col,.5,.15));
-    top.position.y=1.2; top.castShadow=true; g.add(top); s._top=top;
-    const sign=makeSign(STATION_LABEL[s.id]||s.id, s.col); sign.position.y=2.25; g.add(sign); s._sign=sign;
-    if(s.kind==='cook'){
-      const pan=new THREE.Mesh(new THREE.CylinderGeometry(0.44,0.36,0.16,16),dmat(0x17171b,.5,.5));
-      pan.position.y=1.32; g.add(pan);
-      const glow=new THREE.Mesh(new THREE.SphereGeometry(0.32,12,10),
-        new THREE.MeshBasicMaterial({color:0xff7a1e,transparent:true,opacity:0,depthWrite:false}));
-      glow.position.y=1.4; g.add(glow); s._glow=glow;
-      const flame=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.34,0.8,10),
-        new THREE.MeshBasicMaterial({color:0xff551e,transparent:true,opacity:0.92,depthWrite:false}));
-      flame.position.y=1.74; flame.visible=false; g.add(flame); s._flame=flame;
-    } else if(s.kind==='source'){
-      const lid=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.4,1.1),dmat(0xbfd6e6,.5,.2));
-      lid.position.y=1.5; g.add(lid);
-    } else if(s.kind==='sink'){
-      const basin=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.3,0.9),dmat(0x30363c,.6,.4));
-      basin.position.y=1.24; g.add(basin);
-    } else if(s.kind==='plate'){
-      for(let i=0;i<4;i++){ const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.34,0.03,16),dmat(0xf4efe4,.4,.05));
-        pl.position.y=1.3+i*0.04; g.add(pl); }
-    } else if(s.kind==='prep'){
-      const board=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.1,0.9),dmat(0xcaa46a,.7,.05)); board.position.y=1.3; g.add(board);
-      const knife=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.04,0.5),dmat(0xcfd6da,.4,.6)); knife.position.set(0.36,1.38,0.1); g.add(knife);
-    } else if(s.kind==='assemble'){
-      const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.28,0.28,16),dmat(0xe8e2d4,.5,.05)); bowl.position.y=1.34; g.add(bowl);
-      const greens=new THREE.Mesh(new THREE.SphereGeometry(0.34,12,8,0,TAU,0,Math.PI*0.5),dmat(0x74bb4e,.8,0)); greens.position.y=1.44; g.add(greens);
-    }
+    s._top=buildCounter(g);
+    buildAppliance(s,g);
+    const sign=makeSign(STATION_LABEL[s.id]||s.id, s.col); sign.position.y=2.35; g.add(sign); s._sign=sign;
   }
 }
 function makeDiner(cast){
