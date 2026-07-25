@@ -307,7 +307,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r35</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r36</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1681,7 +1681,7 @@ const sfx={
 };
 
 /* ================================================================ STATE */
-const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500, male:false, nightRoster:null, inRun:false };   // debt: what you owe Vince -> scales him (economy wires this later); male: chef gender
+const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500, male:false, nightRoster:null, inRun:false, vinceNight:false };   // debt: what you owe Vince -> scales him (economy wires this later); male: chef gender
 try{ GAME.male = localStorage.getItem('so_chef')==='male'; }catch(e){}   // remembered chef choice
 const enemies=[];
 let player=null;
@@ -4149,6 +4149,7 @@ function startNight(cfg, onEnd){
   WAVE.wave=0; WAVE.resting=false; WAVE.done=false; WAVE.winT=0;
   WAVE.queue=WAVE.chunks[0]; WAVE.total=WAVE.queue.length; WAVE.spawned=0; WAVE.waveDone=false; WAVE.pending=0;
   spawnWaveChunk(300);
+  if(cfg.boss==='vince') spawnVince();                       // the landlord walks in with the mob
   updateHUDCooks(Math.min(4,WAVE.total));
   updateHUDWave();
   updateHUDHealth(); updateHUDWeapon();
@@ -4169,7 +4170,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r35';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r36';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4183,7 +4184,7 @@ function showTitle(){
     '<button class="btn" id="playBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">🌙 STEP TO THE PASS (NIGHT ONLY)</button>'+
     '<div style="margin-top:18px;color:#ff8a3a;letter-spacing:.14em;font-size:14px">'+BUILD_VERSION+'</div>'+
     '<div id="ctrls">'+ctrlRows()+'</div>';
-  document.getElementById('dayBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; openShop(); };
+  document.getElementById('dayBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; toDay(); };
   document.getElementById('playBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; GAME.inRun=false; startNight(SLICE, onNightEnd); };
   document.getElementById('veil').classList.remove('hide');
   touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
@@ -4226,18 +4227,24 @@ function showEnd(res){
 // Returns true when it owns the end-screen (so endNight skips the generic card).
 function onNightEnd(res){
   if(!GAME.inRun) return false;                 // standalone night from the title -> generic win/lose card
-  const bounty = res.survived ? 200 + res.kills*40 : res.kills*20;   // beating the mob pays; a loss pays scraps
+  let bounty = res.survived ? 200 + res.kills*40 : res.kills*20;   // beating the mob pays; a loss pays scraps
+  let bossLine='';
+  if(GAME.vinceNight){                          // tonight WAS the landlord fight (rent-day 'fight' choice)
+    GAME.vinceNight=false;
+    if(res.survived){
+      RUN.holiday=2;                            // beat him -> two rent-free weeks...
+      RUN.debt=1500; GAME.debt=1500;            // ...and you're square, the tab wiped
+      bounty+=1200;
+      bossLine='<span style="color:#8be27a">You put <b>VINCE</b> on the floor. No rent for two weeks — and he won’t be back for a while.</span>';
+    } else {
+      RUN.bank=0;                               // lose to Vince -> he takes everything on you
+      bossLine='<span style="color:#ff6a3a"><b>Vince cleaned you out.</b> Bank’s empty. Should’ve run.</span>';
+    }
+  }
   RUN.bank += bounty;
   RUN.day++;
-  let rentLine='';
-  if(rentDueOn(RUN.day)){
-    const rent=rentFor(weekOf(RUN.day));
-    if(RUN.bank>=rent){ RUN.bank-=rent; rentLine='Rent paid: <b>$'+rent+'</b>.'; }
-    else { const short=rent-RUN.bank; RUN.bank=0; RUN.debt+=short; GAME.debt=RUN.debt;
-      rentLine='<span style="color:#ff6a3a">Short <b>$'+short+'</b> on rent — Vince adds it to the tab.</span>'; }
-  }
   saveRun();
-  showMorning(res, bounty, rentLine);
+  showMorning(res, bounty, bossLine);
   return true;
 }
 function showMorning(res, bounty, rentLine){
@@ -4256,8 +4263,35 @@ function showMorning(res, bounty, rentLine){
     '<br>Bank <b>$'+RUN.bank+'</b>'+(RUN.debt>1500?' &nbsp;·&nbsp; Owed to Vince <b>$'+RUN.debt+'</b>':'')+'</div>'+
     '<button class="btn" id="nextDayBtn">OPEN UP — DAY '+RUN.day+'</button>'+
     '<button class="btn" id="quitRunBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">CALL IT — BACK TO TITLE</button></div>';
-  document.getElementById('nextDayBtn').onclick=()=>{ goFullscreen(); openShop(); };
+  document.getElementById('nextDayBtn').onclick=()=>{ goFullscreen(); toDay(); };
   document.getElementById('quitRunBtn').onclick=()=>{ GAME.inRun=false; showTitle(); };
+}
+// the morning gate: on a rent day you settle with Vince (pay or fight) before
+// the shop; a rent holiday (won by beating him) waves it through.
+function toDay(){
+  if(rentDueOn(RUN.day)){
+    if(RUN.holiday>0){ RUN.holiday--; saveRun(); openShop(); return; }   // still on the house
+    showRentDecision(); return;
+  }
+  openShop();
+}
+function showRentDecision(){
+  GAME.inRun=true; GAME.mode='shop'; GAME.paused=false;
+  document.getElementById('veil').classList.remove('hide');
+  document.getElementById('hud').classList.remove('on');
+  document.getElementById('dayhud').classList.remove('on');
+  touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
+  const rent=rentFor(weekOf(RUN.day)), canPay=RUN.bank>=rent;
+  document.getElementById('card').innerHTML='<div class="card">'+
+    '<div class="kick">RENT DAY · DAY '+RUN.day+'</div>'+
+    '<div class="title">VINCE<br><span class="b">WANTS HIS MONEY</span></div>'+
+    '<div class="stat">Rent is <b>$'+rent+'</b>. &nbsp; Bank: <b>$'+RUN.bank+'</b>.<br>'+
+      (canPay?'Pay up and he leaves quiet — or keep the cash and settle it with your hands tonight. Beat him and you get two weeks free.'
+             :'You can’t cover it. He’s coming tonight whether you like it or not — win, or he takes everything.')+'</div>'+
+    (canPay?'<button class="btn" id="payBtn">PAY $'+rent+'</button>':'')+
+    '<button class="btn" id="fightBtn" style="margin-top:10px;background:'+(canPay?'#2a2018':'var(--flame)')+';color:'+(canPay?'var(--cream)':'var(--ink)')+'">🥊 FIGHT VINCE TONIGHT</button></div>';
+  if(canPay){ const pb=document.getElementById('payBtn'); if(pb) pb.onclick=()=>{ RUN.bank-=rent; saveRun(); openShop(); }; }
+  const fb=document.getElementById('fightBtn'); if(fb) fb.onclick=()=>{ GAME.vinceNight=true; openShop(); };
 }
 
 /* the back-office SHOP: spend the bank before opening. Fixed menu, no RNG. */
@@ -4358,10 +4392,10 @@ const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, 
    (bigger, tougher mob) and, at week boundaries, the rent. Cash banks across
    days; the night pays a bounty that funds tomorrow. Persisted to localStorage. */
 const RENT_BASE=1500, RENT_STEP=500, WEEK_DAYS=5, RATING_WINDOW=5;
-const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[], upgrades:{} };
-function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; GAME.debt=RUN.debt; }
+const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[], upgrades:{}, holiday:0 };
+function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; if(RUN.holiday==null) RUN.holiday=0; GAME.debt=RUN.debt; }
 function saveRun(){ try{ localStorage.setItem('so_run', JSON.stringify(RUN)); }catch(e){} }
-function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; GAME.debt=1500; saveRun(); }
+function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; RUN.holiday=0; GAME.debt=1500; saveRun(); }
 loadRun();
 // The back-office shop -- a FIXED menu (no RNG, per the research's bad-luck-floor
 // rule), leveled, each level costing more. Day-side upgrades ease the cook; the
@@ -4389,11 +4423,14 @@ function chunkSizes(n){ const out=[]; let w=3, left=n; while(left>0){ const s=Ma
 // you're a bigger target = nastier night).
 function nightCfgFor(){
   const roster=GAME.nightRoster;
+  const player=Object.assign({}, SLICE.player, { wpn: upLvl('blade')?'knife':'fists' });
+  if(GAME.vinceNight){                                       // the landlord fight: Vince + a couple of hangers-on
+    return Object.assign({}, SLICE, { waves:['weak','weak'], waveSizes:[2], roster, player, boss:'vince' });
+  }
   const grudges=roster?roster.length:0;
   const count=clamp(grudges - upLvl('locks'), 3, 16);       // reinforced door turns some away
   const toughRatio=clamp((RUN.rating-4)/6, 0.1, 0.8);
   const waves=[]; for(let i=0;i<count;i++) waves.push(Math.random()<toughRatio?'tough':'weak');
-  const player=Object.assign({}, SLICE.player, { wpn: upLvl('blade')?'knife':'fists' });
   return Object.assign({}, SLICE, { waves, waveSizes:chunkSizes(count), roster, player });
 }
 let kitchenGrp=null;
@@ -4711,14 +4748,16 @@ function showDayEnd(res){
     ? '<div class="stat" style="color:#ff9a72;margin-top:10px"><b>'+g+'</b> '+(g===1?'patron is':'patrons are')+' coming back tonight — the ones you shooed and the ones who walked.</div>'
     : '<div class="stat" style="color:#8be27a;margin-top:10px">Nobody left with a grudge. A light night ahead.</div>';
   const rentIn=daysToRent(res.dayNo);
-  const rentLine='<div class="stat" style="margin-top:8px;color:#e8c98a">Bank <b>$'+res.bank+'</b> &nbsp;·&nbsp; Rent <b>$'+rentFor(weekOf(res.dayNo+1))+'</b> due in <b>'+rentIn+'</b> '+(rentIn===1?'day':'days')+'</div>';
+  const rentLine = GAME.vinceNight
+    ? '<div class="stat" style="margin-top:8px;color:#ff6a3a"><b>VINCE IS WAITING.</b> Lock up and settle it — win and you owe him nothing for two weeks.</div>'
+    : '<div class="stat" style="margin-top:8px;color:#e8c98a">Bank <b>$'+res.bank+'</b> &nbsp;·&nbsp; Rent <b>$'+rentFor(weekOf(res.dayNo+1))+'</b> due in <b>'+rentIn+'</b> '+(rentIn===1?'day':'days')+'</div>';
   c.innerHTML='<div class="card end win">'+
     '<div class="kick">DAY '+res.dayNo+' · SERVICE OVER · THE LUNCH RUSH IS DONE</div>'+
     '<div class="title">DAY<br><span class="b">BANKED</span></div>'+
     '<div class="stat">Took <b>$'+res.cash+'</b> &nbsp;·&nbsp; Served <b>'+res.served+'</b> &nbsp;·&nbsp; Shooed <b>'+res.shooed+'</b> &nbsp;·&nbsp; Walkouts <b>'+res.lost+'</b>'+
     '<br>Best streak <b>x'+Math.min(4,1+Math.max(0,res.best-1)*0.5).toFixed(1)+'</b> &nbsp;·&nbsp; Rating <b>'+res.rating+'/10</b> (today '+res.today+')</div>'+
     grudgeLine+ rentLine+
-    '<button class="btn" id="openNightBtn">LOCK UP &amp; BRACE FOR TONIGHT</button></div>';
+    '<button class="btn" id="openNightBtn">'+(GAME.vinceNight?'🥊 FACE VINCE':'LOCK UP &amp; BRACE FOR TONIGHT')+'</button></div>';
   document.getElementById('openNightBtn').onclick=()=>{ goFullscreen(); ended=false; startNight(nightCfgFor(), onNightEnd); };
 }
 
