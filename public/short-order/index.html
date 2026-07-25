@@ -244,7 +244,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r25</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r26</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1800,7 +1800,7 @@ if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(G
 // doesn't also resume via the tap-to-resume handler above).
 { const dd=document.getElementById('devDrunk');
   if(dd) dd.addEventListener('pointerdown',ev=>{ ev.preventDefault(); ev.stopPropagation();
-    if(player){ player.drinks=DRINK_WASTED_AT+2; player.wastedT=WASTED_TIME; player._drunk=1; player.drinkCD=0; } }); }
+    if(player){ player.drinks=DRINK_WASTED_AT+2; player.wastedT=1e9; player._drunk=1; player.drinkCD=0; } }); }   // stays maxed the rest of the night
 
 /* FLOATING analog stick: touch anywhere on the LEFT half and the stick spawns
    under your thumb (transparent), tracks from there, and vanishes on release. */
@@ -3964,7 +3964,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r25';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r26';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
