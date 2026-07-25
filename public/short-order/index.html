@@ -102,6 +102,10 @@
   .ticket.bad .tdish{color:#ff9a72}
   .ticket .tbarwrap{margin-top:calc(var(--u)*0.7);height:calc(var(--u)*1.1);background:#0006;border-radius:3px;overflow:hidden}
   .ticket .tbar{height:100%;width:100%;transform-origin:left;background:#49d05a;transition:transform .1s linear,background .2s}
+  #drun{position:absolute;top:calc(var(--u)*2.4);left:calc(var(--u)*3);font-size:calc(var(--u)*1.9);letter-spacing:.1em;color:#e8c98a;
+    background:#120b06cc;border-left:3px solid var(--copper);padding:calc(var(--u)*0.8) calc(var(--u)*1.4);border-radius:4px;line-height:1.5}
+  #drun b{font-family:"Anton",sans-serif;color:var(--cream);font-size:calc(var(--u)*2.3)}
+  #drun .due{color:#ff9a72}
   #dcarry{position:absolute;bottom:calc(var(--u)*4);left:50%;transform:translateX(-50%);font-family:"Anton",sans-serif;
     font-size:calc(var(--u)*2.4);letter-spacing:.1em;color:var(--cream);background:#120b06cc;border-radius:4px;padding:calc(var(--u)*0.6) calc(var(--u)*1.6);opacity:0;transition:opacity .15s}
   #dcarry.on{opacity:1}
@@ -281,11 +285,12 @@
     <div class="dchip" id="dcombo"><b id="dcomboN">x1.0</b><span>STREAK</span></div>
     <div class="dchip" id="dplates"><b id="dplatesN">6</b><span>PLATES</span></div>
   </div>
+  <div id="drun"></div>
   <div id="tickets"></div>
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r33</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r34</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1659,7 +1664,7 @@ const sfx={
 };
 
 /* ================================================================ STATE */
-const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500, male:false, nightRoster:null };   // debt: what you owe Vince -> scales him (economy wires this later); male: chef gender
+const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500, male:false, nightRoster:null, inRun:false };   // debt: what you owe Vince -> scales him (economy wires this later); male: chef gender
 try{ GAME.male = localStorage.getItem('so_chef')==='male'; }catch(e){}   // remembered chef choice
 const enemies=[];
 let player=null;
@@ -1903,6 +1908,9 @@ if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(G
     GAME.male=!GAME.male; try{ localStorage.setItem('so_chef', GAME.male?'male':'female'); }catch(e){}
     if(player){ scene.remove(player.chef); player=null; }               // rebuild the chef mesh with the new look
     ended=false; if(GAME.paused) togglePause(); startNight(SLICE, onNightEnd); }); }   // swap her/him and restart the night
+{ const dr=document.getElementById('devReset');
+  if(dr) dr.addEventListener('pointerdown',ev=>{ ev.preventDefault(); ev.stopPropagation();
+    resetRun(); if(GAME.paused) togglePause(); GAME.inRun=false; showTitle(); }); }   // wipe the campaign back to Day 1
 
 /* FLOATING analog stick: touch anywhere on the LEFT half and the stick spawns
    under your thumb (transparent), tracks from there, and vanishes on release. */
@@ -4137,13 +4145,13 @@ let ended=false;
 function endNight(survived){
   if(ended)return; ended=true; GAME.mode='over';
   const res={ survived, kills:GAME.kills, maxCombo:GAME.maxCombo, wpn:player.wpn };
-  if(GAME.onEnd) GAME.onEnd(res);
   document.getElementById('hint').classList.remove('on');
+  if(GAME.onEnd && GAME.onEnd(res)) return;   // a run consumed the result and drew its own morning card
   showEnd(res);
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r33';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r34';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4153,12 +4161,12 @@ function showTitle(){
     '<div class="sub">The dinner rush is over. They\u2019re not. Grab whatever\u2019s on the pass \u2014 '+
     'a spatula, a nonstick, the cast iron if HR isn\u2019t around \u2014 and clear the line. '+
     'Everything breaks. Everything is heavy in its own way. Tips are not guaranteed.</div>'+
-    '<button class="btn" id="dayBtn">☀️ OPEN THE DINER (DAY SHIFT)</button>'+
-    '<button class="btn" id="playBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">🌙 STEP TO THE PASS (NIGHT)</button>'+
+    '<button class="btn" id="dayBtn">'+(RUN.day>1?('☀️ CONTINUE — DAY '+RUN.day+' ($'+RUN.bank+')'):'☀️ OPEN THE DINER (DAY SHIFT)')+'</button>'+
+    '<button class="btn" id="playBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">🌙 STEP TO THE PASS (NIGHT ONLY)</button>'+
     '<div style="margin-top:18px;color:#ff8a3a;letter-spacing:.14em;font-size:14px">'+BUILD_VERSION+'</div>'+
     '<div id="ctrls">'+ctrlRows()+'</div>';
   document.getElementById('dayBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startDay(); };
-  document.getElementById('playBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startNight(SLICE, onNightEnd); };
+  document.getElementById('playBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; GAME.inRun=false; startNight(SLICE, onNightEnd); };
   document.getElementById('veil').classList.remove('hide');
   touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
   GAME.paused=false; { const pe=document.getElementById('pause'); if(pe) pe.classList.remove('on'); }
@@ -4193,9 +4201,46 @@ function showEnd(res){
     '<div class="stat">Cooks put down <b>'+res.kills+'</b> &nbsp;·&nbsp; Best combo <b>'+res.maxCombo+'</b>'+
     (win?'':'<br>Last weapon in hand: <b>'+WEAPONS[res.wpn].name+'</b>')+'</div>'+
     '<button class="btn" id="againBtn">'+(win?'ANOTHER NIGHT':'BACK ON THE LINE')+'</button></div>';
-  document.getElementById('againBtn').onclick=()=>{ goFullscreen(); ended=false; startNight(SLICE, onNightEnd); };
+  document.getElementById('againBtn').onclick=()=>{ goFullscreen(); ended=false; GAME.inRun=false; startNight(SLICE, onNightEnd); };
 }
-function onNightEnd(res){ /* the seam hands the cooking-loop layer a result here */ }
+// the night reports back here. In a RUN, this closes the loop: bank the bounty,
+// advance the day, charge rent at week boundaries, then roll into the morning.
+// Returns true when it owns the end-screen (so endNight skips the generic card).
+function onNightEnd(res){
+  if(!GAME.inRun) return false;                 // standalone night from the title -> generic win/lose card
+  const bounty = res.survived ? 200 + res.kills*40 : res.kills*20;   // beating the mob pays; a loss pays scraps
+  RUN.bank += bounty;
+  RUN.day++;
+  let rentLine='';
+  if(rentDueOn(RUN.day)){
+    const rent=rentFor(weekOf(RUN.day));
+    if(RUN.bank>=rent){ RUN.bank-=rent; rentLine='Rent paid: <b>$'+rent+'</b>.'; }
+    else { const short=rent-RUN.bank; RUN.bank=0; RUN.debt+=short; GAME.debt=RUN.debt;
+      rentLine='<span style="color:#ff6a3a">Short <b>$'+short+'</b> on rent — Vince adds it to the tab.</span>'; }
+  }
+  saveRun();
+  showMorning(res, bounty, rentLine);
+  return true;
+}
+function showMorning(res, bounty, rentLine){
+  const c=document.getElementById('card');
+  document.getElementById('veil').classList.remove('hide');
+  document.getElementById('hud').classList.remove('on');
+  document.getElementById('hint').classList.remove('on');
+  touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
+  GAME.paused=false; { const pe=document.getElementById('pause'); if(pe) pe.classList.remove('on'); }
+  const win=res.survived;
+  c.innerHTML='<div class="card end '+(win?'win':'lose')+'">'+
+    '<div class="kick">'+(win?'YOU HELD THE LINE':'THEY GOT THE BETTER OF YOU')+' · SUNRISE</div>'+
+    '<div class="title">'+(win?'MADE IT<br><span class="b">TO MORNING</span>':'ROUGH<br><span class="b">NIGHT</span>')+'</div>'+
+    '<div class="stat">Put down <b>'+res.kills+'</b> &nbsp;·&nbsp; Bounty <b>$'+bounty+'</b>'+
+    (rentLine?'<br>'+rentLine:'')+
+    '<br>Bank <b>$'+RUN.bank+'</b>'+(RUN.debt>1500?' &nbsp;·&nbsp; Owed to Vince <b>$'+RUN.debt+'</b>':'')+'</div>'+
+    '<button class="btn" id="nextDayBtn">OPEN UP — DAY '+RUN.day+'</button>'+
+    '<button class="btn" id="quitRunBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">CALL IT — BACK TO TITLE</button></div>';
+  document.getElementById('nextDayBtn').onclick=()=>{ goFullscreen(); startDay(); };
+  document.getElementById('quitRunBtn').onclick=()=>{ GAME.inRun=false; showTitle(); };
+}
 
 /* ================================================================ DAY (the cooking shift)
    Phase-1 vertical slice of the daytime restaurant loop the whole design hangs
@@ -4247,7 +4292,35 @@ const STATIONS=[
 const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m==null?.12:m,flatShading:true});
 const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, cleanPlates:6, dirty:0,
   diners:[], slotTaken:[false,false,false,false], carry:null, spawnT:1.4, washT:0, _carrySig:'', carryMesh:null,
-  ledger:[] };   // cast indices of everyone shooed or walked-out today -> tonight's roster
+  ledger:[], spawnMul:1 };   // cast indices of everyone shooed or walked-out today -> tonight's roster
+
+/* ---- THE RUN: the persistent campaign the day->night->day loop advances ----
+   Rating is the spine: a rolling average of daily scores that scales the night
+   (bigger, tougher mob) and, at week boundaries, the rent. Cash banks across
+   days; the night pays a bounty that funds tomorrow. Persisted to localStorage. */
+const RENT_BASE=1500, RENT_STEP=500, WEEK_DAYS=5, RATING_WINDOW=5;
+const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[] };
+function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} GAME.debt=RUN.debt; }
+function saveRun(){ try{ localStorage.setItem('so_run', JSON.stringify(RUN)); }catch(e){} }
+function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; GAME.debt=1500; saveRun(); }
+loadRun();
+function weekOf(day){ return Math.floor((day-1)/WEEK_DAYS); }             // 0-based week index
+function rentFor(week){ return RENT_BASE + RENT_STEP*week; }
+function rentDueOn(day){ return day>1 && (day-1)%WEEK_DAYS===0; }          // rent hits at the start of each new week
+function daysToRent(day){ return WEEK_DAYS - ((day-1)%WEEK_DAYS); }
+// split a mob of N into escalating waves: 3,4,5,... capped so no wave is huge
+function chunkSizes(n){ const out=[]; let w=3, left=n; while(left>0){ const s=Math.min(w,left); out.push(s); left-=s; w=Math.min(7,w+1); } return out; }
+// build the night from how the day went: the mob is who you wronged (roster),
+// its size floored at 3, its toughness scaled by your rating (higher rating =
+// you're a bigger target = nastier night).
+function nightCfgFor(){
+  const roster=GAME.nightRoster;
+  const grudges=roster?roster.length:0;
+  const count=clamp(grudges,3,16);
+  const toughRatio=clamp((RUN.rating-4)/6, 0.1, 0.8);
+  const waves=[]; for(let i=0;i<count;i++) waves.push(Math.random()<toughRatio?'tough':'weak');
+  return Object.assign({}, SLICE, { waves, waveSizes:chunkSizes(count), roster });
+}
 let kitchenGrp=null;
 function buildKitchen(){
   if(kitchenGrp) return;
@@ -4465,6 +4538,11 @@ function renderDayHUD(){
   const cashN=document.getElementById('dcashN'); if(cashN) cashN.textContent='$'+DAY.cash;
   const cmN=document.getElementById('dcomboN'); if(cmN){ const mult=Math.min(4,1+Math.max(0,DAY.combo-1)*0.5); cmN.textContent='x'+mult.toFixed(1); }
   const plN=document.getElementById('dplatesN'); if(plN) plN.textContent=DAY.cleanPlates;
+  const dr=document.getElementById('drun');
+  if(dr){ const rin=daysToRent(RUN.day);
+    dr.innerHTML='<b>DAY '+RUN.day+'</b> &nbsp; BANK <b>$'+RUN.bank+'</b> &nbsp; RATING <b>'+RUN.rating.toFixed(1)+'</b>'+
+      '<br>RENT $'+rentFor(weekOf(RUN.day))+' <span class="due">in '+rin+(rin===1?' day':' days')+'</span>'+
+      (RUN.debt>1500?' &nbsp; OWED <b>$'+RUN.debt+'</b>':''); }
   const rail=document.getElementById('tickets');
   if(rail){
     const waiting=DAY.diners.filter(d=>d.state==='waiting'||d.state==='coming').sort((a,b)=>a.slot-b.slot);
@@ -4503,7 +4581,10 @@ function startDay(){
   player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null; player.hold=null; player.grabbed=null;
   player.drinks=0; player.wastedT=0; player._drunk=0; player.vy=0; player.pos.y=0;
   resetRagPose(player);
-  DAY.on=true; DAY.t=DAY_LEN; DAY.cash=0; DAY.served=0; DAY.lost=0; DAY.shooed=0; DAY.combo=0; DAY.best=0;
+  GAME.inRun=true;
+  DAY.on=true; DAY.t=DAY_LEN+(RUN.day-1)*4;                 // days lengthen as the run goes (more volume)
+  DAY.spawnMul=clamp(1-(RUN.day-1)*0.03, 0.55, 1);          // ...and the rush comes faster
+  DAY.cash=0; DAY.served=0; DAY.lost=0; DAY.shooed=0; DAY.combo=0; DAY.best=0;
   DAY.ledger.length=0;
   DAY.cleanPlates=6; DAY.dirty=0; DAY.diners.length=0; DAY.slotTaken=[false,false,false,false];
   DAY.carry=null; DAY.spawnT=1.4; DAY.washT=0; updateCarryMesh();
@@ -4520,7 +4601,7 @@ function startDay(){
 function updateDay(dt){
   DAY.t-=dt;
   // spawn diners while open and a stool is free
-  if(DAY.t>0){ DAY.spawnT-=dt; if(DAY.spawnT<=0 && freeSlot()>=0){ spawnDiner(); DAY.spawnT=rand(SPAWN_MIN,SPAWN_MAX); } }
+  if(DAY.t>0){ DAY.spawnT-=dt; if(DAY.spawnT<=0 && freeSlot()>=0){ spawnDiner(); DAY.spawnT=rand(SPAWN_MIN,SPAWN_MAX)*DAY.spawnMul; } }
   updateDiners(dt);
   tickCooks(dt);
   updateCarryMesh();
@@ -4532,7 +4613,14 @@ function dayScore(){ return clamp(6 + DAY.served*0.32 - DAY.lost*0.6, 1, 10); }
 function finishDay(){
   const roster=DAY.ledger.slice();
   GAME.nightRoster = roster.length ? roster : null;         // tonight's returning faces (null -> random mob)
-  const res={ rating: +dayScore().toFixed(1), cash:DAY.cash, served:DAY.served, lost:DAY.lost,
+  // bank the takings; roll the rating (avg of the last RATING_WINDOW days)
+  RUN.bank += DAY.cash;
+  RUN.ratingHist.push(dayScore());
+  if(RUN.ratingHist.length>RATING_WINDOW) RUN.ratingHist.shift();
+  RUN.rating = RUN.ratingHist.reduce((a,b)=>a+b,0)/RUN.ratingHist.length;
+  saveRun();
+  const res={ dayNo:RUN.day, rating:+RUN.rating.toFixed(1), today:+dayScore().toFixed(1),
+    cash:DAY.cash, bank:RUN.bank, served:DAY.served, lost:DAY.lost,
     shooed:DAY.shooed, best:DAY.best, grudges:roster.length };
   dayCleanup(); GAME.mode='over';
   showDayEnd(res);
@@ -4545,17 +4633,17 @@ function showDayEnd(res){
   const g=res.grudges|0;
   const grudgeLine = g>0
     ? '<div class="stat" style="color:#ff9a72;margin-top:10px"><b>'+g+'</b> '+(g===1?'patron is':'patrons are')+' coming back tonight — the ones you shooed and the ones who walked.</div>'
-    : '<div class="stat" style="color:#8be27a;margin-top:10px">Nobody left with a grudge. Quiet night ahead.</div>';
+    : '<div class="stat" style="color:#8be27a;margin-top:10px">Nobody left with a grudge. A light night ahead.</div>';
+  const rentIn=daysToRent(res.dayNo);
+  const rentLine='<div class="stat" style="margin-top:8px;color:#e8c98a">Bank <b>$'+res.bank+'</b> &nbsp;·&nbsp; Rent <b>$'+rentFor(weekOf(res.dayNo+1))+'</b> due in <b>'+rentIn+'</b> '+(rentIn===1?'day':'days')+'</div>';
   c.innerHTML='<div class="card end win">'+
-    '<div class="kick">SERVICE OVER · THE LUNCH RUSH IS DONE</div>'+
+    '<div class="kick">DAY '+res.dayNo+' · SERVICE OVER · THE LUNCH RUSH IS DONE</div>'+
     '<div class="title">DAY<br><span class="b">BANKED</span></div>'+
     '<div class="stat">Took <b>$'+res.cash+'</b> &nbsp;·&nbsp; Served <b>'+res.served+'</b> &nbsp;·&nbsp; Shooed <b>'+res.shooed+'</b> &nbsp;·&nbsp; Walkouts <b>'+res.lost+'</b>'+
-    '<br>Best streak <b>x'+Math.min(4,1+Math.max(0,res.best-1)*0.5).toFixed(1)+'</b> &nbsp;·&nbsp; Rating <b>'+res.rating+'/10</b></div>'+
-    grudgeLine+
-    '<button class="btn" id="openNightBtn">LOCK UP &amp; BRACE FOR TONIGHT</button>'+
-    '<button class="btn" id="dayAgainBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">RUN THE DAY AGAIN</button></div>';
-  document.getElementById('openNightBtn').onclick=()=>{ goFullscreen(); ended=false; startNight(Object.assign({},SLICE,{roster:GAME.nightRoster}), onNightEnd); };
-  document.getElementById('dayAgainBtn').onclick=()=>{ goFullscreen(); startDay(); };
+    '<br>Best streak <b>x'+Math.min(4,1+Math.max(0,res.best-1)*0.5).toFixed(1)+'</b> &nbsp;·&nbsp; Rating <b>'+res.rating+'/10</b> (today '+res.today+')</div>'+
+    grudgeLine+ rentLine+
+    '<button class="btn" id="openNightBtn">LOCK UP &amp; BRACE FOR TONIGHT</button></div>';
+  document.getElementById('openNightBtn').onclick=()=>{ goFullscreen(); ended=false; startNight(nightCfgFor(), onNightEnd); };
 }
 
 /* the hardcoded test night for this slice */
