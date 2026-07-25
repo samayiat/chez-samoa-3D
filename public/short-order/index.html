@@ -307,7 +307,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r36</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r37</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4170,7 +4170,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r36';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r37';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4351,10 +4351,14 @@ const SLOTS_X=[-3.2,-1.05,1.05,3.2];             // four counter stools
 const SERVE_REACH=3.7, STATION_REACH=2.3;
 const COOK_TIME=4.2, READY_HOLD=2.9, BURN_TO_FIRE=3.2;   // cook -> green window -> burnt -> fire
 const PATIENCE=15, DAY_LEN=95, SPAWN_MIN=2.6, SPAWN_MAX=4.6;
+// dishes vary by CHAIN LENGTH (the Overcooked way -- depth from stacking the
+// same verbs, not new ones). `prep:true` means the raw must be CHOPPED at the
+// cutboard before it can go on; some dishes cook, salad only assembles.
 const DISHES={
-  soup:  { name:'SOUP',   pay:14, col:0xd9902f },
-  burger:{ name:'BURGER', pay:24, col:0x8a5330 },
-  fries: { name:'FRIES',  pay:18, col:0xe3b53a },
+  fries: { name:'FRIES',  pay:16, col:0xe3b53a },                 // raw -> fryer -> plate
+  burger:{ name:'BURGER', pay:22, col:0x8a5330 },                 // raw -> griddle -> plate
+  soup:  { name:'SOUP',   pay:18, col:0xd9902f, prep:true },      // raw -> chop -> pot -> plate
+  salad: { name:'SALAD',  pay:14, col:0x76c24a, prep:true },      // raw -> chop -> toss -> plate (no cook)
 };
 const DISH_KEYS=Object.keys(DISHES);
 // The regulars. Each is a face (skin/hair/outfit) + a signature BAD ORDER: the
@@ -4375,12 +4379,14 @@ const CAST=[
 // stations along the kitchen line. `dish` on a cook station = what it produces,
 // so which station you cook at IS the routing choice (ticket says FRIES -> fryer).
 const STATIONS=[
-  { id:'icebox',  kind:'source', x:-10.5, z:KZ, col:0x8fb7d6 },
-  { id:'sink',    kind:'sink',   x:-7.0,  z:KZ, col:0x6f909a },
-  { id:'pot',     kind:'cook',   dish:'soup',   x:-2.8, z:KZ, col:0x9a5a2a },
-  { id:'griddle', kind:'cook',   dish:'burger', x: 1.0, z:KZ, col:0x545a60 },
-  { id:'fryer',   kind:'cook',   dish:'fries',  x: 4.8, z:KZ, col:0xc9a23a },
-  { id:'plate',   kind:'plate',  x: 8.6, z:KZ, col:0xece5d6 },
+  { id:'icebox',  kind:'source',  x:-11.0, z:KZ, col:0x8fb7d6 },
+  { id:'sink',    kind:'sink',    x:-8.4,  z:KZ, col:0x6f909a },
+  { id:'prep',    kind:'prep',    x:-5.8,  z:KZ, col:0x9a7a4a },                  // cutboard: raw -> chopped
+  { id:'pot',     kind:'cook',    dish:'soup',   needs:'chopped', x:-3.0, z:KZ, col:0x9a5a2a },
+  { id:'griddle', kind:'cook',    dish:'burger', needs:'raw',     x:-0.4, z:KZ, col:0x545a60 },
+  { id:'fryer',   kind:'cook',    dish:'fries',  needs:'raw',     x: 2.2, z:KZ, col:0xc9a23a },
+  { id:'saladbar',kind:'assemble',dish:'salad',                   x: 5.0, z:KZ, col:0x6fae54 },  // chopped -> salad (no cook)
+  { id:'plate',   kind:'plate',   x: 8.0,  z:KZ, col:0xece5d6 },
 ];
 const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m==null?.12:m,flatShading:true});
 const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, cleanPlates:6, dirty:0,
@@ -4461,6 +4467,12 @@ function buildKitchen(){
     } else if(s.kind==='plate'){
       for(let i=0;i<4;i++){ const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.34,0.03,16),dmat(0xf4efe4,.4,.05));
         pl.position.y=1.3+i*0.04; g.add(pl); }
+    } else if(s.kind==='prep'){
+      const board=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.1,0.9),dmat(0xcaa46a,.7,.05)); board.position.y=1.3; g.add(board);
+      const knife=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.04,0.5),dmat(0xcfd6da,.4,.6)); knife.position.set(0.36,1.38,0.1); g.add(knife);
+    } else if(s.kind==='assemble'){
+      const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.28,0.28,16),dmat(0xe8e2d4,.5,.05)); bowl.position.y=1.34; g.add(bowl);
+      const greens=new THREE.Mesh(new THREE.SphereGeometry(0.34,12,8,0,TAU,0,Math.PI*0.5),dmat(0x74bb4e,.8,0)); greens.position.y=1.44; g.add(greens);
     }
   }
 }
@@ -4502,7 +4514,8 @@ function spawnDiner(){
   const g=makeDiner(cast); g.rotation.y=Math.PI;           // face the counter (-z, toward the kitchen)
   const sx=SLOTS_X[slot];
   g.position.set(sx, 0, HALFD-1.2); scene.add(g);
-  const bubble=makeBubble(bad?cast.bad:DISHES[dish].name, bad); scene.add(bubble);
+  const label = bad ? cast.bad : (DISHES[dish].name + (DISHES[dish].prep?' (CHOP)':''));
+  const bubble=makeBubble(label, bad); scene.add(bubble);
   DAY.diners.push({ g, bubble, slot, castIdx:ci, cast, bad, dish, hearts:1, state:'coming',
     x:sx, z:HALFD-1.2, tx:sx, tz:SERVE_Z });
 }
@@ -4589,11 +4602,18 @@ function serveDiner(P,d){
 function stationAct(P,s){
   const c=DAY.carry;
   if(s.kind==='source'){ if(!c){ DAY.carry={kind:'raw'}; if(AC)sfx.pickup(); } }
+  else if(s.kind==='prep'){
+    if(c && c.kind==='raw'){ DAY.carry={kind:'chopped'}; if(AC)sfx.pickup(); }   // chop it up
+  }
   else if(s.kind==='cook'){
     const it=s.item;
-    if(!it && c && c.kind==='raw'){ s.item={dish:s.dish,t:0,state:'cooking'}; DAY.carry=null; if(AC)sfx.pickup(); }
+    if(!it && c && c.kind===s.needs){ s.item={dish:s.dish,t:0,state:'cooking'}; DAY.carry=null; if(AC)sfx.pickup(); }
+    else if(!it && c && (c.kind==='raw'||c.kind==='chopped')){ toast(s.needs==='chopped'?'CHOP IT FIRST':'DOESN’T GO HERE'); }
     else if(it && !c && (it.state==='ready'||it.state==='burnt')){
       DAY.carry={kind:'cooked',dish:it.dish,quality:it.state==='ready'?'perfect':'burnt'}; s.item=null; if(AC)sfx.pickup(); }
+  }
+  else if(s.kind==='assemble'){                                    // salad bar: toss chopped -> a finished salad (no heat)
+    if(c && c.kind==='chopped'){ DAY.carry={kind:'cooked',dish:s.dish,quality:'perfect'}; if(AC)sfx.pickup(); }
   }
   else if(s.kind==='plate'){
     if(c && c.kind==='cooked'){ if(DAY.cleanPlates>0){ DAY.cleanPlates--; DAY.carry={kind:'plated',dish:c.dish,quality:c.quality}; if(AC)sfx.pickup(); }
@@ -4629,6 +4649,7 @@ function updateCarryMesh(){
     if(c){
       const g=new THREE.Group();
       if(c.kind==='raw'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.16,10,8),dmat(0xd7c8a8,.8,0))); }
+      else if(c.kind==='chopped'){ for(let i=0;i<4;i++){ const cube=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.1),dmat(0xbfd88a,.8,0)); cube.position.set((i%2?0.07:-0.07),0.02+((i>>1)*0.08),(i>>1?0.05:-0.05)); g.add(cube); } }
       else if(c.kind==='cooked'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8),dmat(c.quality==='burnt'?0x241812:DISHES[c.dish].col,.6,.05))); }
       else if(c.kind==='plated'){
         const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.24,0.04,16),dmat(0xf4efe4,.4,.05)); g.add(pl);
@@ -4660,7 +4681,7 @@ function renderDayHUD(){
     const waiting=DAY.diners.filter(d=>d.state==='waiting'||d.state==='coming').sort((a,b)=>a.slot-b.slot);
     rail.innerHTML=waiting.map(d=>{
       const f=clamp(d.hearts,0,1); const col=f>0.5?'#49d05a':f>0.25?'#e3b53a':'#ff3b30';
-      const order=d.bad ? ('✕ '+d.cast.bad) : DISHES[d.dish].name;
+      const order=d.bad ? ('✕ '+d.cast.bad) : (DISHES[d.dish].name + (DISHES[d.dish].prep?' 🔪':''));
       return '<div class="ticket'+(d.bad?' bad':'')+'"><div class="tname">'+d.cast.name+'</div><div class="tdish">'+order+'</div>'+
         '<div class="tbarwrap"><i class="tbar" style="transform:scaleX('+f.toFixed(3)+');background:'+col+'"></i></div></div>';
     }).join('');
@@ -4669,6 +4690,7 @@ function renderDayHUD(){
   if(car){ const c=DAY.carry;
     if(c){ car.classList.add('on');
       car.textContent = c.kind==='raw'?'CARRYING: RAW':
+        c.kind==='chopped'?'CARRYING: CHOPPED':
         c.kind==='cooked'?('CARRYING: '+(c.quality==='burnt'?'BURNT ':'')+DISHES[c.dish].name):
         ('PLATED: '+(c.quality==='burnt'?'BURNT ':'')+DISHES[c.dish].name);
     } else car.classList.remove('on'); }
