@@ -99,7 +99,7 @@
   .dchip span{font-size:calc(var(--u)*1.5);letter-spacing:.16em;color:#f4e4c199}
   #dclock.crit b{color:var(--flame)}
   #dcombo b{color:var(--flame)}
-  #tickets{position:absolute;top:calc(var(--u)*10);left:50%;transform:translateX(-50%);display:flex;gap:calc(var(--u)*1.2);flex-wrap:nowrap}
+  #tickets{position:absolute;top:calc(var(--u)*9);right:calc(var(--u)*2);left:auto;transform:none;display:flex;flex-direction:column;gap:calc(var(--u)*1);align-items:flex-end}
   .ticket{background:#1a0f08ee;border:2px solid #e8c98a;border-radius:6px;padding:calc(var(--u)*0.8) calc(var(--u)*1.2);width:calc(var(--u)*13);box-shadow:0 4px 0 #0007}
   .ticket.bad{border-color:#ff6a3a;background:#22100cee}
   .ticket.read{border-color:#6b6152;opacity:.72}
@@ -121,6 +121,10 @@
   #dcarry{position:absolute;bottom:calc(var(--u)*4);left:50%;transform:translateX(-50%);font-family:"Anton",sans-serif;
     font-size:calc(var(--u)*2.4);letter-spacing:.1em;color:var(--cream);background:#120b06cc;border-radius:4px;padding:calc(var(--u)*0.6) calc(var(--u)*1.6);opacity:0;transition:opacity .15s}
   #dcarry.on{opacity:1}
+
+  /* cooking day: only GRAB is used -- hide the combat touch buttons */
+  body.cookmode #tface .cross, body.cookmode #tface .square, body.cookmode #tface .roll,
+  body.cookmode #bGuard, body.cookmode #bLock{ display:none !important }
 
   /* ---------- back-office shop ---------- */
   .card.shop{max-width:min(96%,780px)}
@@ -332,7 +336,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r44</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r45</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -903,7 +907,7 @@ buildOcean();
    other counter in this file. */
 const BAR={ x:0, z:-HALFD+1.1, w:8, d:1.5 };
 (function bar(){
-  const g=new THREE.Group(); g.position.set(BAR.x,0,BAR.z); arena.add(g);
+  const g=new THREE.Group(); g.position.set(BAR.x,0,BAR.z); arena.add(g); arena.userData.barG=g;   // the liquor 'island' -- hidden during the day service
   const body=new THREE.Mesh(new THREE.BoxGeometry(BAR.w,1.15,BAR.d),
     new THREE.MeshStandardMaterial({color:0x5a4028,roughness:.85,flatShading:true}));
   body.position.y=0.58; body.castShadow=body.receiveShadow=true; g.add(body);
@@ -1013,7 +1017,7 @@ function passSlotX(i){ return (i-(PASS_SLOTS-1)/2) * (PASS.w-1.4)/(PASS_SLOTS-1)
 /* potted palms, the restaurant's own greenery */
 (function palms(){
   for(const sx of [-HALFW+2.6,HALFW-2.6]){
-    const p=new THREE.Group(); p.position.set(sx,0,-HALFD*0.15); arena.add(p);
+    const p=new THREE.Group(); p.position.set(sx,0,-HALFD*0.15); arena.add(p); (arena.userData.palmsG=arena.userData.palmsG||[]).push(p);
     const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.62,0.85,10),
       new THREE.MeshStandardMaterial({color:0x6a3a24,flatShading:true,roughness:.9})); pot.position.y=0.42; pot.castShadow=true; p.add(pot);
     const trunk=new THREE.Mesh(new THREE.BoxGeometry(0.18,2.4,0.18),new THREE.MeshStandardMaterial({color:0x54381e,flatShading:true,roughness:.9}));
@@ -4146,6 +4150,7 @@ function startNight(cfg, onEnd){
   for(const p of PICKUPS) scene.remove(p.g); PICKUPS.length=0;
   tokensUsed=0;
   GAME.kills=0; GAME.combo=0; GAME.maxCombo=0; GAME.hitsLanded=0; GAME.onEnd=onEnd;
+  if(typeof dayScene==='function') dayScene(false);          // restore the after-hours look for the brawl document.body.classList.remove("cookmode");
   NIGHT_ROSTER = (cfg.roster && cfg.roster.length) ? cfg.roster.slice() : null;   // the day's grudges, if any
   if(NIGHT_ROSTER) NIGHT_ROSTER._i=0;
   // player
@@ -4195,7 +4200,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r44';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r45';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4370,10 +4375,17 @@ function buyUpgrade(key){
    is a bounded ~95s shift that outputs { rating, cash, served, lost } -- the
    struct the night's difficulty will read from (wired next increment). Reuses the
    chef rig, movement, camera and juice wholesale; combat is gated off in cook mode. */
-const KZ=-6.5;                                   // the kitchen work line (behind the pass)
-const SERVE_Z=1.6;                               // where diners stand at the counter (dining side)
-const SLOTS_X=[-3.2,-1.05,1.05,3.2];             // four counter stools
-const SERVE_REACH=3.7, STATION_REACH=2.3;
+// OPEN-KITCHEN dining room: cook line along the back wall (KZ), a central PASS
+// you stage plated dishes on, and 4 two-seat TABLES out front where customers sit.
+const KZ=-8.5;                                   // the cook line runs along the back wall
+const SERVE_REACH=3.2, STATION_REACH=2.3;
+const TABLES=[ {x:-7.5,z:4.2},{x:-2.5,z:4.2},{x:2.5,z:4.2},{x:7.5,z:4.2} ];
+const SEATS=[];
+TABLES.forEach((t,ti)=>{ SEATS.push({x:t.x-0.95,z:t.z,table:ti}); SEATS.push({x:t.x+0.95,z:t.z,table:ti}); });
+// the PASS is the SAME counter the night weapons sit on (PASS, defined in ARENA).
+// By day you stage plated dishes on it, then run them out to the tables.
+const PASSD={ x:PASS.x, z:PASS.z, w:PASS.w, top:1.3, slots:4 };
+const ENTRANCE_Z=HALFD-1.2;
 const COOK_TIME=4.2, READY_HOLD=2.9, BURN_TO_FIRE=3.2;   // cook -> green window -> burnt -> fire
 const PATIENCE=15, DAY_LEN=95, SPAWN_MIN=2.6, SPAWN_MAX=4.6;
 // dishes vary by CHAIN LENGTH (the Overcooked way -- depth from stacking the
@@ -4421,11 +4433,14 @@ const STATIONS=[
 ];
 const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m==null?.12:m,flatShading:true});
 const STATION_LABEL={ icebox:'ICEBOX', sink:'SINK', prep:'PREP', pot:'SOUP POT', griddle:'GRIDDLE', fryer:'FRYER', saladbar:'SALAD', plate:'PLATES' };
+// bold, distinct accent colour per station -- painted on the counter FRONT so you
+// can read what each is from across the room (Overcooked/PlateUp colour-coding).
+const STATION_ACCENT={ icebox:0x3aa6dc, prep:0x8a5a2c, pot:0xd23f2a, griddle:0x394048, fryer:0xe6a721, saladbar:0x4fb03a, plate:0xdfe4e8, sink:0x2f9fb8 };
 // fixed 2.5D daytime camera (Overcooked/PlateUp-style): high, angled, framing the
 // whole kitchen line + the counter. Tunable by eye.
-const DAYCAM={ x:-1.5, y:14.5, z:8.5, lookY:0.7, lookZ:-3.1, fov:44 };
+const DAYCAM={ x:0, y:19, z:15, lookY:0.9, lookZ:-2.0, fov:45 };
 const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, cleanPlates:6, dirty:0,
-  diners:[], slotTaken:[false,false,false,false], carry:null, spawnT:1.4, washT:0, _carrySig:'', carryMesh:null,
+  diners:[], slotTaken:[], carry:null, spawnT:1.4, washT:0, _carrySig:'', carryMesh:null, passDishes:[],
   ledger:[], spawnMul:1 };   // cast indices of everyone shooed or walked-out today -> tonight's roster
 
 /* ---- THE RUN: the persistent campaign the day->night->day loop advances ----
@@ -4478,54 +4493,64 @@ let kitchenGrp=null;
 const SURF=1.12;    // shared worktop surface height -- every appliance sits on THIS
 // one uniform counter unit (cabinet + flush worktop) so the run reads as one
 // continuous countertop, Overcooked/PlateUp style.
-function buildCounter(g){
+function buildCounter(g, accent){
   const cab=new THREE.Mesh(new THREE.BoxGeometry(CELL,1.0,1.5),dmat(0x39414b,.7,.25));
   cab.position.y=0.5; cab.castShadow=true; cab.receiveShadow=true; g.add(cab);
   const kick=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.16,1.42),dmat(0x2b323b,.8,.2)); kick.position.y=0.08; g.add(kick);
-  const top=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.12,1.56),dmat(0xd9d3c6,.55,.05));   // flush -> continuous
+  // bold colour-coded FRONT panel -- this is the at-a-glance identifier
+  const front=new THREE.Mesh(new THREE.BoxGeometry(CELL-0.06,0.72,0.06),dmat(accent,.55,.1)); front.position.set(0,0.56,0.76); g.add(front);
+  const top=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.12,1.56),dmat(0xe4dfd2,.5,.05));   // flush -> continuous
   top.position.y=SURF-0.06; top.castShadow=true; g.add(top);
-  const lip=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.06,0.07),dmat(0xb7b0a0,.6,.05)); lip.position.set(0,SURF-0.1,0.79); g.add(lip);
+  const lip=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.07,0.08),dmat(accent,.5,.1)); lip.position.set(0,SURF-0.1,0.79); g.add(lip);
   return top;
 }
 // the distinct appliance that sits on the worktop, so each station reads at a glance
 function buildAppliance(s,g){
-  if(s.kind==='source'){                       // ingredient fridge
-    const box=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.9,1.2),dmat(0xcfe6f2,.5,.1)); box.position.y=SURF+0.45; box.castShadow=true; g.add(box);
-    const lid=new THREE.Mesh(new THREE.BoxGeometry(1.76,0.14,1.26),dmat(0xeaf4fa,.4,.1)); lid.position.y=SURF+0.92; g.add(lid);
-    const hn=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.08,0.1),dmat(0x9fb8c6,.4,.4)); hn.position.set(0,SURF+0.55,0.62); g.add(hn);
-  } else if(s.kind==='prep'){                   // wooden board + knife
-    const board=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.12,0.95),dmat(0xcaa46a,.7,.05)); board.position.y=SURF+0.06; g.add(board);
-    const grip=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.06,0.32),dmat(0x2a1c10,.6,.1)); grip.position.set(0.42,SURF+0.13,-0.2); g.add(grip);
-    const blade=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.03,0.4),dmat(0xcfd6da,.3,.7)); blade.position.set(0.42,SURF+0.13,0.18); g.add(blade);
+  if(s.kind==='source'){                       // ICE-BLUE fridge, tall + frosty
+    const box=new THREE.Mesh(new THREE.BoxGeometry(1.7,1.15,1.15),dmat(0x39a8dc,.4,.15)); box.position.y=SURF+0.58; box.castShadow=true; g.add(box);
+    const door=new THREE.Mesh(new THREE.BoxGeometry(1.74,0.55,1.19),dmat(0x5cc0ee,.35,.15)); door.position.y=SURF+0.85; g.add(door);
+    const frost=new THREE.Mesh(new THREE.BoxGeometry(1.76,0.12,1.21),dmat(0xeaf6fc,.3,.1)); frost.position.y=SURF+1.2; g.add(frost);
+    const hn=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.09,0.11),dmat(0xdfeef7,.3,.5)); hn.position.set(0,SURF+0.85,0.62); g.add(hn);
+  } else if(s.kind==='prep'){                   // green cutting MAT + thick board + big knife
+    const mat=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.06,1.0),dmat(0x4fae44,.7,.02)); mat.position.y=SURF+0.03; g.add(mat);
+    const board=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.14,0.8),dmat(0xd9b06a,.7,.05)); board.position.set(-0.1,SURF+0.13,0); g.add(board);
+    const grip=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.09,0.34),dmat(0x2a1c10,.6,.1)); grip.position.set(0.5,SURF+0.2,-0.22); g.add(grip);
+    const blade=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.02,0.46),dmat(0xdfe6ea,.25,.8)); blade.position.set(0.5,SURF+0.2,0.16); blade.rotation.x=-0.15; g.add(blade);
+    for(const c of [[-0.35,0.1],[-0.2,-0.12],[0.05,0.06]]){ const v=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.08,0.12),dmat(0xd23f2a,.7,0)); v.position.set(c[0],SURF+0.24,c[1]); g.add(v); }
   } else if(s.kind==='cook'){
-    if(s.dish==='fries'){                        // fryer: oil vat + basket handle
-      const vat=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.5,1.0),dmat(0x2a2d32,.5,.5)); vat.position.y=SURF+0.25; g.add(vat);
-      const oil=new THREE.Mesh(new THREE.BoxGeometry(1.0,0.06,0.8),dmat(0xd9a83a,.3,.2)); oil.position.y=SURF+0.44; g.add(oil);
-      const hb=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.5),dmat(0x1a1a1e,.5,.5)); hb.position.set(0,SURF+0.55,0.6); g.add(hb);
-    } else if(s.dish==='burger'){                // griddle: ridged flat top
-      const gr=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.16,1.1),dmat(0x24262b,.4,.6)); gr.position.y=SURF+0.1; g.add(gr);
-      for(let i=-2;i<=2;i++){ const rr=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.03,0.06),dmat(0x14151a,.4,.6)); rr.position.set(0,SURF+0.19,i*0.16); g.add(rr); }
-    } else {                                     // soup: pot on a burner
-      const burner=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.1,16),dmat(0x1a1a1e,.5,.5)); burner.position.y=SURF+0.06; g.add(burner);
-      const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.36,0.5,16),dmat(0x3a3f47,.4,.5)); pot.position.y=SURF+0.36; g.add(pot);
-      const lid=new THREE.Mesh(new THREE.CylinderGeometry(0.44,0.44,0.06,16),dmat(0x4a5057,.4,.5)); lid.position.y=SURF+0.63; g.add(lid);
+    if(s.dish==='fries'){                        // FRYER: golden oil vat + wire basket
+      const vat=new THREE.Mesh(new THREE.BoxGeometry(1.25,0.6,1.05),dmat(0x2a2d32,.5,.5)); vat.position.y=SURF+0.3; g.add(vat);
+      const oil=new THREE.Mesh(new THREE.BoxGeometry(1.05,0.1,0.85),dmat(0xf0b429,.25,.15)); oil.position.y=SURF+0.55; g.add(oil);
+      const basket=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.28,0.6),dmat(0x8a8f96,.4,.7)); basket.position.set(0,SURF+0.5,0); g.add(basket);
+      const hb=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.7,8),dmat(0x1a1a1e,.5,.6)); hb.rotation.x=-0.5; hb.position.set(0,SURF+0.7,0.55); g.add(hb);
+    } else if(s.dish==='burger'){                // GRIDDLE: wide charcoal flat-top w/ hot strip
+      const gr=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.2,1.15),dmat(0x24262b,.4,.6)); gr.position.y=SURF+0.12; g.add(gr);
+      for(let i=-2;i<=2;i++){ const rr=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.03,0.05),dmat(0x0e0f12,.4,.6)); rr.position.set(0,SURF+0.23,i*0.18); g.add(rr); }
+      const strip=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.02,0.9),new THREE.MeshBasicMaterial({color:0xff5a1e,transparent:true,opacity:0.28,depthWrite:false})); strip.position.y=SURF+0.24; g.add(strip);
+    } else {                                     // SOUP POT: fat round red-handled pot on a burner
+      const burner=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,0.12,18),dmat(0x141519,.5,.5)); burner.position.y=SURF+0.07; g.add(burner);
+      const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.52,0.44,0.62,20),dmat(0xc9402c,.4,.35)); pot.position.y=SURF+0.44; g.add(pot);
+      const rim=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,0.08,20),dmat(0x8f2a1c,.4,.35)); rim.position.y=SURF+0.75; g.add(rim);
+      const lid=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.08,20),dmat(0xe4dfd2,.5,.2)); lid.position.y=SURF+0.8; g.add(lid);
+      const knob=new THREE.Mesh(new THREE.SphereGeometry(0.08,8,6),dmat(0x2a1c10,.6,0)); knob.position.y=SURF+0.87; g.add(knob);
     }
     const glow=new THREE.Mesh(new THREE.SphereGeometry(0.34,12,10),
       new THREE.MeshBasicMaterial({color:0xff7a1e,transparent:true,opacity:0,depthWrite:false}));
-    glow.position.y=SURF+0.5; g.add(glow); s._glow=glow;
-    const flame=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.36,0.85,10),
+    glow.position.y=SURF+0.55; g.add(glow); s._glow=glow;
+    const flame=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.38,0.9,10),
       new THREE.MeshBasicMaterial({color:0xff551e,transparent:true,opacity:0.92,depthWrite:false}));
-    flame.position.y=SURF+0.85; flame.visible=false; g.add(flame); s._flame=flame;
-  } else if(s.kind==='assemble'){               // salad bar bowl of greens
-    const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.32,0.34,18),dmat(0xe8e2d4,.5,.05)); bowl.position.y=SURF+0.17; g.add(bowl);
-    const greens=new THREE.Mesh(new THREE.SphereGeometry(0.42,14,10,0,TAU,0,Math.PI*0.5),dmat(0x74bb4e,.8,0)); greens.position.y=SURF+0.3; g.add(greens);
-  } else if(s.kind==='plate'){                  // a stack of clean plates
-    for(let i=0;i<5;i++){ const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.035,18),dmat(0xf4efe4,.4,.05)); pl.position.y=SURF+0.05+i*0.045; g.add(pl); }
-  } else if(s.kind==='sink'){                   // basin + gooseneck faucet
-    const basin=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.34,1.0),dmat(0x2f363c,.5,.4)); basin.position.y=SURF+0.1; g.add(basin);
-    const water=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.05,0.8),dmat(0x4a7f96,.2,.3)); water.position.y=SURF+0.26; g.add(water);
-    const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.5,10),dmat(0xb8c2c8,.3,.6)); neck.position.set(0,SURF+0.5,-0.4); g.add(neck);
-    const spout=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.3,10),dmat(0xb8c2c8,.3,.6)); spout.rotation.x=Math.PI/2; spout.position.set(0,SURF+0.72,-0.28); g.add(spout);
+    flame.position.y=SURF+0.95; flame.visible=false; g.add(flame); s._flame=flame;
+  } else if(s.kind==='assemble'){               // SALAD BAR: bright green mound in a wide bowl
+    const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.34,0.4,20),dmat(0xece6da,.5,.05)); bowl.position.y=SURF+0.2; g.add(bowl);
+    const greens=new THREE.Mesh(new THREE.SphereGeometry(0.52,16,12,0,TAU,0,Math.PI*0.5),dmat(0x54c23e,.8,0)); greens.position.y=SURF+0.36; g.add(greens);
+    for(const c of [[-0.2,0.1,0xd23f2a],[0.18,-0.12,0xe6a721],[0.05,0.2,0xd23f2a]]){ const b=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,6),dmat(c[2],.6,0)); b.position.set(c[0],SURF+0.5,c[1]); g.add(b); }
+  } else if(s.kind==='plate'){                  // tall stack of clean white plates
+    for(let i=0;i<6;i++){ const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.42,0.04,20),dmat(0xf7f2e8,.35,.05)); pl.position.y=SURF+0.06+i*0.05; g.add(pl); }
+  } else if(s.kind==='sink'){                   // deep AQUA basin + tall gooseneck faucet
+    const basin=new THREE.Mesh(new THREE.BoxGeometry(1.35,0.4,1.05),dmat(0x27313a,.5,.4)); basin.position.y=SURF+0.14; g.add(basin);
+    const water=new THREE.Mesh(new THREE.BoxGeometry(1.12,0.06,0.82),dmat(0x35b6d6,.15,.25)); water.position.y=SURF+0.32; g.add(water);
+    const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,0.62,12),dmat(0xcfd8dd,.3,.7)); neck.position.set(0,SURF+0.6,-0.42); g.add(neck);
+    const spout=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,0.4,12),dmat(0xcfd8dd,.3,.7)); spout.rotation.x=Math.PI/2; spout.position.set(0,SURF+0.88,-0.24); g.add(spout);
   }
 }
 function buildKitchen(){
@@ -4533,10 +4558,51 @@ function buildKitchen(){
   kitchenGrp=new THREE.Group(); arena.add(kitchenGrp);
   for(const s of STATIONS){
     const g=new THREE.Group(); g.position.set(s.x,0,s.z); kitchenGrp.add(g); s._g=g;
-    s._top=buildCounter(g);
+    s._top=buildCounter(g, STATION_ACCENT[s.id]||0x39414b);
     buildAppliance(s,g);
     const sign=makeSign(STATION_LABEL[s.id]||s.id, s.col); sign.position.y=2.35; g.add(sign); s._sign=sign;
   }
+  buildDining();
+}
+function buildDining(){
+  // NO new pass counter -- the real PASS (arena) already sits here. Just dress it
+  // for service: a heat-lamp bar + a PASS sign above the existing counter.
+  const pg=new THREE.Group(); pg.position.set(PASSD.x,0,PASSD.z); kitchenGrp.add(pg);
+  const lamp=new THREE.Mesh(new THREE.BoxGeometry(PASSD.w-0.4,0.1,0.14),dmat(0x2a2018,.6,.3)); lamp.position.set(0,2.05,0); pg.add(lamp);
+  const glow=new THREE.Mesh(new THREE.BoxGeometry(PASSD.w-0.6,0.02,0.9),new THREE.MeshBasicMaterial({color:0xff9a2e,transparent:true,opacity:0.22,depthWrite:false})); glow.position.set(0,1.94,0); pg.add(glow);
+  PASSD._sign=makeSign('PASS',0xe6a721); PASSD._sign.position.set(0,2.4,0); pg.add(PASSD._sign);
+  // dining TABLES: round top, pedestal, two chairs
+  for(const t of TABLES){
+    const tg=new THREE.Group(); tg.position.set(t.x,0,t.z); kitchenGrp.add(tg);
+    const tt=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.1,20),dmat(0xc07a44,.55,.05)); tt.position.y=0.95; tt.castShadow=true; tg.add(tt);
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,0.9,10),dmat(0x4a3626,.6,.1)); post.position.y=0.47; tg.add(post);
+    const foot=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.42,0.06,14),dmat(0x3a2a1c,.6,.1)); foot.position.y=0.04; tg.add(foot);
+    for(const sx of [-0.95,0.95]){
+      const seatm=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.5),dmat(0x6a4c34,.7,.05)); seatm.position.set(sx,0.5,0); tg.add(seatm);
+      const back=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.62,0.08),dmat(0x6a4c34,.7,.05)); back.position.set(sx,0.82,0.24); tg.add(back);
+    }
+  }
+}
+// the pass's staging slots (finished plates sit here until you run them out)
+function passSlotPos(i){ return { x: PASSD.x + (i-(PASSD.slots-1)/2)*1.3, y:PASSD.top+0.06, z:PASSD.z }; }
+function nearPass(P){ return Math.hypot(PASSD.x-P.pos.x, PASSD.z-P.pos.z) < 2.8; }
+function platedMesh(dish,quality){
+  const g=new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.24,0.04,16),dmat(0xf4efe4,.4,.05)));
+  const food=new THREE.Mesh(new THREE.SphereGeometry(0.14,10,8),dmat(quality==='burnt'?0x241812:DISHES[dish].col,.6,.05)); food.position.y=0.09; g.add(food);
+  return g;
+}
+function stagePlate(){                                    // set the carried plate down on the pass
+  const c=DAY.carry; if(!c||c.kind!=='plated') return false;
+  let idx=-1; for(let i=0;i<PASSD.slots;i++) if(!DAY.passDishes[i]){ idx=i; break; }
+  if(idx<0){ toast('PASS IS FULL'); return false; }
+  const m=platedMesh(c.dish,c.quality); const p=passSlotPos(idx); m.position.set(p.x,p.y,p.z); scene.add(m);
+  DAY.passDishes[idx]={dish:c.dish,quality:c.quality,mesh:m}; DAY.carry=null; if(AC)sfx.pickup(); return true;
+}
+function grabFromPass(P){                                 // pick up the nearest staged plate
+  let idx=-1,bd=1e9; for(let i=0;i<PASSD.slots;i++){ const pd=DAY.passDishes[i]; if(!pd)continue; const d=Math.abs(passSlotPos(i).x-P.pos.x); if(d<bd){ bd=d; idx=i; } }
+  if(idx<0) return false;
+  const pd=DAY.passDishes[idx]; DAY.carry={kind:'plated',dish:pd.dish,quality:pd.quality}; scene.remove(pd.mesh); DAY.passDishes[idx]=null; if(AC)sfx.pickup(); return true;
 }
 function makeDiner(cast){
   const g=new THREE.Group();
@@ -4594,23 +4660,23 @@ function makeSign(text, col){
   const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,fog:false});
   const m=new THREE.Mesh(new THREE.PlaneGeometry(1.7,0.42),mat); m.renderOrder=1150; return m;
 }
-function freeSlot(){ for(let i=0;i<SLOTS_X.length;i++) if(!DAY.slotTaken[i]) return i; return -1; }
+function freeSlot(){ for(let i=0;i<SEATS.length;i++) if(!DAY.slotTaken[i]) return i; return -1; }
 function spawnDiner(){
   const slot=freeSlot(); if(slot<0) return;
   DAY.slotTaken[slot]=true;
+  const seat=SEATS[slot];
   const ci=(Math.random()*CAST.length)|0, cast=CAST[ci];
   const bad=Math.random()<0.30;                            // ~30% ask for the off-menu thing (the 2D ratio)
   const dish=bad?null:pick(DISH_KEYS);
-  const g=makeDiner(cast); g.rotation.y=Math.PI;           // face the counter (-z, toward the kitchen)
-  const sx=SLOTS_X[slot];
-  g.position.set(sx, 0, HALFD-1.2); scene.add(g);
-  const bubble=makeBubble('…','read'); scene.add(bubble);  // they read the menu first; the order is hidden until you greet them
+  const g=makeDiner(cast); g.rotation.y=Math.PI;           // face the pass/kitchen (-z)
+  g.position.set(seat.x, 0, ENTRANCE_Z); scene.add(g);     // walk in from the front door
+  const bubble=makeBubble('…','read'); scene.add(bubble);  // read the menu first; the order is hidden until you greet them
   DAY.diners.push({ g, bubble, slot, castIdx:ci, cast, bad, dish, hearts:1, state:'coming',
-    readT:rand(2.4,4.2), x:sx, z:HALFD-1.2, tx:sx, tz:SERVE_Z });
+    readT:rand(2.4,4.2), x:seat.x, z:ENTRANCE_Z, tx:seat.x, tz:seat.z });
 }
 function grudge(d){ DAY.ledger.push(d.castIdx); }   // they'll be back tonight, this face
 function releaseDiner(d, happy){
-  DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=HALFD-1.0;
+  DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=ENTRANCE_Z;
   if(d.bubble) d.bubble.visible=false;
   if(!happy){ DAY.combo=0; }
 }
@@ -4631,10 +4697,10 @@ function updateDiners(dt){
       if(d.hearts<=0){ d.hearts=0; DAY.lost++; grudge(d); toast(d.cast.name+' WALKED OUT'); releaseDiner(d,false); }
     } else if(d.state==='eating'){                                  // sit and enjoy it, THEN leave a dirty plate + free the stool
       d.eatT-=dt;
-      if(d.eatT<=0){ DAY.dirty++; DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=HALFD-1.0; if(d.bubble) d.bubble.visible=false; }
+      if(d.eatT<=0){ DAY.dirty++; DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=ENTRANCE_Z; if(d.bubble) d.bubble.visible=false; }
     } else if(d.state==='leaving'){
       d.z += (d.tz-d.z)*Math.min(1,dt*3.0);
-      if(d.z>HALFD-1.35){ scene.remove(d.g); if(d.bubble) scene.remove(d.bubble); DAY.diners.splice(i,1); continue; }
+      if(d.z>ENTRANCE_Z-0.25){ scene.remove(d.g); if(d.bubble) scene.remove(d.bubble); DAY.diners.splice(i,1); continue; }
     }
     d.g.position.set(d.x, Math.sin(GAME.t*3+d.slot)*0.02, d.z);   // small alive-bob
     if(d.bubble && d.bubble.visible!==false){
@@ -4708,11 +4774,15 @@ function dayPrompt(P){
   if(dR) html='<span class="pname">GREET</span><span class="pact">'+dR.cast.name+'</span>';
   else if(dO && dO.bad) html='<span class="pname">'+dO.cast.name+'</span><span class="pact">wants '+dO.cast.bad+' — wave off</span>';
   else if(dO && !dO.bad && DAY.carry && DAY.carry.kind==='plated') html='<span class="pname">SERVE</span><span class="pact">'+dO.cast.name+'</span>';
+  else if(nearPass(P)){ const c=DAY.carry;
+    if(c && c.kind==='plated') html='<span class="pname">PASS</span><span class="pact">set plate down</span>';
+    else if(!c && DAY.passDishes.some(Boolean)) html='<span class="pname">PASS</span><span class="pact">pick up a plate</span>';
+    else if(s) html=stationPrompt(s); else html='<span class="pname">PASS</span>'; }
   else if(s) html=stationPrompt(s);
   if(html){ el.innerHTML=html; el.classList.add('on'); } else el.classList.remove('on');
 }
 function waveOff(d){
-  DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=HALFD-1.0;
+  DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=ENTRANCE_Z;
   if(d.bubble) d.bubble.visible=false;
   DAY.shooed++; grudge(d);                                  // shooed -> they're on tonight's roster
   const coins=3+((Math.random()*3)|0); DAY.cash+=coins;
@@ -4777,7 +4847,12 @@ function cookVerbs(P,pad,dt){
   if(d){
     if(d.state==='ready'){ if(!DAY.carry){ takeOrder(d); return; } }          // greet -> they order
     else if(d.bad){ if(!DAY.carry){ waveOff(d); return; } }                   // off-menu -> shoo
-    else if(DAY.carry && DAY.carry.kind==='plated'){ serveDiner(P,d); return; } // deliver the plated order
+    else if(DAY.carry && DAY.carry.kind==='plated'){ serveDiner(P,d); return; } // run the plate to their table
+  }
+  // the PASS: set a finished plate down to stage it, or pick one back up
+  if(nearPass(P)){
+    if(DAY.carry && DAY.carry.kind==='plated'){ stagePlate(); return; }
+    if(!DAY.carry && DAY.passDishes.some(Boolean)){ grabFromPass(P); return; }
   }
   if(s) stationAct(P,s);
 }
@@ -4843,12 +4918,14 @@ function renderDayHUD(){
 function dayCleanup(){
   DAY.on=false;
   for(const d of DAY.diners){ scene.remove(d.g); if(d.bubble) scene.remove(d.bubble); }
-  DAY.diners.length=0; DAY.slotTaken=[false,false,false,false];
+  DAY.diners.length=0; DAY.slotTaken=new Array(SEATS.length).fill(false);
   for(const s of STATIONS){ if(s.kind==='cook'){ s.item=null; if(s._flame)s._flame.visible=false; if(s._glow)s._glow.material.opacity=0; } }
+  for(const pd of DAY.passDishes){ if(pd&&pd.mesh) scene.remove(pd.mesh); } DAY.passDishes.length=0;
   DAY.carry=null; updateCarryMesh();
   if(kitchenGrp) kitchenGrp.visible=false;
   const dh=document.getElementById('dayhud'); if(dh) dh.classList.remove('on');
   const pr=document.getElementById('prompt'); if(pr) pr.classList.remove('on');
+  document.body.classList.remove("cookmode");
 }
 function startDay(){
   buildKitchen(); kitchenGrp.visible=true;
@@ -4867,9 +4944,12 @@ function startDay(){
   DAY.readyHold=READY_HOLD*(1+0.35*upLvl('grip'));          // 'steady burners' widens the green window
   DAY.cash=0; DAY.served=0; DAY.lost=0; DAY.shooed=0; DAY.combo=0; DAY.best=0;
   DAY.ledger.length=0;
-  DAY.cleanPlates=6+2*upLvl('plates'); DAY.dirty=0; DAY.diners.length=0; DAY.slotTaken=[false,false,false,false];
+  DAY.cleanPlates=6+2*upLvl('plates'); DAY.dirty=0; DAY.diners.length=0; DAY.slotTaken=new Array(SEATS.length).fill(false);
   DAY.carry=null; DAY.spawnT=1.4; DAY.washT=0; updateCarryMesh();
   for(const s of STATIONS){ if(s.kind==='cook') s.item=null; }
+  for(const pd of DAY.passDishes){ if(pd&&pd.mesh) scene.remove(pd.mesh); } DAY.passDishes.length=0;
+  dayScene(true);                                          // bright daytime lights + hide the night decor
+  document.body.classList.add("cookmode");
   CAM.yaw=player.facing; CAM.lockK=0;
   GAME.mode='day'; GAME.paused=false;
   document.getElementById('hud').classList.remove('on');
@@ -4879,6 +4959,24 @@ function startDay(){
   if(TOUCHCAP){ touchEl.classList.add('on'); if(bPause) bPause.classList.add('on'); }
   if(master){ try{ master.gain.value=0.5; }catch(e){} }
 }
+// bright, flat daytime lighting + hide the after-hours decor (liquor bar, palms)
+const LIGHT0={};
+function dayScene(on){
+  if(LIGHT0.hemi===undefined){
+    LIGHT0.hemi=hemi.intensity; LIGHT0.key=key.intensity; LIGHT0.fill=fill.intensity;
+    LIGHT0.hcol=(hemi.color&&hemi.color.getHex)?hemi.color.getHex():0xff9a55;
+    LIGHT0.bg=(scene.background&&scene.background.getHex)?scene.background.getHex():0x140d07;
+    if(scene.fog){ LIGHT0.fogcol=(scene.fog.color&&scene.fog.color.getHex)?scene.fog.color.getHex():0x140d07; LIGHT0.fogfar=scene.fog.far; }
+  }
+  hemi.intensity = on?0.5:LIGHT0.hemi;    // keep ambient LOW so shadows stay -> contrast
+  key.intensity  = on?2.4:LIGHT0.key;     // the sun does the work
+  fill.intensity = on?0.45:LIGHT0.fill;
+  if(hemi.color&&hemi.color.setHex) hemi.color.setHex(on?0xf4ead6:LIGHT0.hcol);       // soft daylight, not blown out
+  if(scene.background&&scene.background.setHex) scene.background.setHex(on?0xbcd6e4:LIGHT0.bg);  // bright day sky
+  if(scene.fog){ if(scene.fog.color&&scene.fog.color.setHex) scene.fog.color.setHex(on?0xc6dae6:LIGHT0.fogcol); scene.fog.far=on?80:LIGHT0.fogfar; }
+  const bg=arena.userData.barG; if(bg) bg.visible=!on;                                // hide the liquor 'island'
+  const pl=arena.userData.palmsG; if(pl) for(const p of pl) p.visible=!on;            // and the after-hours palms
+}
 function updateDay(dt){
   DAY.t-=dt;
   // spawn diners while open and a stool is free
@@ -4887,6 +4985,7 @@ function updateDay(dt){
   tickCooks(dt);
   updateCarryMesh();
   for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); }   // signs face the fixed cam
+  if(PASSD._sign) PASSD._sign.quaternion.copy(camera.quaternion);
   dayPrompt(player);
   renderDayHUD();
   // end of shift: clock done AND the counter has cleared
