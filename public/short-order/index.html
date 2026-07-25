@@ -332,7 +332,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r42</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r43</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4195,7 +4195,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r42';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r43';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4629,6 +4629,9 @@ function updateDiners(dt){
     } else if(d.state==='ordered'){
       d.hearts -= dt/PATIENCE;                                      // the real order clock, once taken
       if(d.hearts<=0){ d.hearts=0; DAY.lost++; grudge(d); toast(d.cast.name+' WALKED OUT'); releaseDiner(d,false); }
+    } else if(d.state==='eating'){                                  // sit and enjoy it, THEN leave a dirty plate + free the stool
+      d.eatT-=dt;
+      if(d.eatT<=0){ DAY.dirty++; DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=HALFD-1.0; if(d.bubble) d.bubble.visible=false; }
     } else if(d.state==='leaving'){
       d.z += (d.tz-d.z)*Math.min(1,dt*3.0);
       if(d.z>HALFD-1.35){ scene.remove(d.g); if(d.bubble) scene.remove(d.bubble); DAY.diners.splice(i,1); continue; }
@@ -4728,10 +4731,10 @@ function serveDiner(P,d){
   const mult=Math.min(4, 1+(DAY.combo-1)*0.5);                        // Overcooked-style streak, capped x4
   const tip=Math.round(base*0.5*clamp(d.hearts,0,1));                 // served fast (hearts left) -> bigger tip
   const pay=Math.round((base*qualMul*mult+tip)*(1+0.2*upLvl('tipjar')));   // + Bigger Tip Jar
-  DAY.cash+=pay; DAY.served++; DAY.dirty++; DAY.carry=null;
+  DAY.cash+=pay; DAY.served++; DAY.carry=null;
   const wp=new V3(d.x,1.9,d.z-0.5); popWord(wp,'$'+pay,c.quality==='perfect'?'#49d05a':'#e3b53a',30);
   if(AC){ sfx.pickup(); } burst(new V3(d.x,1.4,d.z),8,COL.cream,0.7);
-  releaseDiner(d,true);
+  d.state='eating'; d.eatT=1.9; setBubble(d,'YUM','good');   // they sit and eat; the dirty plate + freed stool come when they leave
 }
 function stationAct(P,s){
   const c=DAY.carry;
