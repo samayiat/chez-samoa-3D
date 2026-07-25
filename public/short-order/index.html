@@ -336,7 +336,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r46</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r47</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4201,7 +4201,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r46';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r47';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4421,17 +4421,51 @@ const CAST=[
 // a distinct appliance on top. CELL is that footprint; cellX tiles them centred
 // on the day camera, in a logical prep->cook->plate->wash order.
 const CELL=2.5, KX0=-1.5;
-function cellX(i){ return KX0 + (i-3.5)*CELL; }
-const STATIONS=[
-  { id:'icebox',  kind:'source',  x:cellX(0), z:KZ, col:0x8fb7d6 },
-  { id:'prep',    kind:'prep',    x:cellX(1), z:KZ, col:0x9a7a4a },
-  { id:'pot',     kind:'cook',    dish:'soup',   needs:'chopped', x:cellX(2), z:KZ, col:0x9a5a2a },
-  { id:'griddle', kind:'cook',    dish:'burger', needs:'raw',     x:cellX(3), z:KZ, col:0x545a60 },
-  { id:'fryer',   kind:'cook',    dish:'fries',  needs:'raw',     x:cellX(4), z:KZ, col:0xc9a23a },
-  { id:'saladbar',kind:'assemble',dish:'salad',                   x:cellX(5), z:KZ, col:0x6fae54 },
-  { id:'plate',   kind:'plate',   x:cellX(6), z:KZ, col:0xece5d6 },
-  { id:'sink',    kind:'sink',    x:cellX(7), z:KZ, col:0x6f909a },
+// --- placement grid over the kitchen zone (back of the room) ---
+// Appliances are MOVABLE (PlateUp / tower-defense style): stations live on grid
+// cells, not hardcoded coordinates. A layout is a list of {id,c,r}; applyLayout()
+// resolves each to a world x/z and rebuilds the occupancy map. Columns 0..cols-1
+// run left->right; row 0 is the back line (against the wall), rows step forward.
+// gridX(c) intentionally equals the old cellX(c) so DEFAULT_LAYOUT reproduces the
+// original straight counter run exactly -- this whole change is non-breaking.
+const GRID={ cols:8, rows:2, cell:CELL };
+function gridX(c){ return KX0 + (c-3.5)*GRID.cell; }
+function gridZ(r){ return KZ + r*GRID.cell; }
+const cellKey=(c,r)=>c+'|'+r;
+// static per-type props (kind/dish/needs/accent) -- position-free, so a station
+// of a given id behaves identically wherever it's placed on the grid.
+const STATION_DEFS={
+  icebox:  { kind:'source',   col:0x8fb7d6 },
+  prep:    { kind:'prep',     col:0x9a7a4a },
+  pot:     { kind:'cook', dish:'soup',   needs:'chopped', col:0x9a5a2a },
+  griddle: { kind:'cook', dish:'burger', needs:'raw',     col:0x545a60 },
+  fryer:   { kind:'cook', dish:'fries',  needs:'raw',     col:0xc9a23a },
+  saladbar:{ kind:'assemble', dish:'salad', col:0x6fae54 },
+  plate:   { kind:'plate',    col:0xece5d6 },
+  sink:    { kind:'sink',     col:0x6f909a },
+};
+// the kitchen you start with -- one continuous back line, prep->cook->plate->wash.
+const DEFAULT_LAYOUT=[
+  {id:'icebox',c:0,r:0},{id:'prep',c:1,r:0},{id:'pot',c:2,r:0},{id:'griddle',c:3,r:0},
+  {id:'fryer',c:4,r:0},{id:'saladbar',c:5,r:0},{id:'plate',c:6,r:0},{id:'sink',c:7,r:0},
 ];
+let STATIONS=[];   // live station objects (carry mesh refs + cook state at runtime)
+let OCC={};        // occupancy map: 'c|r' -> station id (for placement collision)
+// Resolve a layout (list of {id,c,r}) into live STATIONS + OCC. Mutates STATIONS
+// IN PLACE (never reassigns the array) so mesh refs attached by buildKitchen and
+// per-object cook state survive a re-layout. Called once at init and again only
+// when the player rearranges the kitchen in prep -- NOT every day.
+function applyLayout(layout){
+  STATIONS.length=0; OCC={};
+  for(const p of layout){
+    const def=STATION_DEFS[p.id]; if(!def) continue;
+    const s={ id:p.id, c:p.c, r:p.r, x:gridX(p.c), z:gridZ(p.r) };
+    Object.assign(s, def);
+    STATIONS.push(s); OCC[cellKey(p.c,p.r)]=p.id;
+  }
+  return STATIONS;
+}
+applyLayout(DEFAULT_LAYOUT);   // populate immediately; RUN.layout re-applies after loadRun()
 const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m==null?.12:m,flatShading:true});
 const STATION_LABEL={ icebox:'ICEBOX', sink:'SINK', prep:'PREP', pot:'SOUP POT', griddle:'GRIDDLE', fryer:'FRYER', saladbar:'SALAD', plate:'PLATES' };
 // bold, distinct accent colour per station -- painted on the counter FRONT so you
@@ -4449,11 +4483,13 @@ const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, 
    (bigger, tougher mob) and, at week boundaries, the rent. Cash banks across
    days; the night pays a bounty that funds tomorrow. Persisted to localStorage. */
 const RENT_BASE=1500, RENT_STEP=500, WEEK_DAYS=5, RATING_WINDOW=5;
-const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[], upgrades:{}, holiday:0 };
-function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; if(RUN.holiday==null) RUN.holiday=0; GAME.debt=RUN.debt; }
+const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[], upgrades:{}, holiday:0, layout:null };
+function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; if(RUN.holiday==null) RUN.holiday=0; if(!RUN.layout) RUN.layout=null; GAME.debt=RUN.debt; }
 function saveRun(){ try{ localStorage.setItem('so_run', JSON.stringify(RUN)); }catch(e){} }
-function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; RUN.holiday=0; GAME.debt=1500; saveRun(); }
+function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; RUN.holiday=0; RUN.layout=null; GAME.debt=1500; saveRun(); }
 loadRun();
+// re-resolve stations from the saved layout (falls back to the default kitchen).
+applyLayout(RUN.layout && RUN.layout.length ? RUN.layout : DEFAULT_LAYOUT);
 // The back-office shop -- a FIXED menu (no RNG, per the research's bad-luck-floor
 // rule), leveled, each level costing more. Day-side upgrades ease the cook; the
 // SECURITY buys (locks) are the cash sink that thins the night. Persisted in
