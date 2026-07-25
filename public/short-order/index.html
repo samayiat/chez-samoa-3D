@@ -94,8 +94,12 @@
   #dclock.crit b{color:var(--flame)}
   #dcombo b{color:var(--flame)}
   #tickets{position:absolute;top:calc(var(--u)*10);left:50%;transform:translateX(-50%);display:flex;gap:calc(var(--u)*1.2);flex-wrap:nowrap}
-  .ticket{background:#1a0f08ee;border:2px solid #e8c98a;border-radius:6px;padding:calc(var(--u)*0.9) calc(var(--u)*1.2);width:calc(var(--u)*13);box-shadow:0 4px 0 #0007}
+  .ticket{background:#1a0f08ee;border:2px solid #e8c98a;border-radius:6px;padding:calc(var(--u)*0.8) calc(var(--u)*1.2);width:calc(var(--u)*13);box-shadow:0 4px 0 #0007}
+  .ticket.bad{border-color:#ff6a3a;background:#22100cee}
+  .ticket .tname{font-size:calc(var(--u)*1.5);letter-spacing:.12em;color:#e8c98a;margin-bottom:calc(var(--u)*0.3)}
+  .ticket.bad .tname{color:#ff9a72}
   .ticket .tdish{font-family:"Anton",sans-serif;font-size:calc(var(--u)*2.6);color:var(--cream);letter-spacing:.04em}
+  .ticket.bad .tdish{color:#ff9a72}
   .ticket .tbarwrap{margin-top:calc(var(--u)*0.7);height:calc(var(--u)*1.1);background:#0006;border-radius:3px;overflow:hidden}
   .ticket .tbar{height:100%;width:100%;transform-origin:left;background:#49d05a;transition:transform .1s linear,background .2s}
   #dcarry{position:absolute;bottom:calc(var(--u)*4);left:50%;transform:translateX(-50%);font-family:"Anton",sans-serif;
@@ -281,7 +285,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r32</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r33</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1655,7 +1659,7 @@ const sfx={
 };
 
 /* ================================================================ STATE */
-const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500, male:false };   // debt: what you owe Vince -> scales him (economy wires this later); male: chef gender
+const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500, male:false, nightRoster:null };   // debt: what you owe Vince -> scales him (economy wires this later); male: chef gender
 try{ GAME.male = localStorage.getItem('so_chef')==='male'; }catch(e){}   // remembered chef choice
 const enemies=[];
 let player=null;
@@ -1689,7 +1693,7 @@ function makePlayer(){
   };
 }
 /* --- enemy factory --- */
-function makeEnemy(kind, spawnPos){
+function makeEnemy(kind, spawnPos, castIdx){
   // Everyone spawns UNARMED. Weapons are finite -- they come only off the pass
   // (the fixed PASS_LOADOUT set), taken via the fetch state below, and removed
   // from the table when grabbed. Enemies used to conjure a spatula/nonstick out
@@ -1701,11 +1705,16 @@ function makeEnemy(kind, spawnPos){
     tough:{ skin:0x6b4a34, jacket:pick([0x7a2a22,0x2a3550,0x3a4028]), apron:0x241a12, scarf:0, hair:pick([0x1a1208,0x2a1c12,0x0a0805]), hp:60, scale:1.12, speed:3.2, wind:0.72, aggr:[0.5,1.1], weapon:'fists' }
   };
   const s=styles[kind];
-  const chef=makeChef({ skin:s.skin, jacket:s.jacket, apron:s.apron, scarf:s.scarf, hair:s.hair, customer:true, boot:0x1c130a });
+  // if this enemy is a returning regular (castIdx from the day's ledger), wear
+  // that exact face -- so the night's mob IS the people you shooed/lost by day.
+  const cast = (castIdx!=null && CAST[castIdx]) ? CAST[castIdx] : null;
+  const chef=makeChef({ skin: cast?cast.skin:s.skin, jacket: cast?cast.outfit:s.jacket, apron:s.apron,
+    scarf:s.scarf, hair: cast?cast.hair:s.hair, customer:true, boot:0x1c130a });
   chef.scale.setScalar(s.scale);
   equip(chef, s.weapon);
   const e={
-    chef, kind, pos:spawnPos.clone(), vel:new V3(), yaw:0, facing:0,
+    chef, kind, castIdx: castIdx!=null?castIdx:null, castName: cast?cast.name:null,
+    pos:spawnPos.clone(), vel:new V3(), yaw:0, facing:0,
     hp:s.hp, hpMax:s.hp, wpn:s.weapon, spd:s.speed, wind:s.wind, aggr:s.aggr,
     state:'spawn', stateT:rand(0.2,0.8), movePhase:Math.random()*TAU, speed:0,
     attack:null, hasToken:false, stagger:0, hurt:0, dead:false, deadT:0, _sq:0,
@@ -3986,6 +3995,7 @@ function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg
 // Omitting waveSizes collapses to one chunk = the whole list, i.e. the
 // original single-wave trickle, so any caller not passing it is unaffected.
 const WAVE={ spawned:0, done:false };
+let NIGHT_ROSTER=null;   // [castIdx...] seeded from the day's ledger; null = anonymous mob
 function spawnEnemy(kind,forceSide){
   // spawn at a random edge, away from player -- forceSide pins it to one
   // wall instead (side 1 = the front wall / dining-room entrance), used for
@@ -3999,7 +4009,11 @@ function spawnEnemy(kind,forceSide){
     else {x=HALFW-1.2;z=rand(-HALFD+1,HALFD-1);}
     tries++;
   } while(Math.hypot(x-player.pos.x,z-player.pos.z)<4 && tries<10);
-  const e=makeEnemy(kind,new V3(x,0,z)); enemies.push(e);
+  // if a night roster is loaded (seeded from the day's ledger), the next spawn
+  // wears the next grudge-holder's face, cycling through the list.
+  let castIdx=null;
+  if(NIGHT_ROSTER && NIGHT_ROSTER.length){ castIdx=NIGHT_ROSTER[(NIGHT_ROSTER._i++)%NIGHT_ROSTER.length]; }
+  const e=makeEnemy(kind,new V3(x,0,z),castIdx); enemies.push(e);
   // little poof
   const p=new V3(x,1.2,z); burst(p,6,COL.cream,0.7);
   return e;
@@ -4082,6 +4096,8 @@ function startNight(cfg, onEnd){
   for(const p of PICKUPS) scene.remove(p.g); PICKUPS.length=0;
   tokensUsed=0;
   GAME.kills=0; GAME.combo=0; GAME.maxCombo=0; GAME.hitsLanded=0; GAME.onEnd=onEnd;
+  NIGHT_ROSTER = (cfg.roster && cfg.roster.length) ? cfg.roster.slice() : null;   // the day's grudges, if any
+  if(NIGHT_ROSTER) NIGHT_ROSTER._i=0;
   // player
   if(!player){ player=makePlayer(); attachPlayerHelpers(player); }
   const ppos=(cfg.player&&cfg.player.pos)||{x:0,z:2.5};
@@ -4127,7 +4143,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r32';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r33';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4203,6 +4219,21 @@ const DISHES={
   fries: { name:'FRIES',  pay:18, col:0xe3b53a },
 };
 const DISH_KEYS=Object.keys(DISHES);
+// The regulars. Each is a face (skin/hair/outfit) + a signature BAD ORDER: the
+// off-menu thing they wrongly ask for. A good order you cook; a bad order you
+// can't -- you WAVE THEM OFF. Either way, anyone you shoo or let walk out is
+// logged (DAY.ledger) and COMES BACK for the night brawl wearing this same face.
+// Day stays pure cooking; the grudge is filed for 11pm. (No daytime violence.)
+const CAST=[
+  { name:'REGGIE',     skin:0xc98a5a, hair:0x241a12, outfit:0x4a6ea0, bad:'GRITS' },
+  { name:'MARISOL',    skin:0xb6926a, hair:0x5a3a20, outfit:0xc4789a, bad:'TRUFFLES' },
+  { name:'SINCLAIR',   skin:0xd9b48c, hair:0x5a3c22, outfit:0x3c4256, bad:'CAVIAR' },
+  { name:'VAL',        skin:0x8a5a3a, hair:0x241a12, outfit:0x607c54, bad:'A HOT DOG' },
+  { name:'THE CRITIC', skin:0xc69a72, hair:0xb6b2ba, outfit:0x4a4256, bad:'FOIE GRAS' },
+  { name:'NANA',       skin:0xe0c0a0, hair:0xe6e2ea, outfit:0x9a6ea0, bad:'PLAIN OATMEAL' },
+  { name:'DEJA',       skin:0x7a4a2a, hair:0x1d150f, outfit:0xd2964a, bad:'A SMOOTHIE' },
+  { name:'MONTY',      skin:0xe0c0a0, hair:0xb6b2ba, outfit:0x7a5040, bad:'ESCARGOT' },
+];
 // stations along the kitchen line. `dish` on a cook station = what it produces,
 // so which station you cook at IS the routing choice (ticket says FRIES -> fryer).
 const STATIONS=[
@@ -4214,8 +4245,9 @@ const STATIONS=[
   { id:'plate',   kind:'plate',  x: 8.6, z:KZ, col:0xece5d6 },
 ];
 const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m==null?.12:m,flatShading:true});
-const DAY={ on:false, t:0, cash:0, served:0, lost:0, combo:0, best:0, cleanPlates:6, dirty:0,
-  diners:[], slotTaken:[false,false,false,false], carry:null, spawnT:1.4, washT:0, _carrySig:'', carryMesh:null };
+const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, cleanPlates:6, dirty:0,
+  diners:[], slotTaken:[false,false,false,false], carry:null, spawnT:1.4, washT:0, _carrySig:'', carryMesh:null,
+  ledger:[] };   // cast indices of everyone shooed or walked-out today -> tonight's roster
 let kitchenGrp=null;
 function buildKitchen(){
   if(kitchenGrp) return;
@@ -4247,29 +4279,52 @@ function buildKitchen(){
     }
   }
 }
-function makeDiner(){
+function makeDiner(cast){
   const g=new THREE.Group();
-  const col=pick([0x8a3b2f,0x35506b,0x4a5a34,0x6b4a6b,0x7a5a2a,0x2f5a55]);
-  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.29,0.36,1.15,10),dmat(col,.85,.05));
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.29,0.36,1.15,10),dmat(cast.outfit,.85,.05));
   body.position.y=0.78; body.castShadow=true; g.add(body);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(0.23,12,10),dmat(pick([0x8a5a3a,0x6b4a34,0xb9835b,0x4a3222]),.6,0));
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.23,12,10),dmat(cast.skin,.6,0));
   head.position.y=1.56; head.castShadow=true; g.add(head);
-  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.245,10,8,0,TAU,0,Math.PI*0.62),dmat(pick([0x1a1208,0x2a1c12,0x0a0805,0x3a2a1a]),.92,0));
+  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.245,10,8,0,TAU,0,Math.PI*0.62),dmat(cast.hair,.92,0));
   hair.scale.set(1.02,0.95,1.05); hair.position.y=1.6; g.add(hair);
   return g;
+}
+// a glance-able speech bubble that floats over a seated diner: GREEN dish = cook
+// it; RED off-menu item = you can't, wave them off. Billboarded to camera.
+function makeBubble(text, bad){
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=88;
+  try{ const x=cv.getContext('2d');
+    x.fillStyle= bad?'rgba(44,12,10,0.94)':'rgba(20,28,14,0.94)';
+    if(x.fillRect) x.fillRect(6,6,244,64);
+    x.strokeStyle= bad?'#ff6a3a':'#8be27a'; x.lineWidth=5;
+    if(x.strokeRect) x.strokeRect(6,6,244,64);
+    x.fillStyle= bad?'#ff9a72':'#bff0a0'; x.textAlign='center'; x.textBaseline='middle';
+    x.font='bold 40px Anton, system-ui, sans-serif';
+    if(x.fillText) x.fillText((bad?'✕ ':'')+text.toUpperCase(), 128, 40);
+  }catch(e){}
+  const tex=new THREE.CanvasTexture(cv);
+  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,fog:false});
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(1.5,0.52),mat); m.renderOrder=1200;
+  const grp=new THREE.Group(); grp.add(m); grp.visible=true; return grp;
 }
 function freeSlot(){ for(let i=0;i<SLOTS_X.length;i++) if(!DAY.slotTaken[i]) return i; return -1; }
 function spawnDiner(){
   const slot=freeSlot(); if(slot<0) return;
   DAY.slotTaken[slot]=true;
-  const g=makeDiner(); g.rotation.y=Math.PI;               // face the counter (-z, toward the kitchen)
+  const ci=(Math.random()*CAST.length)|0, cast=CAST[ci];
+  const bad=Math.random()<0.30;                            // ~30% ask for the off-menu thing (the 2D ratio)
+  const dish=bad?null:pick(DISH_KEYS);
+  const g=makeDiner(cast); g.rotation.y=Math.PI;           // face the counter (-z, toward the kitchen)
   const sx=SLOTS_X[slot];
   g.position.set(sx, 0, HALFD-1.2); scene.add(g);
-  DAY.diners.push({ g, slot, dish:pick(DISH_KEYS), hearts:1, state:'coming',
+  const bubble=makeBubble(bad?cast.bad:DISHES[dish].name, bad); scene.add(bubble);
+  DAY.diners.push({ g, bubble, slot, castIdx:ci, cast, bad, dish, hearts:1, state:'coming',
     x:sx, z:HALFD-1.2, tx:sx, tz:SERVE_Z });
 }
+function grudge(d){ DAY.ledger.push(d.castIdx); }   // they'll be back tonight, this face
 function releaseDiner(d, happy){
   DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=HALFD-1.0;
+  if(d.bubble) d.bubble.visible=false;
   if(!happy){ DAY.combo=0; }
 }
 function updateDiners(dt){
@@ -4280,14 +4335,17 @@ function updateDiners(dt){
       if(Math.abs(d.z-d.tz)<0.12){ d.z=d.tz; d.state='waiting'; }
     } else if(d.state==='waiting'){
       d.hearts -= dt/PATIENCE;
-      if(d.hearts<=0){ d.hearts=0; DAY.lost++; toast('WALKOUT'); releaseDiner(d,false); }
+      if(d.hearts<=0){ d.hearts=0; DAY.lost++; grudge(d);       // walked out angry -> tonight's roster
+        toast(d.cast.name+' WALKED OUT'); releaseDiner(d,false); }
     } else if(d.state==='leaving'){
       d.z += (d.tz-d.z)*Math.min(1,dt*3.0);
-      if(d.z>HALFD-1.35){ scene.remove(d.g); DAY.diners.splice(i,1); continue; }
+      if(d.z>HALFD-1.35){ scene.remove(d.g); if(d.bubble) scene.remove(d.bubble); DAY.diners.splice(i,1); continue; }
     }
-    d.g.position.set(d.x,0,d.z);
-    // a small bob so they read as alive
-    d.g.position.y=Math.sin(GAME.t*3+d.slot)*0.02;
+    d.g.position.set(d.x, Math.sin(GAME.t*3+d.slot)*0.02, d.z);   // small alive-bob
+    if(d.bubble && d.bubble.visible){
+      d.bubble.position.set(d.x, 2.5, d.z);
+      d.bubble.quaternion.copy(camera.quaternion);
+    }
   }
 }
 function tickCooks(dt){
@@ -4318,9 +4376,19 @@ function nearestWaitingDiner(P){
     const dist=Math.hypot(d.x-P.pos.x,d.z-P.pos.z); if(dist<bd){ bd=dist; best=d; } }
   return best;
 }
+function waveOff(d){
+  DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=HALFD-1.0;
+  if(d.bubble) d.bubble.visible=false;
+  DAY.shooed++; grudge(d);                                  // shooed -> they're on tonight's roster
+  const coins=3+((Math.random()*3)|0); DAY.cash+=coins;
+  const wp=new V3(d.x,2.0,d.z-0.4); popWord(wp,'SHOOED','#8be27a',26);
+  toast('WAVED OFF '+d.cast.name+' — NO '+d.cast.bad);
+  if(AC) sfx.whiff(); burst(new V3(d.x,1.4,d.z),8,COL.herb,0.7);
+}
 function serveDiner(P,d){
   const c=DAY.carry;
   if(!c||c.kind!=='plated') return;
+  if(d.bad){ toast(d.cast.name+' WANTS '+d.cast.bad+' — WAVE THEM OFF'); return; }   // can't cook it; don't waste the plate
   if(c.dish!==d.dish){ toast('WRONG ORDER'); DAY.combo=0; return; }   // breaks the streak, keeps the plate
   const base=DISHES[d.dish].pay;
   const qualMul = c.quality==='perfect'?1:0.4;
@@ -4361,7 +4429,10 @@ function cookVerbs(P,pad,dt){
   const tap = pad.pickup||pad.rush||tapK('f')||consume('pickupEdge');
   if(!tap) return;
   const d=nearestWaitingDiner(P);
-  if(d && DAY.carry && DAY.carry.kind==='plated'){ serveDiner(P,d); return; }
+  if(d){
+    if(DAY.carry && DAY.carry.kind==='plated'){ serveDiner(P,d); return; }   // deliver a plated good order
+    if(d.bad && !DAY.carry){ waveOff(d); return; }                          // shoo an off-menu asker
+  }
   if(s) stationAct(P,s);
 }
 function carrySig(c){ return !c?'':c.kind+(c.dish||'')+(c.quality||''); }
@@ -4399,7 +4470,8 @@ function renderDayHUD(){
     const waiting=DAY.diners.filter(d=>d.state==='waiting'||d.state==='coming').sort((a,b)=>a.slot-b.slot);
     rail.innerHTML=waiting.map(d=>{
       const f=clamp(d.hearts,0,1); const col=f>0.5?'#49d05a':f>0.25?'#e3b53a':'#ff3b30';
-      return '<div class="ticket"><div class="tdish">'+DISHES[d.dish].name+'</div>'+
+      const order=d.bad ? ('✕ '+d.cast.bad) : DISHES[d.dish].name;
+      return '<div class="ticket'+(d.bad?' bad':'')+'"><div class="tname">'+d.cast.name+'</div><div class="tdish">'+order+'</div>'+
         '<div class="tbarwrap"><i class="tbar" style="transform:scaleX('+f.toFixed(3)+');background:'+col+'"></i></div></div>';
     }).join('');
   }
@@ -4413,7 +4485,7 @@ function renderDayHUD(){
 }
 function dayCleanup(){
   DAY.on=false;
-  for(const d of DAY.diners) scene.remove(d.g);
+  for(const d of DAY.diners){ scene.remove(d.g); if(d.bubble) scene.remove(d.bubble); }
   DAY.diners.length=0; DAY.slotTaken=[false,false,false,false];
   for(const s of STATIONS){ if(s.kind==='cook'){ s.item=null; if(s._flame)s._flame.visible=false; if(s._glow)s._glow.material.opacity=0; } }
   DAY.carry=null; updateCarryMesh();
@@ -4431,7 +4503,8 @@ function startDay(){
   player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null; player.hold=null; player.grabbed=null;
   player.drinks=0; player.wastedT=0; player._drunk=0; player.vy=0; player.pos.y=0;
   resetRagPose(player);
-  DAY.on=true; DAY.t=DAY_LEN; DAY.cash=0; DAY.served=0; DAY.lost=0; DAY.combo=0; DAY.best=0;
+  DAY.on=true; DAY.t=DAY_LEN; DAY.cash=0; DAY.served=0; DAY.lost=0; DAY.shooed=0; DAY.combo=0; DAY.best=0;
+  DAY.ledger.length=0;
   DAY.cleanPlates=6; DAY.dirty=0; DAY.diners.length=0; DAY.slotTaken=[false,false,false,false];
   DAY.carry=null; DAY.spawnT=1.4; DAY.washT=0; updateCarryMesh();
   for(const s of STATIONS){ if(s.kind==='cook') s.item=null; }
@@ -4457,7 +4530,10 @@ function updateDay(dt){
 }
 function dayScore(){ return clamp(6 + DAY.served*0.32 - DAY.lost*0.6, 1, 10); }
 function finishDay(){
-  const res={ rating: +dayScore().toFixed(1), cash:DAY.cash, served:DAY.served, lost:DAY.lost, best:DAY.best };
+  const roster=DAY.ledger.slice();
+  GAME.nightRoster = roster.length ? roster : null;         // tonight's returning faces (null -> random mob)
+  const res={ rating: +dayScore().toFixed(1), cash:DAY.cash, served:DAY.served, lost:DAY.lost,
+    shooed:DAY.shooed, best:DAY.best, grudges:roster.length };
   dayCleanup(); GAME.mode='over';
   showDayEnd(res);
 }
@@ -4466,15 +4542,19 @@ function showDayEnd(res){
   document.getElementById('veil').classList.remove('hide');
   document.getElementById('hud').classList.remove('on');
   touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
-  const stars='★★★★★☆☆☆☆☆'.slice(5-Math.round(res.rating/2), 10-Math.round(res.rating/2));
+  const g=res.grudges|0;
+  const grudgeLine = g>0
+    ? '<div class="stat" style="color:#ff9a72;margin-top:10px"><b>'+g+'</b> '+(g===1?'patron is':'patrons are')+' coming back tonight — the ones you shooed and the ones who walked.</div>'
+    : '<div class="stat" style="color:#8be27a;margin-top:10px">Nobody left with a grudge. Quiet night ahead.</div>';
   c.innerHTML='<div class="card end win">'+
     '<div class="kick">SERVICE OVER · THE LUNCH RUSH IS DONE</div>'+
     '<div class="title">DAY<br><span class="b">BANKED</span></div>'+
-    '<div class="stat">Took <b>$'+res.cash+'</b> &nbsp;·&nbsp; Served <b>'+res.served+'</b> &nbsp;·&nbsp; Walkouts <b>'+res.lost+'</b>'+
+    '<div class="stat">Took <b>$'+res.cash+'</b> &nbsp;·&nbsp; Served <b>'+res.served+'</b> &nbsp;·&nbsp; Shooed <b>'+res.shooed+'</b> &nbsp;·&nbsp; Walkouts <b>'+res.lost+'</b>'+
     '<br>Best streak <b>x'+Math.min(4,1+Math.max(0,res.best-1)*0.5).toFixed(1)+'</b> &nbsp;·&nbsp; Rating <b>'+res.rating+'/10</b></div>'+
+    grudgeLine+
     '<button class="btn" id="openNightBtn">LOCK UP &amp; BRACE FOR TONIGHT</button>'+
     '<button class="btn" id="dayAgainBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">RUN THE DAY AGAIN</button></div>';
-  document.getElementById('openNightBtn').onclick=()=>{ goFullscreen(); ended=false; startNight(SLICE, onNightEnd); };
+  document.getElementById('openNightBtn').onclick=()=>{ goFullscreen(); ended=false; startNight(Object.assign({},SLICE,{roster:GAME.nightRoster}), onNightEnd); };
   document.getElementById('dayAgainBtn').onclick=()=>{ goFullscreen(); startDay(); };
 }
 
