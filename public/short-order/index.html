@@ -102,6 +102,10 @@
   #planbar .pbchairs,#planbar .pbdone{pointer-events:auto;font-family:"Anton",sans-serif;font-size:calc(var(--u)*2.6);letter-spacing:.08em;border:none;border-radius:7px;padding:calc(var(--u)*1) calc(var(--u)*3.2);box-shadow:0 4px 0 #0007;cursor:pointer}
   #planbar .pbdone{color:var(--ink);background:var(--flame)}
   #planbar .pbchairs{color:var(--cream);background:#2a6a4a}
+  #plantray{display:none;flex-wrap:wrap;gap:calc(var(--u)*0.8);justify-content:center;align-items:center;pointer-events:auto;max-width:90vw}
+  #plantray.on{display:flex}
+  #plantray .trlabel{font-family:"Anton",sans-serif;font-size:calc(var(--u)*1.8);letter-spacing:.1em;color:#ffd98a}
+  #plantray .trchip{pointer-events:auto;font-family:system-ui,sans-serif;font-weight:700;font-size:calc(var(--u)*1.7);color:var(--ink);background:#e8c98a;border:none;border-radius:5px;padding:calc(var(--u)*0.6) calc(var(--u)*1.4);box-shadow:0 3px 0 #0007;cursor:pointer}
   #daytop{position:absolute;top:calc(var(--u)*2.2);left:50%;transform:translateX(-50%);display:flex;gap:calc(var(--u)*1.4)}
   .dchip{background:#120b06e0;border:2px solid var(--copper);border-radius:6px;padding:calc(var(--u)*0.9) calc(var(--u)*1.6);text-align:center;min-width:calc(var(--u)*9);box-shadow:0 4px 0 #0007}
   .dchip b{display:block;font-family:"Anton",sans-serif;font-size:calc(var(--u)*3.2);line-height:.9;color:var(--cream)}
@@ -144,6 +148,8 @@
   .card.shop .sbank b{color:#8be27a}
   /* two columns -- the rotated stage is landscape, so 7 items fit in ~4 rows */
   .shoplist{display:grid;grid-template-columns:1fr 1fr;gap:clamp(5px,calc(var(--u,6.4px)*1),8px);margin-bottom:clamp(9px,calc(var(--u,6.4px)*1.6),14px);text-align:left}
+  .card.shop .sshelf{font-family:"Anton",sans-serif;color:#ffb43a;letter-spacing:.1em;font-size:clamp(11px,calc(var(--u,6.4px)*1.7),15px);text-align:left;margin:2px 0 6px;border-bottom:1px solid #ffffff1a;padding-bottom:3px}
+  .card.shop .strayhint{font-size:clamp(11px,calc(var(--u,6.4px)*1.7),14px);color:#9be86a;background:#12210ccc;border-radius:5px;padding:6px 10px;margin-bottom:6px}
   .shoprow{display:flex;align-items:center;gap:clamp(7px,calc(var(--u,6.4px)*1.6),12px);background:#1a0f08cc;border:2px solid #3a2a1a;border-radius:8px;padding:clamp(6px,calc(var(--u,6.4px)*1.2),9px) clamp(9px,calc(var(--u,6.4px)*1.6),12px)}
   .shoprow .sic{font-size:clamp(19px,calc(var(--u,6.4px)*3.4),26px);line-height:1;flex:0 0 auto}
   .shoprow .sinfo{flex:1 1 auto;min-width:0}
@@ -344,9 +350,9 @@
   <div id="tickets"></div>
   <div id="dcarry"></div>
 </div>
-<div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint"><b>ACT</b> to lift/place appliances &amp; tables &middot; <b>CHAIRS</b> to toggle a seat (1–4)</div><div class="pbrow"><button id="planChairs" class="pbchairs">CHAIRS</button><button id="planDone" class="pbdone">DONE ✓</button></div></div>
+<div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint"><b>ACT</b> to lift/place appliances &amp; tables &middot; <b>CHAIRS</b> to toggle a seat (1–4)</div><div id="plantray"></div><div class="pbrow"><button id="planChairs" class="pbchairs">CHAIRS</button><button id="planDone" class="pbdone">DONE ✓</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r50</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r51</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4214,7 +4220,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r50';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r51';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4359,16 +4365,32 @@ function renderShop(){
       '<button class="sbuy'+(afford?'':' off')+'" data-k="'+u.key+'"'+(afford?'':' disabled')+'>'+(maxed?'MAX':'$'+cost)+'</button>'+
     '</div>';
   }).join('');
-  const rin=daysToRent(RUN.day);
+  const store=STORE.map((it,i)=>{
+    const afford=RUN.bank>=it.price;
+    return '<div class="shoprow">'+
+      '<div class="sic">'+it.icon+'</div>'+
+      '<div class="sinfo"><div class="sname">'+it.name+'</div><div class="sdesc">'+it.desc+'</div></div>'+
+      '<button class="sbuy'+(afford?'':' off')+'" data-i="'+i+'"'+(afford?'':' disabled')+'>$'+it.price+'</button>'+
+    '</div>';
+  }).join('');
+  const rin=daysToRent(RUN.day), oc=ownedCount();
+  const tray = oc>0 ? '<div class="strayhint">📦 '+oc+' item'+(oc>1?'s':'')+' bought — place '+(oc>1?'them':'it')+' in REARRANGE</div>' : '';
   document.getElementById('card').innerHTML='<div class="card shop">'+
     '<div class="kick">BEFORE OPEN · DAY '+RUN.day+'</div>'+
     '<div class="title">BACK <span class="b">OFFICE</span></div>'+
-    '<div class="sbank">BANK <b>$'+RUN.bank+'</b> &nbsp;·&nbsp; RENT $'+rentFor(weekOf(RUN.day))+' in '+rin+(rin===1?' day':' days')+'</div>'+
+    '<div class="sbank">BANK <b>$'+RUN.bank+'</b> &nbsp;·&nbsp; BELI <b>'+beli().toFixed(1)+'</b> &nbsp;·&nbsp; RENT $'+rentFor(weekOf(RUN.day))+' in '+rin+(rin===1?' day':' days')+'</div>'+
+    '<div class="sshelf">UPGRADES</div>'+
     '<div class="shoplist">'+rows+'</div>'+
-    '<button class="btn" id="planBtn" style="background:#2a2018;color:var(--cream);margin-bottom:10px">🍳 REARRANGE KITCHEN</button>'+
+    '<div class="sshelf">THE STORE — appliances &amp; tables</div>'+
+    '<div class="shoplist">'+store+'</div>'+
+    tray+
+    '<button class="btn" id="planBtn" style="background:#2a2018;color:var(--cream);margin-bottom:10px;margin-top:10px">🍳 REARRANGE KITCHEN'+(oc>0?' ('+oc+' to place)':'')+'</button>'+
     '<button class="btn" id="startDayBtn">OPEN THE DINER →</button></div>';
   const c=document.getElementById('card');
-  if(c.querySelectorAll) c.querySelectorAll('.sbuy').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); buyUpgrade(b.getAttribute('data-k')); }));
+  if(c.querySelectorAll){
+    c.querySelectorAll('.sbuy[data-k]').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); buyUpgrade(b.getAttribute('data-k')); }));
+    c.querySelectorAll('.sbuy[data-i]').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); buyStore(+b.getAttribute('data-i')); }));
+  }
   const pb=document.getElementById('planBtn'); if(pb) pb.onclick=()=>{ goFullscreen(); startPlan(); };
   const sb=document.getElementById('startDayBtn'); if(sb) sb.onclick=()=>{ goFullscreen(); startDay(); };
 }
@@ -4378,6 +4400,13 @@ function buyUpgrade(key){
   const cost=upCost(u); if(RUN.bank<cost) return;
   RUN.bank-=cost; RUN.upgrades[key]=upLvl(key)+1; saveRun();
   if(AC) sfx.pickup();
+  renderShop();
+}
+function buyStore(i){
+  const it=STORE[i]; if(!it || RUN.bank<it.price) return;
+  RUN.bank-=it.price;
+  RUN.owned.push(it.kind==='table' ? {kind:'table'} : {kind:'station', def:it.def});
+  saveRun(); if(AC) sfx.pickup();
   renderShop();
 }
 
@@ -4501,14 +4530,16 @@ function gridZ(r){ return KZ + r*GRID.cell; }
 const cellKey=(c,r)=>c+'|'+r;
 // static per-type props (kind/dish/needs/accent) -- position-free, so a station
 // of a given id behaves identically wherever it's placed on the grid.
+// station DEFS are keyed by TYPE ('def'). A placed station is an INSTANCE with a
+// unique id (def+'#'+n) so you can own several of the same type (two sinks, three
+// chop boards) -- the Store depends on this.
 const STATION_DEFS={
   lettucecrate:{ kind:'crate', ingredient:'lettuce', col:0x5eb739 },
   tomatocrate: { kind:'crate', ingredient:'tomato',  col:0xd23f2a },
   prep:    { kind:'prep',     col:0x9a7a4a },
-  prep2:   { kind:'prep',     col:0x9a7a4a },
   plate:   { kind:'plate',    col:0xece5d6 },
   sink:    { kind:'sink',     col:0x6f909a },
-  // --- kept for future cooked recipes (not in the salad default layout) ---
+  // --- buyable / future cooked recipes (not in the salad default layout) ---
   icebox:  { kind:'source',   col:0x8fb7d6 },
   pot:     { kind:'cook', dish:'soup',   needs:'chopped', col:0x9a5a2a },
   griddle: { kind:'cook', dish:'burger', needs:'raw',     col:0x545a60 },
@@ -4519,22 +4550,24 @@ const STATION_DEFS={
 // boards (chopping is the bottleneck, same as Overcooked/PlateUp), a plating
 // station, and the wash-up. grab -> chop -> plate up -> serve, no stove.
 const DEFAULT_LAYOUT=[
-  {id:'lettucecrate',c:0,r:0},{id:'tomatocrate',c:1,r:0},{id:'prep',c:2,r:0},
-  {id:'prep2',c:3,r:0},{id:'plate',c:4,r:0},{id:'sink',c:5,r:0},
+  {def:'lettucecrate',c:0,r:0},{def:'tomatocrate',c:1,r:0},{def:'prep',c:2,r:0},
+  {def:'prep',c:3,r:0},{def:'plate',c:4,r:0},{def:'sink',c:5,r:0},
 ];
-let STATIONS=[];   // live station objects (carry mesh refs + cook state at runtime)
-let OCC={};        // occupancy map: 'c|r' -> station id (for placement collision)
-// Resolve a layout (list of {id,c,r}) into live STATIONS + OCC. Mutates STATIONS
+let STATIONS=[];   // live station instances (carry mesh refs + cook state at runtime)
+let OCC={};        // occupancy map: 'c|r' -> instance id (for placement collision)
+let _sidCounter=0;
+function normDef(p){ return p.def || (p.id==='prep2'?'prep':p.id); }   // accept legacy {id} layouts
+function makeStation(def,c,r){ const D=STATION_DEFS[def]; if(!D) return null;
+  const s={ def, id:def+'#'+(_sidCounter++), c, r, x:gridX(c), z:gridZ(r) }; Object.assign(s, D); return s; }
+// Resolve a layout (list of {def,c,r}) into live STATIONS + OCC. Mutates STATIONS
 // IN PLACE (never reassigns the array) so mesh refs attached by buildKitchen and
 // per-object cook state survive a re-layout. Called once at init and again only
 // when the player rearranges the kitchen in prep -- NOT every day.
 function applyLayout(layout){
-  STATIONS.length=0; OCC={};
+  STATIONS.length=0; OCC={}; _sidCounter=0;
   for(const p of layout){
-    const def=STATION_DEFS[p.id]; if(!def) continue;
-    const s={ id:p.id, c:p.c, r:p.r, x:gridX(p.c), z:gridZ(p.r) };
-    Object.assign(s, def);
-    STATIONS.push(s); OCC[cellKey(p.c,p.r)]=p.id;
+    const s=makeStation(normDef(p), p.c, p.r); if(!s) continue;
+    STATIONS.push(s); OCC[cellKey(p.c,p.r)]=s.id;
   }
   return STATIONS;
 }
@@ -4555,11 +4588,11 @@ const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, 
    Rating is the spine: a rolling average of daily scores that scales the night
    (bigger, tougher mob) and, at week boundaries, the rent. Cash banks across
    days; the night pays a bounty that funds tomorrow. Persisted to localStorage. */
-const RENT_BASE=1500, RENT_STEP=500, WEEK_DAYS=5, RATING_WINDOW=5;
-const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[], upgrades:{}, holiday:0, layout:null, tables:null };
-function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; if(RUN.holiday==null) RUN.holiday=0; if(!RUN.layout) RUN.layout=null; if(!RUN.tables) RUN.tables=null; GAME.debt=RUN.debt; }
+const RENT_BASE=1500, RENT_STEP=500, WEEK_DAYS=5, RATING_WINDOW=5, SEED_CASH=1000;
+const RUN={ day:1, bank:SEED_CASH, debt:1500, rating:6, ratingHist:[], upgrades:{}, holiday:0, layout:null, tables:null, owned:[] };
+function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s){ Object.assign(RUN, JSON.parse(s)); } else { RUN.bank=SEED_CASH; } }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; if(RUN.holiday==null) RUN.holiday=0; if(!RUN.layout) RUN.layout=null; if(!RUN.tables) RUN.tables=null; if(!RUN.owned) RUN.owned=[]; GAME.debt=RUN.debt; }
 function saveRun(){ try{ localStorage.setItem('so_run', JSON.stringify(RUN)); }catch(e){} }
-function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; RUN.holiday=0; RUN.layout=null; RUN.tables=null; GAME.debt=1500; saveRun(); }
+function resetRun(){ RUN.day=1; RUN.bank=SEED_CASH; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; RUN.holiday=0; RUN.layout=null; RUN.tables=null; RUN.owned=[]; GAME.debt=1500; saveRun(); }
 loadRun();
 // re-resolve stations + tables from the saved layout (falls back to the defaults).
 applyLayout(RUN.layout && RUN.layout.length ? RUN.layout : DEFAULT_LAYOUT);
@@ -4579,8 +4612,27 @@ const SHOP=[
 ];
 function upLvl(k){ return (RUN.upgrades && RUN.upgrades[k]) || 0; }
 function upCost(u){ return Math.round(u.base*Math.pow(1.6, upLvl(u.key))); }
+// THE STORE: appliances + tables you BUY as objects. A buy drops into RUN.owned
+// (an unplaced tray); you set it down on the grid in REARRANGE. Fixed prices.
+const STORE=[
+  { kind:'station', def:'prep',         name:'Chop Board',      desc:'Another cutting station — chop in parallel', price:180, icon:'🔪' },
+  { kind:'station', def:'sink',         name:'Sink',            desc:'A second wash-up — dishes pile up slower',   price:260, icon:'🚰' },
+  { kind:'station', def:'plate',        name:'Plating Station', desc:'Build a second order at the same time',      price:220, icon:'🍽️' },
+  { kind:'station', def:'lettucecrate', name:'Lettuce Crate',   desc:'Another lettuce source',                     price:120, icon:'🥬' },
+  { kind:'station', def:'tomatocrate',  name:'Tomato Crate',    desc:'Another tomato source',                      price:120, icon:'🍅' },
+  { kind:'station', def:'griddle',      name:'Griddle',         desc:'Grill station (unlocks with burgers)',       price:340, icon:'🥩' },
+  { kind:'station', def:'fryer',        name:'Fryer',           desc:'Fry station (unlocks with fried dishes)',    price:360, icon:'🍟' },
+  { kind:'station', def:'pot',          name:'Stock Pot',       desc:'Boil station (unlocks with rice/soup)',      price:320, icon:'🍲' },
+  { kind:'table',                        name:'Dining Table',    desc:'More seats — place it, then set its chairs', price:300, icon:'🪑' },
+];
+function ownedCount(){ return (RUN.owned||[]).length; }
+// BELI = your restaurant's rating: day-to-day SERVICE plus how kitted-out you are.
+// The catch (Vince): a higher Beli => higher rent. Getting good makes you a target.
+function kitScore(){ let n=Math.max(0, STATIONS.length-DEFAULT_LAYOUT.length) + Math.max(0, TABLES.length-DEFAULT_TABLES.length);
+  for(const k in (RUN.upgrades||{})) n+=RUN.upgrades[k]||0; return n; }
+function beli(){ return clamp((RUN.rating||6) + kitScore()*0.12, 0, 10); }
 function weekOf(day){ return Math.floor((day-1)/WEEK_DAYS); }             // 0-based week index
-function rentFor(week){ return RENT_BASE + RENT_STEP*week; }
+function rentFor(week){ return Math.round((RENT_BASE + RENT_STEP*week) * (1 + Math.max(0, beli()-6)*0.05)); }   // Vince taxes your Beli
 function rentDueOn(day){ return day>1 && (day-1)%WEEK_DAYS===0; }          // rent hits at the start of each new week
 function daysToRent(day){ return WEEK_DAYS - ((day-1)%WEEK_DAYS); }
 // split a mob of N into escalating waves: 3,4,5,... capped so no wave is huge
@@ -4673,15 +4725,18 @@ function buildAppliance(s,g){
     const spout=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,0.4,12),dmat(0xcfd8dd,.3,.7)); spout.rotation.x=Math.PI/2; spout.position.set(0,SURF+0.88,-0.24); g.add(spout);
   }
 }
+// build one station's mesh group (also used when placing a store-bought station)
+function buildStationMesh(s){
+  if(!kitchenGrp || s._g) return;
+  const g=new THREE.Group(); g.position.set(s.x,0,s.z); kitchenGrp.add(g); s._g=g;
+  s._top=buildCounter(g, STATION_ACCENT[s.def]||0x39414b);
+  buildAppliance(s,g);
+  const sign=makeSign(STATION_LABEL[s.def]||s.def, s.col); sign.position.y=2.35; g.add(sign); s._sign=sign;
+}
 function buildKitchen(){
   if(kitchenGrp) return;
   kitchenGrp=new THREE.Group(); arena.add(kitchenGrp);
-  for(const s of STATIONS){
-    const g=new THREE.Group(); g.position.set(s.x,0,s.z); kitchenGrp.add(g); s._g=g;
-    s._top=buildCounter(g, STATION_ACCENT[s.id]||0x39414b);
-    buildAppliance(s,g);
-    const sign=makeSign(STATION_LABEL[s.id]||s.id, s.col); sign.position.y=2.35; g.add(sign); s._sign=sign;
-  }
+  for(const s of STATIONS) buildStationMesh(s);
   buildDining();
 }
 function buildDining(){
@@ -4693,21 +4748,23 @@ function buildDining(){
   PASSD._sign=makeSign('PASS',0xe6a721); PASSD._sign.position.set(0,2.4,0); pg.add(PASSD._sign);
   // dining TABLES: round top, pedestal, and up to 4 chairs (one per side, shown
   // per the table's chair config). A capacity badge floats above each.
-  for(const tb of TABLES){
-    const tg=new THREE.Group(); tg.position.set(tb.x,0,tb.z); kitchenGrp.add(tg); tb._g=tg;
-    const tt=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.1,20),dmat(0xc07a44,.55,.05)); tt.position.y=0.95; tt.castShadow=true; tg.add(tt);
-    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,0.9,10),dmat(0x4a3626,.6,.1)); post.position.y=0.47; tg.add(post);
-    const foot=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.42,0.06,14),dmat(0x3a2a1c,.6,.1)); foot.position.y=0.04; tg.add(foot);
-    tb._chairs=[];
-    CHAIR_OFF.forEach((o,side)=>{
-      const cg=new THREE.Group(); cg.position.set(o.x,0,o.z);
-      const seatm=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.5),dmat(0x6a4c34,.7,.05)); seatm.position.set(0,0.5,0); cg.add(seatm);
-      const back=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.62,0.08),dmat(0x6a4c34,.7,.05)); back.position.set(o.x*0.29,0.82,o.z*0.29); cg.add(back);
-      cg.visible=!!tb.chairs[side];
-      tg.add(cg); tb._chairs[side]=cg;
-    });
-    tb._cap=null; updateCapBadge(tb);
-  }
+  for(const tb of TABLES) buildTableMesh(tb);
+}
+function buildTableMesh(tb){
+  if(!kitchenGrp || tb._g) return;
+  const tg=new THREE.Group(); tg.position.set(tb.x,0,tb.z); kitchenGrp.add(tg); tb._g=tg;
+  const tt=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.1,20),dmat(0xc07a44,.55,.05)); tt.position.y=0.95; tt.castShadow=true; tg.add(tt);
+  const post=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,0.9,10),dmat(0x4a3626,.6,.1)); post.position.y=0.47; tg.add(post);
+  const foot=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.42,0.06,14),dmat(0x3a2a1c,.6,.1)); foot.position.y=0.04; tg.add(foot);
+  tb._chairs=[];
+  CHAIR_OFF.forEach((o,side)=>{
+    const cg=new THREE.Group(); cg.position.set(o.x,0,o.z);
+    const seatm=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.5),dmat(0x6a4c34,.7,.05)); seatm.position.set(0,0.5,0); cg.add(seatm);
+    const back=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.62,0.08),dmat(0x6a4c34,.7,.05)); back.position.set(o.x*0.29,0.82,o.z*0.29); cg.add(back);
+    cg.visible=!!tb.chairs[side];
+    tg.add(cg); tb._chairs[side]=cg;
+  });
+  tb._cap=null; updateCapBadge(tb);
 }
 function makeCapBadge(n){
   const cv=document.createElement('canvas'); cv.width=64; cv.height=64;
@@ -4887,7 +4944,7 @@ function nearestDiner(P, pred){
 }
 // the appliance name (+ its current action) that pops up when you stand in front
 function stationPrompt(s){
-  const name=STATION_LABEL[s.id]||s.id, c=DAY.carry; let act='';
+  const name=STATION_LABEL[s.def]||s.def, c=DAY.carry; let act='';
   if(s.kind==='crate') act = c?'':'grab';
   else if(s.kind==='prep') act = (c&&c.kind==='ing'&&!c.chopped)?'chop':'';
   else if(s.kind==='plate'){
@@ -5028,7 +5085,7 @@ function cookVerbs(P,pad,dt){
 const PLAN={ lift:null, cell:null };   // lift = {kind:'station'|'table', obj}; cell = target under player
 const TABLE_REACH=2.7;
 // persist helpers -- write the live layouts back into the run
-function saveKitchen(){ RUN.layout=STATIONS.map(st=>({id:st.id,c:st.c,r:st.r})); saveRun(); }
+function saveKitchen(){ RUN.layout=STATIONS.map(st=>({def:st.def,c:st.c,r:st.r})); saveRun(); }
 function saveTables(){ RUN.tables=TABLES.map(tb=>({c:tb.c,r:tb.r,chairs:tb.chairs.slice()})); saveRun(); }
 function buildGridOverlay(){
   if(gridGrp) return;
@@ -5092,7 +5149,7 @@ function nearestPlaceable(P){
   for(const tb of TABLES){ const d=Math.hypot(tb.x-P.pos.x,tb.z-P.pos.z); if(d<TABLE_REACH && d<bd){ bd=d; best={kind:'table',obj:tb}; } }
   return best;
 }
-function placeableName(pl){ return pl.kind==='table' ? 'TABLE' : (STATION_LABEL[pl.obj.id]||pl.obj.id); }
+function placeableName(pl){ return pl.kind==='table' ? 'TABLE' : (STATION_LABEL[pl.obj.def]||pl.obj.def); }
 function liftPlaceable(pl){
   if(PLAN.lift||!pl) return;
   const o=pl.obj; o._origC=o.c; o._origR=o.r;
@@ -5107,17 +5164,49 @@ function placeAt(cell){
   const wantGrid = lift.kind==='table'?'d':'k';
   if(cell.grid!==wantGrid || cell.occupied) return false;
   const o=lift.obj;
-  if(lift.kind==='station'){ o.c=cell.c; o.r=cell.r; o.x=gridX(cell.c); o.z=gridZ(cell.r); if(o._g) o._g.position.set(o.x,0,o.z); OCC[cellKey(cell.c,cell.r)]=o.id; saveKitchen(); }
-  else { o.c=cell.c; o.r=cell.r; o.x=tblX(cell.c); o.z=tblZ(cell.r); if(o._g) o._g.position.set(o.x,0,o.z); DOCC[dcellKey(cell.c,cell.r)]=TABLES.indexOf(o); saveTables(); rebuildSeats(); }
+  if(lift.kind==='station'){
+    o.c=cell.c; o.r=cell.r; o.x=gridX(cell.c); o.z=gridZ(cell.r); if(o._g) o._g.position.set(o.x,0,o.z);
+    if(lift.tray) STATIONS.push(o);                 // a store-bought station joins the kitchen now
+    OCC[cellKey(cell.c,cell.r)]=o.id; saveKitchen();
+  } else {
+    o.c=cell.c; o.r=cell.r; o.x=tblX(cell.c); o.z=tblZ(cell.r); if(o._g) o._g.position.set(o.x,0,o.z);
+    if(lift.tray) TABLES.push(o);
+    DOCC[dcellKey(cell.c,cell.r)]=TABLES.indexOf(o); saveTables(); rebuildSeats();
+  }
   PLAN.lift=null; o._origC=o._origR=undefined;
-  if(AC) sfx.pickup();
+  if(AC) sfx.pickup(); renderTray();
   return true;
 }
-// drop whatever's carried back onto its original cell (used on exit / cancel)
+// take a store-bought item out of the owned tray and into your hands to place it
+function takeFromTray(idx){
+  if(PLAN.lift) return;
+  const it=(RUN.owned||[])[idx]; if(!it) return;
+  RUN.owned.splice(idx,1); saveRun();
+  if(it.kind==='table'){ const tb={ c:0, r:0, x:0, z:0, chairs:[1,1,0,0] }; buildTableMesh(tb); PLAN.lift={kind:'table', obj:tb, tray:it}; }
+  else { const s=makeStation(it.def,0,0); buildStationMesh(s); PLAN.lift={kind:'station', obj:s, tray:it}; }
+  if(AC) sfx.pickup(); renderTray();
+  toast('PLACE IT — carry to a free tile, tap to set down');
+}
+// drop whatever's carried back (cancel): existing item -> its old cell; tray item -> back to the tray
 function returnLift(){
   const lift=PLAN.lift; if(!lift) return;
   const o=lift.obj;
+  if(lift.tray){
+    if(o._g && kitchenGrp){ kitchenGrp.remove(o._g); } o._g=null;
+    RUN.owned.push(lift.tray); saveRun(); PLAN.lift=null; renderTray(); return;
+  }
   placeAt({grid:lift.kind==='table'?'d':'k', c:o._origC, r:o._origR, occupied:false});
+}
+// the REARRANGE tray: chips for each unplaced owned item; tap one to pick it up
+function renderTray(){
+  const el=document.getElementById('plantray'); if(!el) return;
+  const owned=RUN.owned||[];
+  if(!owned.length || PLAN.lift){ el.classList.remove('on'); el.innerHTML=''; return; }
+  el.classList.add('on');
+  el.innerHTML='<span class="trlabel">PLACE:</span>'+owned.map((it,i)=>{
+    const nm=it.kind==='table'?'TABLE':(STATION_LABEL[it.def]||it.def);
+    return '<button class="trchip" data-i="'+i+'">'+nm+'</button>'; }).join('');
+  if(el.querySelectorAll) el.querySelectorAll('.trchip').forEach(b=>b.addEventListener('pointerdown',ev=>{ ev.preventDefault(); takeFromTray(+b.getAttribute('data-i')); }));
 }
 // toggle the chair on the side of the nearest table closest to the player (min 1 seat).
 function toggleChair(P){
@@ -5151,7 +5240,7 @@ function planPrompt(P){
   if(!_promptEl) return;
   let html='';
   if(PLAN.lift){
-    const nm = PLAN.lift.kind==='table' ? 'TABLE' : (STATION_LABEL[PLAN.lift.obj.id]||PLAN.lift.obj.id);
+    const nm = PLAN.lift.kind==='table' ? 'TABLE' : (STATION_LABEL[PLAN.lift.obj.def]||PLAN.lift.obj.def);
     const ok=PLAN.cell && !PLAN.cell.occupied;
     html='<span class="pname">'+nm+'</span><span class="pact">'+(ok?'set down':'find a free tile')+'</span>';
   } else {
@@ -5182,6 +5271,7 @@ function startPlan(){
   document.getElementById('hud').classList.remove('on');
   document.getElementById('dayhud').classList.remove('on');
   const pb=document.getElementById('planbar'); if(pb) pb.classList.add('on');
+  renderTray();
   if(TOUCHCAP){ touchEl.classList.add('on'); }
   if(master){ try{ master.gain.value=0.5; }catch(e){} }
 }
@@ -5239,7 +5329,7 @@ function renderDayHUD(){
   const plN=document.getElementById('dplatesN'); if(plN) plN.textContent=DAY.cleanPlates;
   const dr=document.getElementById('drun');
   if(dr){ const rin=daysToRent(RUN.day);
-    dr.innerHTML='<b>DAY '+RUN.day+'</b> &nbsp; BANK <b>$'+RUN.bank+'</b> &nbsp; RATING <b>'+RUN.rating.toFixed(1)+'</b>'+
+    dr.innerHTML='<b>DAY '+RUN.day+'</b> &nbsp; BANK <b>$'+RUN.bank+'</b> &nbsp; BELI <b>'+beli().toFixed(1)+'</b>'+
       '<br>RENT $'+rentFor(weekOf(RUN.day))+' <span class="due">in '+rin+(rin===1?' day':' days')+'</span>'+
       (RUN.debt>1500?' &nbsp; OWED <b>$'+RUN.debt+'</b>':''); }
   const rail=document.getElementById('tickets');
