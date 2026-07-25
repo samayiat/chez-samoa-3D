@@ -96,6 +96,12 @@
   #tickets{position:absolute;top:calc(var(--u)*10);left:50%;transform:translateX(-50%);display:flex;gap:calc(var(--u)*1.2);flex-wrap:nowrap}
   .ticket{background:#1a0f08ee;border:2px solid #e8c98a;border-radius:6px;padding:calc(var(--u)*0.8) calc(var(--u)*1.2);width:calc(var(--u)*13);box-shadow:0 4px 0 #0007}
   .ticket.bad{border-color:#ff6a3a;background:#22100cee}
+  .ticket.read{border-color:#6b6152;opacity:.72}
+  .ticket.read .tname,.ticket.read .tdish{color:#c8b88a}
+  .ticket.ready{border-color:#ffb43a;background:#241806ee;animation:tready .7s ease-in-out infinite alternate}
+  .ticket.ready .tname{color:#ffd98a}
+  .ticket.ready .tdish{color:#ffb43a}
+  @keyframes tready{from{box-shadow:0 4px 0 #0007}to{box-shadow:0 4px 0 #0007,0 0 14px #ffb43a99}}
   .ticket .tname{font-size:calc(var(--u)*1.5);letter-spacing:.12em;color:#e8c98a;margin-bottom:calc(var(--u)*0.3)}
   .ticket.bad .tname{color:#ff9a72}
   .ticket .tdish{font-family:"Anton",sans-serif;font-size:calc(var(--u)*2.6);color:var(--cream);letter-spacing:.04em}
@@ -320,7 +326,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r39</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r40</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4183,7 +4189,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r39';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r40';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4402,6 +4408,10 @@ const STATIONS=[
   { id:'plate',   kind:'plate',   x: 8.0,  z:KZ, col:0xece5d6 },
 ];
 const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m==null?.12:m,flatShading:true});
+const STATION_LABEL={ icebox:'ICEBOX', sink:'SINK', prep:'PREP', pot:'SOUP POT', griddle:'GRIDDLE', fryer:'FRYER', saladbar:'SALAD', plate:'PLATES' };
+// fixed 2.5D daytime camera (Overcooked/PlateUp-style): high, angled, framing the
+// whole kitchen line + the counter. Tunable by eye.
+const DAYCAM={ x:-1.5, y:15.5, z:12.5, lookY:0.7, lookZ:-3.4, fov:50 };
 const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, cleanPlates:6, dirty:0,
   diners:[], slotTaken:[false,false,false,false], carry:null, spawnT:1.4, washT:0, _carrySig:'', carryMesh:null,
   ledger:[], spawnMul:1 };   // cast indices of everyone shooed or walked-out today -> tonight's roster
@@ -4462,6 +4472,7 @@ function buildKitchen(){
     base.position.y=0.56; base.castShadow=true; base.receiveShadow=true; g.add(base);
     const top=new THREE.Mesh(new THREE.BoxGeometry(1.66,0.16,1.46),dmat(s.col,.5,.15));
     top.position.y=1.2; top.castShadow=true; g.add(top); s._top=top;
+    const sign=makeSign(STATION_LABEL[s.id]||s.id, s.col); sign.position.y=2.25; g.add(sign); s._sign=sign;
     if(s.kind==='cook'){
       const pan=new THREE.Mesh(new THREE.CylinderGeometry(0.44,0.36,0.16,16),dmat(0x17171b,.5,.5));
       pan.position.y=1.32; g.add(pan);
@@ -4501,21 +4512,49 @@ function makeDiner(cast){
 }
 // a glance-able speech bubble that floats over a seated diner: GREEN dish = cook
 // it; RED off-menu item = you can't, wave them off. Billboarded to camera.
-function makeBubble(text, bad){
+// a diner's floating thought bubble. kind sets the whole look:
+//   'read'  grey  — reading the menu (no order yet)
+//   'ready' amber — decided, waiting for YOU to greet/take the order
+//   'good'  green — an order you can cook
+//   'bad'   red   — an off-menu ask; wave them off
+const BUBBLE_STYLE={
+  read: { bg:'rgba(26,24,20,0.94)', line:'#c8b88a', fg:'#e6d8b4' },
+  ready:{ bg:'rgba(44,30,8,0.95)',  line:'#ffb43a', fg:'#ffd98a' },
+  good: { bg:'rgba(20,28,14,0.94)', line:'#8be27a', fg:'#bff0a0' },
+  bad:  { bg:'rgba(44,12,10,0.94)', line:'#ff6a3a', fg:'#ff9a72' },
+};
+function makeBubble(text, kind){
+  const st=BUBBLE_STYLE[kind]||BUBBLE_STYLE.good;
   const cv=document.createElement('canvas'); cv.width=256; cv.height=88;
   try{ const x=cv.getContext('2d');
-    x.fillStyle= bad?'rgba(44,12,10,0.94)':'rgba(20,28,14,0.94)';
-    if(x.fillRect) x.fillRect(6,6,244,64);
-    x.strokeStyle= bad?'#ff6a3a':'#8be27a'; x.lineWidth=5;
-    if(x.strokeRect) x.strokeRect(6,6,244,64);
-    x.fillStyle= bad?'#ff9a72':'#bff0a0'; x.textAlign='center'; x.textBaseline='middle';
-    x.font='bold 40px Anton, system-ui, sans-serif';
-    if(x.fillText) x.fillText((bad?'✕ ':'')+text.toUpperCase(), 128, 40);
+    x.fillStyle=st.bg; if(x.fillRect) x.fillRect(6,6,244,64);
+    x.strokeStyle=st.line; x.lineWidth=5; if(x.strokeRect) x.strokeRect(6,6,244,64);
+    x.fillStyle=st.fg; x.textAlign='center'; x.textBaseline='middle';
+    x.font='bold 38px Anton, system-ui, sans-serif';
+    if(x.fillText) x.fillText((kind==='bad'?'✕ ':'')+text.toUpperCase(), 128, 40);
   }catch(e){}
   const tex=new THREE.CanvasTexture(cv);
   const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,fog:false});
   const m=new THREE.Mesh(new THREE.PlaneGeometry(1.5,0.52),mat); m.renderOrder=1200;
-  const grp=new THREE.Group(); grp.add(m); grp.visible=true; return grp;
+  const grp=new THREE.Group(); grp.add(m); return grp;
+}
+function setBubble(d, text, kind){                       // swap a diner's bubble to a new state
+  if(d.bubble) scene.remove(d.bubble);
+  d.bubble=makeBubble(text, kind); scene.add(d.bubble);
+}
+// a station name sign that floats above an appliance so you can tell them apart.
+function makeSign(text, col){
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=64;
+  try{ const x=cv.getContext('2d');
+    x.fillStyle='rgba(14,9,6,0.9)'; if(x.fillRect) x.fillRect(4,4,248,52);
+    x.strokeStyle='#'+(col||0xe8c98a).toString(16).padStart(6,'0'); x.lineWidth=4; if(x.strokeRect) x.strokeRect(4,4,248,52);
+    x.fillStyle='#f4e4c1'; x.textAlign='center'; x.textBaseline='middle';
+    x.font='bold 34px Anton, system-ui, sans-serif';
+    if(x.fillText) x.fillText(text.toUpperCase(), 128, 32);
+  }catch(e){}
+  const tex=new THREE.CanvasTexture(cv);
+  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,fog:false});
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(1.7,0.42),mat); m.renderOrder=1150; return m;
 }
 function freeSlot(){ for(let i=0;i<SLOTS_X.length;i++) if(!DAY.slotTaken[i]) return i; return -1; }
 function spawnDiner(){
@@ -4527,10 +4566,9 @@ function spawnDiner(){
   const g=makeDiner(cast); g.rotation.y=Math.PI;           // face the counter (-z, toward the kitchen)
   const sx=SLOTS_X[slot];
   g.position.set(sx, 0, HALFD-1.2); scene.add(g);
-  const label = bad ? cast.bad : (DISHES[dish].name + (DISHES[dish].prep?' (CHOP)':''));
-  const bubble=makeBubble(label, bad); scene.add(bubble);
+  const bubble=makeBubble('…','read'); scene.add(bubble);  // they read the menu first; the order is hidden until you greet them
   DAY.diners.push({ g, bubble, slot, castIdx:ci, cast, bad, dish, hearts:1, state:'coming',
-    x:sx, z:HALFD-1.2, tx:sx, tz:SERVE_Z });
+    readT:rand(2.4,4.2), x:sx, z:HALFD-1.2, tx:sx, tz:SERVE_Z });
 }
 function grudge(d){ DAY.ledger.push(d.castIdx); }   // they'll be back tonight, this face
 function releaseDiner(d, happy){
@@ -4543,21 +4581,36 @@ function updateDiners(dt){
     const d=DAY.diners[i];
     if(d.state==='coming'){
       d.z += (d.tz-d.z)*Math.min(1,dt*3.4); d.x += (d.tx-d.x)*Math.min(1,dt*3.4);
-      if(Math.abs(d.z-d.tz)<0.12){ d.z=d.tz; d.state='waiting'; }
-    } else if(d.state==='waiting'){
-      d.hearts -= dt/PATIENCE;
-      if(d.hearts<=0){ d.hearts=0; DAY.lost++; grudge(d);       // walked out angry -> tonight's roster
-        toast(d.cast.name+' WALKED OUT'); releaseDiner(d,false); }
+      if(Math.abs(d.z-d.tz)<0.12){ d.z=d.tz; d.state='reading'; }   // sat down, now reading the menu
+    } else if(d.state==='reading'){
+      d.readT-=dt;                                                  // no impatience while they browse
+      if(d.readT<=0){ d.state='ready'; d.hearts=1; setBubble(d,'READY','ready'); }   // decided -> waiting for YOU
+    } else if(d.state==='ready'){
+      d.hearts -= dt/(PATIENCE*1.7);                                // annoyed slowly if you never greet them
+      if(d.hearts<=0){ d.hearts=0; DAY.lost++; grudge(d); toast(d.cast.name+' LEFT UNGREETED'); releaseDiner(d,false); }
+    } else if(d.state==='ordered'){
+      d.hearts -= dt/PATIENCE;                                      // the real order clock, once taken
+      if(d.hearts<=0){ d.hearts=0; DAY.lost++; grudge(d); toast(d.cast.name+' WALKED OUT'); releaseDiner(d,false); }
     } else if(d.state==='leaving'){
       d.z += (d.tz-d.z)*Math.min(1,dt*3.0);
       if(d.z>HALFD-1.35){ scene.remove(d.g); if(d.bubble) scene.remove(d.bubble); DAY.diners.splice(i,1); continue; }
     }
     d.g.position.set(d.x, Math.sin(GAME.t*3+d.slot)*0.02, d.z);   // small alive-bob
-    if(d.bubble && d.bubble.visible){
-      d.bubble.position.set(d.x, 2.5, d.z);
+    if(d.bubble && d.bubble.visible!==false){
+      // bob the bubble; pulse the 'ready' one so an ungreeted diner draws the eye
+      const py = (d.state==='ready') ? 2.55+Math.sin(GAME.t*5)*0.08 : 2.5;
+      d.bubble.position.set(d.x, py, d.z);
       d.bubble.quaternion.copy(camera.quaternion);
     }
   }
+}
+// greet a diner who's ready: they hand you their order (good) or ask for the
+// off-menu thing (bad). The order clock starts now.
+function takeOrder(d){
+  d.state='ordered'; d.hearts=1;
+  if(d.bad){ setBubble(d, d.cast.bad, 'bad'); toast(d.cast.name+': “You got '+d.cast.bad+'?”'); }
+  else { setBubble(d, DISHES[d.dish].name+(DISHES[d.dish].prep?' (CHOP)':''), 'good'); toast(d.cast.name+': “'+DISHES[d.dish].name+', please.”'); }
+  if(AC) sfx.pickup();
 }
 function tickCooks(dt){
   for(const s of STATIONS){ if(s.kind!=='cook') continue;
@@ -4581,9 +4634,9 @@ function nearestStation(P){
   for(const s of STATIONS){ const d=Math.hypot(s.x-P.pos.x,s.z-P.pos.z); if(d<bd){ bd=d; best=s; } }
   return best;
 }
-function nearestWaitingDiner(P){
+function nearestDiner(P, pred){
   let best=null,bd=SERVE_REACH;
-  for(const d of DAY.diners){ if(d.state!=='waiting') continue;
+  for(const d of DAY.diners){ if(!pred(d)) continue;
     const dist=Math.hypot(d.x-P.pos.x,d.z-P.pos.z); if(dist<bd){ bd=dist; best=d; } }
   return best;
 }
@@ -4643,13 +4696,17 @@ function cookVerbs(P,pad,dt){
   } else if(s && s.kind==='cook' && s.item && s.item.state==='fire' && held){
     s.item._out=(s.item._out||0)+dt; if(s.item._out>=1.3){ s.item=null; toast('FIRE OUT'); if(AC)sfx.pickup(); }
   } else DAY.washT=0;
-  // EDGE action: the one context interact (grab / place / plate / serve / trash)
+  // EDGE action: the one context interact. At the counter it greets / serves /
+  // shoos; at a station it grabs / places / plates / trashes.
   const tap = pad.pickup||pad.rush||tapK('f')||consume('pickupEdge');
   if(!tap) return;
-  const d=nearestWaitingDiner(P);
+  // act on the CLOSEST counter diner, then branch by their state (so a wide serve
+  // reach can't skip the diner in front of you to grab a neighbour)
+  const d=nearestDiner(P, x=>x.state==='ready'||x.state==='ordered');
   if(d){
-    if(DAY.carry && DAY.carry.kind==='plated'){ serveDiner(P,d); return; }   // deliver a plated good order
-    if(d.bad && !DAY.carry){ waveOff(d); return; }                          // shoo an off-menu asker
+    if(d.state==='ready'){ if(!DAY.carry){ takeOrder(d); return; } }          // greet -> they order
+    else if(d.bad){ if(!DAY.carry){ waveOff(d); return; } }                   // off-menu -> shoo
+    else if(DAY.carry && DAY.carry.kind==='plated'){ serveDiner(P,d); return; } // deliver the plated order
   }
   if(s) stationAct(P,s);
 }
@@ -4691,12 +4748,16 @@ function renderDayHUD(){
       (RUN.debt>1500?' &nbsp; OWED <b>$'+RUN.debt+'</b>':''); }
   const rail=document.getElementById('tickets');
   if(rail){
-    const waiting=DAY.diners.filter(d=>d.state==='waiting'||d.state==='coming').sort((a,b)=>a.slot-b.slot);
-    rail.innerHTML=waiting.map(d=>{
+    const shown=DAY.diners.filter(d=>d.state==='reading'||d.state==='ready'||d.state==='ordered').sort((a,b)=>a.slot-b.slot);
+    rail.innerHTML=shown.map(d=>{
       const f=clamp(d.hearts,0,1); const col=f>0.5?'#49d05a':f>0.25?'#e3b53a':'#ff3b30';
-      const order=d.bad ? ('✕ '+d.cast.bad) : (DISHES[d.dish].name + (DISHES[d.dish].prep?' 🔪':''));
-      return '<div class="ticket'+(d.bad?' bad':'')+'"><div class="tname">'+d.cast.name+'</div><div class="tdish">'+order+'</div>'+
-        '<div class="tbarwrap"><i class="tbar" style="transform:scaleX('+f.toFixed(3)+');background:'+col+'"></i></div></div>';
+      let cls='', order, showBar=true;
+      if(d.state==='reading'){ cls=' read'; order='reading menu…'; showBar=false; }
+      else if(d.state==='ready'){ cls=' ready'; order='▲ GREET'; }
+      else if(d.bad){ cls=' bad'; order='✕ '+d.cast.bad; }
+      else { order=DISHES[d.dish].name + (DISHES[d.dish].prep?' 🔪':''); }
+      return '<div class="ticket'+cls+'"><div class="tname">'+d.cast.name+'</div><div class="tdish">'+order+'</div>'+
+        (showBar?'<div class="tbarwrap"><i class="tbar" style="transform:scaleX('+f.toFixed(3)+');background:'+col+'"></i></div>':'')+'</div>';
     }).join('');
   }
   const car=document.getElementById('dcarry');
@@ -4753,6 +4814,7 @@ function updateDay(dt){
   updateDiners(dt);
   tickCooks(dt);
   updateCarryMesh();
+  for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); }   // signs face the fixed cam
   renderDayHUD();
   // end of shift: clock done AND the counter has cleared
   if(DAY.t<=0 && DAY.diners.length===0){ finishDay(); }
@@ -4970,7 +5032,20 @@ function updateWeaponTrail(){
   trailGeo.attributes.color.needsUpdate=true;
 }
 const _camTgt=new V3();
+// daytime: a FIXED 2.5D camera framing the kitchen line + counter (Overcooked/
+// PlateUp). It does not follow the chef -- the whole line stays on screen.
+function dayCamera(dt){
+  const want=_camTgt.set(DAYCAM.x, DAYCAM.y, DAYCAM.z);
+  CAM.pos.lerp(want, 1-Math.exp(-6*dt));
+  camera.position.copy(CAM.pos);
+  if(camera.up && camera.up.set) camera.up.set(0,1,0);
+  if(camera.lookAt) camera.lookAt(DAYCAM.x, DAYCAM.lookY, DAYCAM.lookZ);
+  if(camera.updateProjectionMatrix && Math.abs((camera.fov||DAYCAM.fov)-DAYCAM.fov)>0.01){ camera.fov=DAYCAM.fov; camera.updateProjectionMatrix(); }
+  // trauma shake still reads
+  FX.trauma=Math.max(0,FX.trauma-dt*2.4);
+}
 function updateCamera(dt){
+  if(GAME.mode==='day'){ dayCamera(dt); return; }
   updateCameraVectors();
   const P=player;
   // trail the COM's ground position (body centre, incl. lean/sway) rather than the
