@@ -253,7 +253,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r29</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r30</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4094,7 +4094,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r29';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r30';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4351,14 +4351,18 @@ function updateCamera(dt){
   if(dir.z>1e-4) dist=Math.min(dist,(mz-target.z)/dir.z);
   else if(dir.z<-1e-4) dist=Math.min(dist,(-mz-target.z)/dir.z);
   dist=Math.max(1.8,dist);
+  // over the shoulder, mirrored for handedness: right-handed chef -> over the
+  // RIGHT shoulder (she sits left of centre); left-handed (male) -> over the LEFT
+  // shoulder so his weapon hand reads and he sits on the right.
+  const shoulder = (P && P.chef && P.chef.userData.whand===0) ? -1 : 1;
   want.copy(target).addScaledVector(dir,dist);
-  want.addScaledVector(camRight, 1.35*k);        // over the shoulder: slide the lens right so the chef sits LEFT of centre (was .95)
+  want.addScaledVector(camRight, 1.35*k*shoulder);
   want.y=CAM.height - 0.55*k;                    // drop toward head height
   if(locked){
     // frame BOTH of you: sit the aim between the pair, biased at the enemy
     const t=P.lockOn.pos;
     const fl=new V3(lerp(P.pos.x,t.x,0.42), 1.45, lerp(P.pos.z,t.z,0.42));
-    fl.addScaledVector(camRight, 0.42);          // keep the player from sliding off-frame
+    fl.addScaledVector(camRight, 0.42*shoulder);   // keep the player from sliding off-frame (mirrored)
     look.lerp(fl, k);
   } else if(P){
     const ne=nearestEnemy(P.pos,P.facing,null);
