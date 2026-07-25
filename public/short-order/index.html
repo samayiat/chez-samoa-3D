@@ -111,10 +111,14 @@
   #dcarry.on{opacity:1}
 
   /* ---------- back-office shop ---------- */
-  .card.shop{max-width:min(92%,560px)}
-  .card.shop .sbank{font-family:"Anton",sans-serif;color:var(--cream);font-size:clamp(15px,calc(var(--u,6.4px)*2.4),20px);letter-spacing:.06em;margin:2px 0 14px}
+  .card.shop{max-width:min(96%,780px)}
+  /* shop title is a header, not the big splash title -- keep it compact so the
+     whole shop + the OPEN button fit a phone stage without scrolling */
+  .card.shop .title{font-size:clamp(22px,calc(var(--u,6.4px)*4.4),40px);line-height:1;margin-bottom:clamp(3px,calc(var(--u,6.4px)*0.6),5px)}
+  .card.shop .sbank{font-family:"Anton",sans-serif;color:var(--cream);font-size:clamp(13px,calc(var(--u,6.4px)*2.2),20px);letter-spacing:.05em;margin:2px 0 clamp(8px,calc(var(--u,6.4px)*1.6),14px)}
   .card.shop .sbank b{color:#8be27a}
-  .shoplist{display:flex;flex-direction:column;gap:clamp(5px,calc(var(--u,6.4px)*1),8px);margin-bottom:14px;text-align:left}
+  /* two columns -- the rotated stage is landscape, so 7 items fit in ~4 rows */
+  .shoplist{display:grid;grid-template-columns:1fr 1fr;gap:clamp(5px,calc(var(--u,6.4px)*1),8px);margin-bottom:clamp(9px,calc(var(--u,6.4px)*1.6),14px);text-align:left}
   .shoprow{display:flex;align-items:center;gap:clamp(7px,calc(var(--u,6.4px)*1.6),12px);background:#1a0f08cc;border:2px solid #3a2a1a;border-radius:8px;padding:clamp(6px,calc(var(--u,6.4px)*1.2),9px) clamp(9px,calc(var(--u,6.4px)*1.6),12px)}
   .shoprow .sic{font-size:clamp(19px,calc(var(--u,6.4px)*3.4),26px);line-height:1;flex:0 0 auto}
   .shoprow .sinfo{flex:1 1 auto;min-width:0}
@@ -316,7 +320,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r38</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r39</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4179,7 +4183,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r38';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r39';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4327,7 +4331,7 @@ function renderShop(){
   const rin=daysToRent(RUN.day);
   document.getElementById('card').innerHTML='<div class="card shop">'+
     '<div class="kick">BEFORE OPEN · DAY '+RUN.day+'</div>'+
-    '<div class="title">BACK<br><span class="b">OFFICE</span></div>'+
+    '<div class="title">BACK <span class="b">OFFICE</span></div>'+
     '<div class="sbank">BANK <b>$'+RUN.bank+'</b> &nbsp;·&nbsp; RENT $'+rentFor(weekOf(RUN.day))+' in '+rin+(rin===1?' day':' days')+'</div>'+
     '<div class="shoplist">'+rows+'</div>'+
     '<button class="btn" id="startDayBtn">OPEN THE DINER →</button></div>';
