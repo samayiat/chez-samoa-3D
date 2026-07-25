@@ -352,7 +352,7 @@
 </div>
 <div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint"><b>ACT</b> to lift/place appliances &amp; tables &middot; <b>CHAIRS</b> to toggle a seat (1–4)</div><div id="plantray"></div><div class="pbrow"><button id="planChairs" class="pbchairs">CHAIRS</button><button id="planDone" class="pbdone">DONE ✓</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r51</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r52</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4220,7 +4220,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r51';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r52';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4292,9 +4292,14 @@ function onNightEnd(res){
     }
   }
   RUN.bank += bounty;
+  // the mob wrecks the place on a rough night: a loss trashes ~half your gear, a
+  // clean win spares it. 'Sturdy Gear' softens the blow.
+  let wrecked=0;
+  if(!res.survived) wrecked=breakSomeStations(0.5);
+  else if((GAME.maxCombo||0) < 3) wrecked=breakSomeStations(0.2);   // scraped by -> a little damage
   RUN.day++;
   saveRun();
-  showMorning(res, bounty, bossLine);
+  showMorning(res, bounty, bossLine + (wrecked>0 ? '<br><span style="color:#ff8a3a">The mob wrecked <b>'+wrecked+'</b> station'+(wrecked>1?'s':'')+' — repair in the back office.</span>' : ''));
   return true;
 }
 function showMorning(res, bounty, rentLine){
@@ -4373,12 +4378,19 @@ function renderShop(){
       '<button class="sbuy'+(afford?'':' off')+'" data-i="'+i+'"'+(afford?'':' disabled')+'>$'+it.price+'</button>'+
     '</div>';
   }).join('');
+  // broken stations you can repair (out of the same bank Vince wants)
+  const broken=STATIONS.filter(s=>s.broken);
+  const repairs = broken.length ? '<div class="sshelf" style="color:#ff6a3a">REPAIRS — '+broken.length+' broken</div><div class="shoplist">'+
+    broken.map(s=>{ const cost=repairCost(s), afford=RUN.bank>=cost;
+      return '<div class="shoprow"><div class="sic">🔧</div><div class="sinfo"><div class="sname">'+(STATION_LABEL[s.def]||s.def)+'</div><div class="sdesc">out of action until fixed</div></div>'+
+      '<button class="sbuy'+(afford?'':' off')+'" data-fix="'+s.id+'"'+(afford?'':' disabled')+'>$'+cost+'</button></div>'; }).join('')+'</div>' : '';
   const rin=daysToRent(RUN.day), oc=ownedCount();
   const tray = oc>0 ? '<div class="strayhint">📦 '+oc+' item'+(oc>1?'s':'')+' bought — place '+(oc>1?'them':'it')+' in REARRANGE</div>' : '';
   document.getElementById('card').innerHTML='<div class="card shop">'+
     '<div class="kick">BEFORE OPEN · DAY '+RUN.day+'</div>'+
     '<div class="title">BACK <span class="b">OFFICE</span></div>'+
     '<div class="sbank">BANK <b>$'+RUN.bank+'</b> &nbsp;·&nbsp; BELI <b>'+beli().toFixed(1)+'</b> &nbsp;·&nbsp; RENT $'+rentFor(weekOf(RUN.day))+' in '+rin+(rin===1?' day':' days')+'</div>'+
+    repairs+
     '<div class="sshelf">UPGRADES</div>'+
     '<div class="shoplist">'+rows+'</div>'+
     '<div class="sshelf">THE STORE — appliances &amp; tables</div>'+
@@ -4390,6 +4402,7 @@ function renderShop(){
   if(c.querySelectorAll){
     c.querySelectorAll('.sbuy[data-k]').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); buyUpgrade(b.getAttribute('data-k')); }));
     c.querySelectorAll('.sbuy[data-i]').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); buyStore(+b.getAttribute('data-i')); }));
+    c.querySelectorAll('.sbuy[data-fix]').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); const s=STATIONS.find(x=>x.id===b.getAttribute('data-fix')); if(s&&repairStation(s)) renderShop(); }));
   }
   const pb=document.getElementById('planBtn'); if(pb) pb.onclick=()=>{ goFullscreen(); startPlan(); };
   const sb=document.getElementById('startDayBtn'); if(sb) sb.onclick=()=>{ goFullscreen(); startDay(); };
@@ -4460,7 +4473,7 @@ applyTables(DEFAULT_TABLES); rebuildSeats();
 // By day you stage plated dishes on it, then run them out to the tables.
 const PASSD={ x:PASS.x, z:PASS.z, w:PASS.w, top:1.3, slots:4 };
 const ENTRANCE_Z=HALFD-1.2;
-const COOK_TIME=4.2, READY_HOLD=2.9, BURN_TO_FIRE=3.2;   // cook -> green window -> burnt -> fire
+const COOK_TIME=4.2, READY_HOLD=2.9, BURN_TO_FIRE=3.2, FIRE_TO_BREAK=3.0;   // cook -> green window -> burnt -> fire -> WRECKED
 const PATIENCE=15, DAY_LEN=95, SPAWN_MIN=2.6, SPAWN_MAX=4.6;
 // dishes vary by CHAIN LENGTH (the Overcooked way -- depth from stacking the
 // same verbs, not new ones). `prep:true` means the raw must be CHOPPED at the
@@ -4557,16 +4570,16 @@ let STATIONS=[];   // live station instances (carry mesh refs + cook state at ru
 let OCC={};        // occupancy map: 'c|r' -> instance id (for placement collision)
 let _sidCounter=0;
 function normDef(p){ return p.def || (p.id==='prep2'?'prep':p.id); }   // accept legacy {id} layouts
-function makeStation(def,c,r){ const D=STATION_DEFS[def]; if(!D) return null;
-  const s={ def, id:def+'#'+(_sidCounter++), c, r, x:gridX(c), z:gridZ(r) }; Object.assign(s, D); return s; }
-// Resolve a layout (list of {def,c,r}) into live STATIONS + OCC. Mutates STATIONS
-// IN PLACE (never reassigns the array) so mesh refs attached by buildKitchen and
-// per-object cook state survive a re-layout. Called once at init and again only
+function makeStation(def,c,r,wear,broken){ const D=STATION_DEFS[def]; if(!D) return null;
+  const s={ def, id:def+'#'+(_sidCounter++), c, r, x:gridX(c), z:gridZ(r), wear:(wear==null?1:wear), broken:!!broken }; Object.assign(s, D); return s; }
+// Resolve a layout (list of {def,c,r,wear,broken}) into live STATIONS + OCC. Mutates
+// STATIONS IN PLACE (never reassigns the array) so mesh refs attached by buildKitchen
+// and per-object cook state survive a re-layout. Called once at init and again only
 // when the player rearranges the kitchen in prep -- NOT every day.
 function applyLayout(layout){
   STATIONS.length=0; OCC={}; _sidCounter=0;
   for(const p of layout){
-    const s=makeStation(normDef(p), p.c, p.r); if(!s) continue;
+    const s=makeStation(normDef(p), p.c, p.r, p.wear, p.broken); if(!s) continue;
     STATIONS.push(s); OCC[cellKey(p.c,p.r)]=s.id;
   }
   return STATIONS;
@@ -4607,6 +4620,7 @@ const SHOP=[
   { key:'rush',   name:'Word of Mouth',   desc:'Diners arrive faster — busier, richer',max:2, base:200, icon:'📣' },
   { key:'tipjar', name:'Bigger Tip Jar',  desc:'+20% on every serve',                  max:3, base:180, icon:'💰' },
   { key:'locks',  name:'Reinforced Door', desc:'Fewer patrons force in at night',      max:3, base:240, icon:'🔒' },
+  { key:'sturdy', name:'Sturdy Gear',     desc:'Less breaks when the night gets rough', max:3, base:220, icon:'🛠️' },
   { key:'brawn',  name:'Line-Cook Grit',  desc:'+30 HP in the night brawl',            max:3, base:200, icon:'💪' },
   { key:'blade',  name:'Good Knife',      desc:'Start the night armed with a knife',   max:1, base:420, icon:'🔪' },
 ];
@@ -4630,9 +4644,41 @@ function ownedCount(){ return (RUN.owned||[]).length; }
 // The catch (Vince): a higher Beli => higher rent. Getting good makes you a target.
 function kitScore(){ let n=Math.max(0, STATIONS.length-DEFAULT_LAYOUT.length) + Math.max(0, TABLES.length-DEFAULT_TABLES.length);
   for(const k in (RUN.upgrades||{})) n+=RUN.upgrades[k]||0; return n; }
-function beli(){ return clamp((RUN.rating||6) + kitScore()*0.12, 0, 10); }
+function brokenCount(){ return STATIONS.filter(s=>s.broken).length; }
+function beli(){ return clamp((RUN.rating||6) + kitScore()*0.12 - brokenCount()*0.6, 0, 10); }   // a broken-down kitchen rates worse
 function weekOf(day){ return Math.floor((day-1)/WEEK_DAYS); }             // 0-based week index
 function rentFor(week){ return Math.round((RENT_BASE + RENT_STEP*week) * (1 + Math.max(0, beli()-6)*0.05)); }   // Vince taxes your Beli
+/* ---- BREAKAGE & REPAIR: entropy, the other enemy of your bank ----
+   Stations break -- from grease fires by day, and from the mob wrecking the place
+   at night (a rough night trashes gear). A broken station shows a red X and can't
+   be used; you pay to REPAIR it in the back office, out of the same bank Vince
+   wants. 'Sturdy Gear' upgrades blunt the night's damage. Broken gear also drags
+   your Beli down. Spend to keep it running, or watch it rot. */
+function storePriceOf(def){ const it=STORE.find(s=>s.def===def); return it?it.price:200; }
+function repairCost(s){ return Math.max(60, Math.round(storePriceOf(s.def)*0.4)); }
+function breakStation(s){
+  if(!s||s.broken) return;
+  s.broken=true; s.wear=0; syncBrokenMark(s);
+  if(s.kind==='cook'){ s.item=null; if(s._flame)s._flame.visible=false; if(s._glow)s._glow.material.opacity=0; }
+  if(s.kind==='plate' && s.plate){ s.plate=null; syncStationPlate(s); }
+  if(AC){ try{ sfx.whiff && sfx.whiff(); }catch(e){} }
+  toast((STATION_LABEL[s.def]||s.def)+' BROKE DOWN');
+}
+function repairStation(s){
+  if(!s||!s.broken) return false;
+  const cost=repairCost(s); if(RUN.bank<cost) return false;
+  RUN.bank-=cost; s.broken=false; s.wear=1; syncBrokenMark(s); saveKitchen(); saveRun();
+  if(AC) sfx.pickup(); return true;
+}
+// a rough night wrecks a share of your gear (KO/loss). 'Sturdy Gear' softens it.
+function breakSomeStations(severity){
+  const live=STATIONS.filter(s=>!s.broken); if(!live.length) return 0;
+  const frac=clamp((severity==null?0.5:severity) - upLvl('sturdy')*0.15, 0, 1);
+  const n=Math.round(live.length*frac); if(n<=0) return 0;
+  for(let i=live.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=live[i]; live[i]=live[j]; live[j]=t; }
+  for(let i=0;i<n;i++) breakStation(live[i]);
+  saveKitchen(); return n;
+}
 function rentDueOn(day){ return day>1 && (day-1)%WEEK_DAYS===0; }          // rent hits at the start of each new week
 function daysToRent(day){ return WEEK_DAYS - ((day-1)%WEEK_DAYS); }
 // split a mob of N into escalating waves: 3,4,5,... capped so no wave is huge
@@ -4725,6 +4771,16 @@ function buildAppliance(s,g){
     const spout=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,0.4,12),dmat(0xcfd8dd,.3,.7)); spout.rotation.x=Math.PI/2; spout.position.set(0,SURF+0.88,-0.24); g.add(spout);
   }
 }
+// a red ✕ that floats over a broken station (billboarded like the signs)
+function makeXMark(){
+  const cv=document.createElement('canvas'); cv.width=64; cv.height=64;
+  try{ const x=cv.getContext('2d'); if(x.fillRect){ x.fillStyle='rgba(30,6,4,0.82)'; x.fillRect(3,3,58,58); }
+    if(x.beginPath){ x.strokeStyle='#ff3b1e'; x.lineWidth=11; x.lineCap='round'; x.beginPath(); x.moveTo(16,16); x.lineTo(48,48); x.moveTo(48,16); x.lineTo(16,48); x.stroke(); } }catch(e){}
+  const tex=new THREE.CanvasTexture(cv);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(0.72,0.72), new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,fog:false}));
+  m.renderOrder=1200; return m;
+}
+function syncBrokenMark(s){ if(s._xmark) s._xmark.visible=!!s.broken; }
 // build one station's mesh group (also used when placing a store-bought station)
 function buildStationMesh(s){
   if(!kitchenGrp || s._g) return;
@@ -4732,6 +4788,7 @@ function buildStationMesh(s){
   s._top=buildCounter(g, STATION_ACCENT[s.def]||0x39414b);
   buildAppliance(s,g);
   const sign=makeSign(STATION_LABEL[s.def]||s.def, s.col); sign.position.y=2.35; g.add(sign); s._sign=sign;
+  const xm=makeXMark(); xm.position.y=1.72; xm.visible=!!s.broken; g.add(xm); s._xmark=xm;
 }
 function buildKitchen(){
   if(kitchenGrp) return;
@@ -4922,6 +4979,7 @@ function tickCooks(dt){
       if(it.state==='cooking' && it.t>=COOK_TIME){ it.state='ready'; it.t=0; if(AC)sfx.pickup(); }
       else if(it.state==='ready' && it.t>=(DAY.readyHold||READY_HOLD)){ it.state='burnt'; it.t=0; }
       else if(it.state==='burnt' && it.t>=BURN_TO_FIRE){ it.state='fire'; it.t=0; toast('FIRE ON THE '+s.dish.toUpperCase()+'!'); }
+      else if(it.state==='fire' && it.t>=FIRE_TO_BREAK){ breakStation(s); }   // a fire left to rage wrecks the station
     }
     // visuals
     if(s._glow){ const on = it && (it.state==='cooking'||it.state==='ready');
@@ -4945,6 +5003,7 @@ function nearestDiner(P, pred){
 // the appliance name (+ its current action) that pops up when you stand in front
 function stationPrompt(s){
   const name=STATION_LABEL[s.def]||s.def, c=DAY.carry; let act='';
+  if(s.broken) return '<span class="pname">'+name+'</span><span class="pact" style="color:#ff6a3a">broken</span>';
   if(s.kind==='crate') act = c?'':'grab';
   else if(s.kind==='prep') act = (c&&c.kind==='ing'&&!c.chopped)?'chop':'';
   else if(s.kind==='plate'){
@@ -5022,6 +5081,7 @@ function syncStationPlate(s){
 // the first still-missing component for a plate, as a name hint ('' if complete/none)
 function plateMissing(items){ for(const rk of RECIPE_KEYS){ const need=RECIPES[rk].need; if(items.every(x=>need.includes(x))){ const miss=need.filter(x=>!items.includes(x)); if(miss.length) return INGREDIENTS[miss[0]].name; } } return ''; }
 function stationAct(P,s){
+  if(s.broken){ toast((STATION_LABEL[s.def]||s.def)+' IS BROKEN — REPAIR IT'); return; }
   const c=DAY.carry;
   if(s.kind==='crate'){ if(!c){ DAY.carry={kind:'ing', id:s.ingredient, chopped:false}; if(AC)sfx.pickup(); } }
   else if(s.kind==='prep'){
@@ -5052,7 +5112,7 @@ function cookVerbs(P,pad,dt){
   const s=nearestStation(P);
   const held=pad.pickupHeld||KEY['f']||TOUCH.pickupHeld;
   // HELD actions: wash at the sink, or douse a fire at a cook station
-  if(s && s.kind==='sink' && held && !DAY.carry && DAY.dirty>0){
+  if(s && s.kind==='sink' && !s.broken && held && !DAY.carry && DAY.dirty>0){
     DAY.washT+=dt; if(DAY.washT>=0.55){ DAY.washT=0; DAY.dirty--; DAY.cleanPlates++; if(AC)sfx.pickup(); }
   } else if(s && s.kind==='cook' && s.item && s.item.state==='fire' && held){
     s.item._out=(s.item._out||0)+dt; if(s.item._out>=1.3){ s.item=null; toast('FIRE OUT'); if(AC)sfx.pickup(); }
@@ -5085,7 +5145,7 @@ function cookVerbs(P,pad,dt){
 const PLAN={ lift:null, cell:null };   // lift = {kind:'station'|'table', obj}; cell = target under player
 const TABLE_REACH=2.7;
 // persist helpers -- write the live layouts back into the run
-function saveKitchen(){ RUN.layout=STATIONS.map(st=>({def:st.def,c:st.c,r:st.r})); saveRun(); }
+function saveKitchen(){ RUN.layout=STATIONS.map(st=>({def:st.def,c:st.c,r:st.r,wear:st.wear,broken:st.broken})); saveRun(); }
 function saveTables(){ RUN.tables=TABLES.map(tb=>({c:tb.c,r:tb.r,chairs:tb.chairs.slice()})); saveRun(); }
 function buildGridOverlay(){
   if(gridGrp) return;
@@ -5293,7 +5353,7 @@ function updatePlan(dt){
   }
   updateGridOverlay(player);
   planPrompt(player);
-  for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); }
+  for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); if(s._xmark&&s._xmark.visible) s._xmark.quaternion.copy(camera.quaternion); }
   for(const tb of TABLES){ if(tb._cap){ tb._cap.visible=true; tb._cap.quaternion.copy(camera.quaternion); } }
   if(PASSD._sign) PASSD._sign.quaternion.copy(camera.quaternion);
 }
@@ -5426,7 +5486,7 @@ function updateDay(dt){
   updateDiners(dt);
   tickCooks(dt);
   updateCarryMesh();
-  for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); }   // signs face the fixed cam
+  for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); if(s._xmark&&s._xmark.visible) s._xmark.quaternion.copy(camera.quaternion); }   // signs face the fixed cam
   if(PASSD._sign) PASSD._sign.quaternion.copy(camera.quaternion);
   dayPrompt(player);
   renderDayHUD();
