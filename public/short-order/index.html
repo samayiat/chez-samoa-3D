@@ -371,11 +371,11 @@
   <div id="tickets"></div>
   <div id="dcarry"></div>
 </div>
-<div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint"><b>ACT</b> to lift/place appliances &amp; tables &middot; <b>CHAIRS</b> to toggle a seat (1–4)</div><div id="plantray"></div><div class="pbrow"><button id="planChairs" class="pbchairs">CHAIRS</button><button id="planDone" class="pbdone">DONE ✓</button></div></div>
+<div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint"><b>ACT</b> lift/place &middot; <b>ROTATE</b> spin equipment &middot; <b>CHAIRS</b> toggle a seat (1–4)</div><div id="plantray"></div><div class="pbrow"><button id="planRotate" class="pbchairs">ROTATE</button><button id="planChairs" class="pbchairs">CHAIRS</button><button id="planDone" class="pbdone">DONE ✓</button></div></div>
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r55</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r56</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1967,7 +1967,7 @@ function clientToStage(dx,dy){ return ROT===90 ? {x:dy,y:-dx} : {x:dx,y:dy}; }
 /* touch input state, merged into the same controls the pad/keyboard feed */
 const TOUCH={ moveX:0, moveY:0, guard:false, camL:false, camR:false, lookDX:0,
   lightEdge:false, heavyEdge:false, pickupEdge:false, dodgeEdge:false, lockEdge:false,
-  chairEdge:false, camLedge:false, camRedge:false };
+  chairEdge:false, rotateEdge:false, camLedge:false, camRedge:false };
 /* map a client POINT into stage-local coords (inverse of the forced-landscape
    rotate) so the floating stick spawns exactly under the thumb */
 function clientToStagePoint(cx,cy){ return ROT===90 ? {x:cy, y:(window.innerWidth-cx)} : {x:cx, y:cy}; }
@@ -1982,6 +1982,7 @@ if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(G
 { const br=document.getElementById('bRecipes'); if(br) br.addEventListener('pointerdown',ev=>{ ev.preventDefault(); openRecipes(); }); }
 { const rc=document.getElementById('rcClose'); if(rc) rc.addEventListener('pointerdown',ev=>{ ev.preventDefault(); closeRecipes(); }); }
 { const pc=document.getElementById('planChairs'); if(pc) pc.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='plan') TOUCH.chairEdge=true; }); }
+{ const pr=document.getElementById('planRotate'); if(pr) pr.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='plan') TOUCH.rotateEdge=true; }); }
 { const pel=document.getElementById('pause');
   if(pel) pel.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.paused) togglePause(); }); }
 // DEV: pause-menu button to jump straight to max drunk (stopPropagation so it
@@ -4245,7 +4246,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r55';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r56';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4628,10 +4629,22 @@ const CELL=2.5, KX0=-1.5;
 // run left->right; row 0 is the back line (against the wall), rows step forward.
 // gridX(c) intentionally equals the old cellX(c) so DEFAULT_LAYOUT reproduces the
 // original straight counter run exactly -- this whole change is non-breaking.
-const GRID={ cols:8, rows:2, cell:CELL };
+const GRID={ cols:8, rows:6, cell:CELL };   // rows span the whole floor depth (back wall -> dining), so you can build anywhere
 function gridX(c){ return KX0 + (c-3.5)*GRID.cell; }
 function gridZ(r){ return KZ + r*GRID.cell; }
 const cellKey=(c,r)=>c+'|'+r;
+// a station cell is BLOCKED if it physically overlaps a table or the pass, so the
+// two grids (appliances vs tables) can't stack on the same spot.
+function cellBlockedByFurniture(c,r,ignoreTb){
+  const x=gridX(c), z=gridZ(r);
+  for(const tb of TABLES){ if(tb===ignoreTb) continue; if(Math.hypot(tb.x-x,tb.z-z)<2.3) return true; }
+  if(Math.abs(x-PASS.x)<PASS.w/2+0.3 && Math.abs(z-PASS.z)<PASS.d/2+1.1) return true;   // keep the pass clear
+  return false;
+}
+function tableSpotBlocked(x,z,ignoreTb){
+  for(const s of STATIONS){ if(Math.hypot(s.x-x,s.z-z)<2.3) return true; }
+  return false;
+}
 // static per-type props (kind/dish/needs/accent) -- position-free, so a station
 // of a given id behaves identically wherever it's placed on the grid.
 // station DEFS are keyed by TYPE ('def'). A placed station is an INSTANCE with a
@@ -4647,6 +4660,7 @@ const STATION_DEFS={
   crabcrate:   { kind:'crate', ingredient:'crab',     col:0xe08a5a },
   prep:    { kind:'prep',     col:0x9a7a4a },
   mash:    { kind:'mash',     col:0x8a6a3a },
+  counter: { kind:'counter',  col:0xc9b48c },
   plate:   { kind:'plate',    col:0xece5d6 },
   sink:    { kind:'sink',     col:0x6f909a },
   pot:     { kind:'cook', process:'boil',  col:0x9a5a2a },
@@ -4664,8 +4678,8 @@ let STATIONS=[];   // live station instances (carry mesh refs + cook state at ru
 let OCC={};        // occupancy map: 'c|r' -> instance id (for placement collision)
 let _sidCounter=0;
 function normDef(p){ return p.def || (p.id==='prep2'?'prep':p.id); }   // accept legacy {id} layouts
-function makeStation(def,c,r,wear,broken){ const D=STATION_DEFS[def]; if(!D) return null;
-  const s={ def, id:def+'#'+(_sidCounter++), c, r, x:gridX(c), z:gridZ(r), wear:(wear==null?1:wear), broken:!!broken }; Object.assign(s, D); return s; }
+function makeStation(def,c,r,wear,broken,rot){ const D=STATION_DEFS[def]; if(!D) return null;
+  const s={ def, id:def+'#'+(_sidCounter++), c, r, x:gridX(c), z:gridZ(r), wear:(wear==null?1:wear), broken:!!broken, rot:(rot||0) }; Object.assign(s, D); return s; }
 // Resolve a layout (list of {def,c,r,wear,broken}) into live STATIONS + OCC. Mutates
 // STATIONS IN PLACE (never reassigns the array) so mesh refs attached by buildKitchen
 // and per-object cook state survive a re-layout. Called once at init and again only
@@ -4673,17 +4687,17 @@ function makeStation(def,c,r,wear,broken){ const D=STATION_DEFS[def]; if(!D) ret
 function applyLayout(layout){
   STATIONS.length=0; OCC={}; _sidCounter=0;
   for(const p of layout){
-    const s=makeStation(normDef(p), p.c, p.r, p.wear, p.broken); if(!s) continue;
+    const s=makeStation(normDef(p), p.c, p.r, p.wear, p.broken, p.rot); if(!s) continue;
     STATIONS.push(s); OCC[cellKey(p.c,p.r)]=s.id;
   }
   return STATIONS;
 }
 applyLayout(DEFAULT_LAYOUT);   // populate immediately; RUN.layout re-applies after loadRun()
 const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7:r,metalness:m==null?.12:m,flatShading:true});
-const STATION_LABEL={ lettucecrate:'LETTUCE', tomatocrate:'TOMATO', ricecrate:'RICE', cilantrocrate:'CILANTRO', limecrate:'LIME', avocadocrate:'AVOCADO', crabcrate:'CRAB', prep:'CHOP', prep2:'CHOP', mash:'MASH', plate:'PLATE UP', sink:'SINK', pot:'BOIL', griddle:'GRILL', fryer:'FRY' };
+const STATION_LABEL={ lettucecrate:'LETTUCE', tomatocrate:'TOMATO', ricecrate:'RICE', cilantrocrate:'CILANTRO', limecrate:'LIME', avocadocrate:'AVOCADO', crabcrate:'CRAB', prep:'CHOP', prep2:'CHOP', mash:'MASH', counter:'COUNTER', plate:'PLATE UP', sink:'SINK', pot:'BOIL', griddle:'GRILL', fryer:'FRY' };
 // bold, distinct accent colour per station -- painted on the counter FRONT so you
 // can read what each is from across the room (Overcooked/PlateUp colour-coding).
-const STATION_ACCENT={ lettucecrate:0x4fb03a, tomatocrate:0xd23f2a, ricecrate:0xd9c98a, cilantrocrate:0x3f8f34, limecrate:0x9fce3a, avocadocrate:0x5a7a2a, crabcrate:0xe08a5a, prep:0x8a5a2c, prep2:0x8a5a2c, mash:0x8a6a3a, plate:0xdfe4e8, sink:0x2f9fb8, pot:0xc23a2a, griddle:0x394048, fryer:0xe6a721 };
+const STATION_ACCENT={ lettucecrate:0x4fb03a, tomatocrate:0xd23f2a, ricecrate:0xd9c98a, cilantrocrate:0x3f8f34, limecrate:0x9fce3a, avocadocrate:0x5a7a2a, crabcrate:0xe08a5a, prep:0x8a5a2c, prep2:0x8a5a2c, mash:0x8a6a3a, counter:0xb89a6a, plate:0xdfe4e8, sink:0x2f9fb8, pot:0xc23a2a, griddle:0x394048, fryer:0xe6a721 };
 // fixed 2.5D daytime camera (Overcooked/PlateUp-style): high, angled, framing the
 // whole kitchen line + the counter. Tunable by eye.
 const DAYCAM={ x:0, y:19, z:15, lookY:0.9, lookZ:-2.0, fov:45 };
@@ -4723,6 +4737,7 @@ function upCost(u){ return Math.round(u.base*Math.pow(1.6, upLvl(u.key))); }
 // THE STORE: appliances + tables you BUY as objects. A buy drops into RUN.owned
 // (an unplaced tray); you set it down on the grid in REARRANGE. Fixed prices.
 const STORE=[
+  { kind:'station', def:'counter',      name:'Counter Space',   desc:'A free surface — set anything down, pick it back up', price:130, icon:'🍽' },
   { kind:'station', def:'prep',         name:'Chop Board',      desc:'Another cutting station — chop in parallel', price:180, icon:'🔪' },
   { kind:'station', def:'mash',         name:'Mash Bowl',       desc:'Mash avocado & more (unlocks Crab Guac)',    price:200, icon:'🥑' },
   { kind:'station', def:'pot',          name:'Stock Pot',       desc:'Boil rice & more (unlocks Cilantro-Lime Rice)', price:320, icon:'🍲' },
@@ -4835,6 +4850,9 @@ function buildAppliance(s,g){
     const grip=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.09,0.34),dmat(0x2a1c10,.6,.1)); grip.position.set(0.5,SURF+0.2,-0.22); g.add(grip);
     const blade=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.02,0.46),dmat(0xdfe6ea,.25,.8)); blade.position.set(0.5,SURF+0.2,0.16); blade.rotation.x=-0.15; g.add(blade);
     for(const c of [[-0.35,0.1],[-0.2,-0.12],[0.05,0.06]]){ const v=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.08,0.12),dmat(0xd23f2a,.7,0)); v.position.set(c[0],SURF+0.24,c[1]); g.add(v); }
+  } else if(s.kind==='counter'){                // COUNTER: an open landing surface (subtle tray outline)
+    const tray=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.05,0.9),dmat(0xd8c49a,.6,.05)); tray.position.y=SURF+0.03; g.add(tray);
+    const lip=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.1,0.06),dmat(0xb89a6a,.6,.05)); lip.position.set(0,SURF+0.08,-0.45); g.add(lip);
   } else if(s.kind==='mash'){                   // MASH BOWL: a molcajete-style stone bowl + pestle
     const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.4,0.44,20),dmat(0x5a5048,.85,.05)); bowl.position.y=SURF+0.22; g.add(bowl);
     const inner=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.3,0.16,18),dmat(0x8bbf5a,.8,0)); inner.position.y=SURF+0.4; g.add(inner);
@@ -4888,7 +4906,7 @@ function syncBrokenMark(s){ if(s._xmark) s._xmark.visible=!!s.broken; }
 // build one station's mesh group (also used when placing a store-bought station)
 function buildStationMesh(s){
   if(!kitchenGrp || s._g) return;
-  const g=new THREE.Group(); g.position.set(s.x,0,s.z); kitchenGrp.add(g); s._g=g;
+  const g=new THREE.Group(); g.position.set(s.x,0,s.z); if(g.rotation) g.rotation.y=(s.rot||0)*Math.PI/2; kitchenGrp.add(g); s._g=g;
   s._top=buildCounter(g, STATION_ACCENT[s.def]||0x39414b);
   buildAppliance(s,g);
   const sign=makeSign(STATION_LABEL[s.def]||s.def, s.col); sign.position.y=2.35; g.add(sign); s._sign=sign;
@@ -5112,6 +5130,7 @@ function stationPrompt(s){
   if(s.kind==='crate') act = c?'':'grab';
   else if(s.kind==='prep') act = rawIng?'chop':'';
   else if(s.kind==='mash') act = rawIng?'mash':'';
+  else if(s.kind==='counter') act = c?(s.held?'':'set down'):(s.held?'pick up':'');
   else if(s.kind==='cook'){
     if(s.item&&(s.item.state==='ready'||s.item.state==='burnt')) act='collect';
     else if(s.item&&s.item.state==='fire') act='hold to douse';
@@ -5177,11 +5196,28 @@ function plateStackMesh(items){
     m.position.set(Math.cos(ang)*0.15,0.11,Math.sin(ang)*0.15); g.add(m); });
   return g;
 }
+// a small mesh for a carried/held item (a raw/prepped ingredient, or a plate)
+function carryItemMesh(c){
+  if(!c) return null;
+  if(c.kind==='ing'){ const g=new THREE.Group(); const ing=INGREDIENTS[c.id]||{raw:0xd7c8a8,col:0xbfd88a};
+    if(c.state==='raw'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17,12,9),dmat(ing.raw,.7,0))); }
+    else if(c.state==='mashed'||c.state==='boiled'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8,0,TAU,0,Math.PI*0.5),dmat(ing.col,.85,0))); }
+    else { for(let i=0;i<5;i++){ const cube=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.1),dmat(c.state==='burnt'?0x241812:ing.col,.75,0)); cube.position.set((i%2?0.08:-0.08),0.02+((i%3)*0.07),((i>>1)%2?0.06:-0.06)); g.add(cube); } }
+    return g; }
+  if(c.kind==='plate'){ return plateStackMesh(c.items); }
+  return null;
+}
 // keep the plating station's on-counter plate mesh in sync with s.plate
 function syncStationPlate(s){
   if(!s._g) return;
   if(s._plateMesh){ s._g.remove(s._plateMesh); s._plateMesh=null; }
   if(s.plate){ const m=plateStackMesh(s.plate.items); m.position.y=SURF+0.16; s._g.add(m); s._plateMesh=m; }
+}
+// keep a COUNTER's held-item mesh in sync with s.held
+function syncCounterMesh(s){
+  if(!s._g) return;
+  if(s._heldMesh){ s._g.remove(s._heldMesh); s._heldMesh=null; }
+  if(s.held){ const m=carryItemMesh(s.held); if(m){ m.position.y=SURF+0.16; s._g.add(m); s._heldMesh=m; } }
 }
 function cookedState(proc){ return PROC_STATE[proc]||'cooked'; }
 function stationAct(P,s){
@@ -5219,6 +5255,10 @@ function stationAct(P,s){
       if(rk){ DAY.carry={kind:'plate', items:s.plate.items.slice(), recipe:rk}; s.plate=null; syncStationPlate(s); if(AC)sfx.pickup(); }
       else { const m=plateMissing(s.plate.items); toast(m?('STILL NEEDS '+m):'THAT’S NOT A DISH'); }
     }
+  }
+  else if(s.kind==='counter'){                                                          // blank landing spot: set anything down / pick it back up
+    if(c && !s.held){ s.held=c; DAY.carry=null; syncCounterMesh(s); if(AC)sfx.pickup(); }
+    else if(!c && s.held){ DAY.carry=s.held; s.held=null; syncCounterMesh(s); if(AC)sfx.pickup(); }
   }
   else if(s.kind==='sink'){ if(c){ DAY.carry=null; toast('BINNED'); } }                 // tap w/ carry = trash it; empty = hold to wash
 }
@@ -5259,7 +5299,7 @@ function cookVerbs(P,pad,dt){
 const PLAN={ lift:null, cell:null };   // lift = {kind:'station'|'table', obj}; cell = target under player
 const TABLE_REACH=2.7;
 // persist helpers -- write the live layouts back into the run
-function saveKitchen(){ RUN.layout=STATIONS.map(st=>({def:st.def,c:st.c,r:st.r,wear:st.wear,broken:st.broken})); saveRun(); }
+function saveKitchen(){ RUN.layout=STATIONS.map(st=>({def:st.def,c:st.c,r:st.r,wear:st.wear,broken:st.broken,rot:st.rot||0})); saveRun(); }
 function saveTables(){ RUN.tables=TABLES.map(tb=>({c:tb.c,r:tb.r,chairs:tb.chairs.slice()})); saveRun(); }
 function buildGridOverlay(){
   if(gridGrp) return;
@@ -5280,16 +5320,20 @@ function buildGridOverlay(){
     t.position.set(tblX(c),0.02,tblZ(r)); t.userData={grid:'d',c,r}; gridGrp.add(t);
   }
 }
-function cellOccupied(grid,c,r){ return grid==='k' ? (OCC[cellKey(c,r)]!==undefined) : (DOCC[dcellKey(c,r)]!==undefined); }
+function cellOccupied(grid,c,r){
+  const carriedTb = PLAN.lift && PLAN.lift.kind==='table' ? PLAN.lift.obj : null;
+  if(grid==='k') return OCC[cellKey(c,r)]!==undefined || cellBlockedByFurniture(c,r,carriedTb);   // no stacking on tables/pass
+  return DOCC[dcellKey(c,r)]!==undefined || tableSpotBlocked(tblX(c),tblZ(r));                     // no table on an appliance
+}
 // nearest cell on a given grid to the player, within reach; or null.
 function nearestCellFor(P,grid){
   let best=null;
   if(grid==='k'){ let bd=GRID.cell*0.72;
     for(let r=0;r<GRID.rows;r++) for(let c=0;c<GRID.cols;c++){ const d=Math.hypot(gridX(c)-P.pos.x,gridZ(r)-P.pos.z);
-      if(d<bd){ bd=d; best={grid:'k',c,r,occupied:OCC[cellKey(c,r)]!==undefined}; } }
+      if(d<bd){ bd=d; best={grid:'k',c,r,occupied:cellOccupied('k',c,r)}; } }
   } else { let bd=Math.min(DGRID.cellX,DGRID.cellZ)*0.75;
     for(let r=0;r<DGRID.rows;r++) for(let c=0;c<DGRID.cols;c++){ const d=Math.hypot(tblX(c)-P.pos.x,tblZ(r)-P.pos.z);
-      if(d<bd){ bd=d; best={grid:'d',c,r,occupied:DOCC[dcellKey(c,r)]!==undefined}; } }
+      if(d<bd){ bd=d; best={grid:'d',c,r,occupied:cellOccupied('d',c,r)}; } }
   }
   return best;
 }
@@ -5396,7 +5440,17 @@ function toggleChair(P){
   if(AC) sfx.pickup();
   return true;
 }
+// rotate the nearest placed equipment 90°. Stations spin their mesh; tables
+// rotate their chair config (which sides seat) so you can face them anywhere.
+function rotateNearest(P){
+  const pl=nearestPlaceable(P); if(!pl) return false;
+  if(pl.kind==='station'){ const s=pl.obj; s.rot=((s.rot||0)+1)%4; if(s._g&&s._g.rotation) s._g.rotation.y=s.rot*Math.PI/2; saveKitchen(); }
+  else { const tb=pl.obj; tb.chairs=[tb.chairs[3],tb.chairs[0],tb.chairs[1],tb.chairs[2]]; updateCapBadge(tb); rebuildSeats(); saveTables(); }
+  if(AC) sfx.pickup(); return true;
+}
 function planVerbs(P,pad,dt){
+  const rot = consume('rotateEdge')||tapK('r');
+  if(rot && !PLAN.lift){ rotateNearest(P); return; }
   const chair = consume('chairEdge')||tapK('c');
   if(chair && !PLAN.lift){ toggleChair(P); return; }
   const tap = pad.pickup||pad.rush||tapK('f')||consume('pickupEdge');
@@ -5419,7 +5473,7 @@ function planPrompt(P){
     html='<span class="pname">'+nm+'</span><span class="pact">'+(ok?'set down':'find a free tile')+'</span>';
   } else {
     const pl=nearestPlaceable(P);
-    if(pl){ const act = pl.kind==='table' ? 'lift · CHAIRS to seat' : 'lift';
+    if(pl){ const act = pl.kind==='table' ? 'lift · ROTATE/CHAIRS' : 'lift · ROTATE';
       html='<span class="pname">'+placeableName(pl)+'</span><span class="pact">'+act+'</span>'; }
   }
   if(html){ _promptEl.innerHTML=html; _promptEl.classList.add('on'); }
@@ -5479,16 +5533,7 @@ function updateCarryMesh(){
   if(sig!==DAY._carrySig){
     DAY._carrySig=sig;
     if(DAY.carryMesh){ scene.remove(DAY.carryMesh); DAY.carryMesh=null; }
-    if(c){
-      let g;
-      if(c.kind==='ing'){
-        g=new THREE.Group(); const ing=INGREDIENTS[c.id]||{raw:0xd7c8a8,col:0xbfd88a};
-        if(c.state==='raw'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17,12,9),dmat(ing.raw,.7,0))); }   // whole
-        else if(c.state==='mashed'||c.state==='boiled'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8,0,TAU,0,Math.PI*0.5),dmat(ing.col,.85,0))); }   // a soft mound
-        else { for(let i=0;i<5;i++){ const cube=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.1),dmat(c.state==='burnt'?0x241812:ing.col,.75,0)); cube.position.set((i%2?0.08:-0.08),0.02+((i%3)*0.07),((i>>1)%2?0.06:-0.06)); g.add(cube); } }   // diced / cooked bits
-      } else if(c.kind==='plate'){ g=plateStackMesh(c.items); }
-      if(g){ scene.add(g); DAY.carryMesh=g; }
-    }
+    if(c){ const g=carryItemMesh(c); if(g){ scene.add(g); DAY.carryMesh=g; } }
   }
   if(DAY.carryMesh && player){
     const P=player;
@@ -5533,7 +5578,7 @@ function dayCleanup(){
   DAY.on=false;
   for(const d of DAY.diners){ scene.remove(d.g); if(d.bubble) scene.remove(d.bubble); }
   DAY.diners.length=0; DAY.slotTaken=new Array(SEATS.length).fill(false);
-  for(const s of STATIONS){ if(s.kind==='cook'){ s.item=null; if(s._flame)s._flame.visible=false; if(s._glow)s._glow.material.opacity=0; } if(s.kind==='plate'){ s.plate=null; syncStationPlate(s); } }
+  for(const s of STATIONS){ if(s.kind==='cook'){ s.item=null; if(s._flame)s._flame.visible=false; if(s._glow)s._glow.material.opacity=0; } if(s.kind==='plate'){ s.plate=null; syncStationPlate(s); } if(s.kind==='counter'){ s.held=null; syncCounterMesh(s); } }
   for(const pd of DAY.passDishes){ if(pd&&pd.mesh) scene.remove(pd.mesh); } DAY.passDishes.length=0;
   DAY.carry=null; updateCarryMesh();
   if(kitchenGrp) kitchenGrp.visible=false;
@@ -5562,7 +5607,7 @@ function startDay(){
   DAY.ledger.length=0;
   DAY.cleanPlates=6+2*upLvl('plates'); DAY.dirty=0; DAY.diners.length=0; DAY.slotTaken=new Array(SEATS.length).fill(false);
   DAY.carry=null; DAY.spawnT=1.4; DAY.washT=0; updateCarryMesh();
-  for(const s of STATIONS){ if(s.kind==='cook') s.item=null; if(s.kind==='plate'){ s.plate=null; syncStationPlate(s); } }
+  for(const s of STATIONS){ if(s.kind==='cook') s.item=null; if(s.kind==='plate'){ s.plate=null; syncStationPlate(s); } if(s.kind==='counter'){ s.held=null; syncCounterMesh(s); } }
   for(const pd of DAY.passDishes){ if(pd&&pd.mesh) scene.remove(pd.mesh); } DAY.passDishes.length=0;
   dayScene(true);                                          // bright daytime lights + hide the night decor
   document.body.classList.add("cookmode");
