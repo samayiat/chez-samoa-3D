@@ -106,6 +106,27 @@
   #plantray.on{display:flex}
   #plantray .trlabel{font-family:"Anton",sans-serif;font-size:calc(var(--u)*1.8);letter-spacing:.1em;color:#ffd98a}
   #plantray .trchip{pointer-events:auto;font-family:system-ui,sans-serif;font-weight:700;font-size:calc(var(--u)*1.7);color:var(--ink);background:#e8c98a;border:none;border-radius:5px;padding:calc(var(--u)*0.6) calc(var(--u)*1.4);box-shadow:0 3px 0 #0007;cursor:pointer}
+  /* recipe cards */
+  #bRecipes{position:fixed;left:calc(var(--u)*2);top:calc(var(--u)*1.2);z-index:31;display:none;pointer-events:auto;border:2px solid var(--copper);background:#160f08cc;border-radius:8px;font-size:calc(var(--u)*3);line-height:1;padding:calc(var(--u)*0.9) calc(var(--u)*1.2);box-shadow:0 4px 0 #0007;cursor:pointer}
+  #bRecipes.on{display:block}
+  #recipes{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:#0b0805e0;overflow:auto;padding:calc(var(--u)*3)}
+  #recipes.on{display:flex}
+  #recipes .rcpanel{margin:auto;width:min(96%,calc(var(--u)*92));background:#160f08;border:2px solid var(--copper);border-radius:12px;padding:calc(var(--u)*2.4);box-shadow:0 10px 30px #000a}
+  #recipes .rctitle{font-family:"Anton",sans-serif;font-size:calc(var(--u)*4);letter-spacing:.06em;color:var(--cream);text-align:center}
+  #recipes .rcsub{text-align:center;color:#f4e4c199;font-size:calc(var(--u)*1.7);margin-bottom:calc(var(--u)*1.8)}
+  #rccards{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*1.4)}
+  .rcard{background:#1e130a;border:2px solid #3a2a1a;border-radius:9px;padding:calc(var(--u)*1.4) calc(var(--u)*1.6);text-align:left}
+  .rcard.locked{opacity:.6;border-style:dashed}
+  .rchead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:calc(var(--u)*1)}
+  .rcname{font-family:"Anton",sans-serif;font-size:calc(var(--u)*2.4);letter-spacing:.03em;color:var(--cream)}
+  .rcpay{font-family:"Anton",sans-serif;color:#8be27a;font-size:calc(var(--u)*2.2)}
+  .rcsteps{display:flex;flex-wrap:wrap;gap:calc(var(--u)*0.7);align-items:center}
+  .rcstep{font-size:calc(var(--u)*1.7);color:#f4e4c1;background:#2a1c10;border-radius:5px;padding:calc(var(--u)*0.5) calc(var(--u)*1)}
+  .rcstep b{color:#ffb43a;text-transform:uppercase;letter-spacing:.04em}
+  .rcstep.rcplate{background:#3a2a1a}
+  .rcneed{margin-top:calc(var(--u)*1);font-size:calc(var(--u)*1.6);color:#ff9a72}
+  #recipes .rcclose{display:block;margin:calc(var(--u)*2.2) auto 0;pointer-events:auto;font-family:"Anton",sans-serif;font-size:calc(var(--u)*2.6);letter-spacing:.08em;color:var(--ink);background:var(--flame);border:none;border-radius:8px;padding:calc(var(--u)*1) calc(var(--u)*4);box-shadow:0 4px 0 #0007;cursor:pointer}
+  @media (max-aspect-ratio:1/1){ #rccards{grid-template-columns:1fr} }
   #daytop{position:absolute;top:calc(var(--u)*2.2);left:50%;transform:translateX(-50%);display:flex;gap:calc(var(--u)*1.4)}
   .dchip{background:#120b06e0;border:2px solid var(--copper);border-radius:6px;padding:calc(var(--u)*0.9) calc(var(--u)*1.6);text-align:center;min-width:calc(var(--u)*9);box-shadow:0 4px 0 #0007}
   .dchip b{display:block;font-family:"Anton",sans-serif;font-size:calc(var(--u)*3.2);line-height:.9;color:var(--cream)}
@@ -351,8 +372,10 @@
   <div id="dcarry"></div>
 </div>
 <div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint"><b>ACT</b> to lift/place appliances &amp; tables &middot; <b>CHAIRS</b> to toggle a seat (1–4)</div><div id="plantray"></div><div class="pbrow"><button id="planChairs" class="pbchairs">CHAIRS</button><button id="planDone" class="pbdone">DONE ✓</button></div></div>
+<button id="bRecipes" aria-label="Recipes">📖</button>
+<div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r53</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r54</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1954,8 +1977,10 @@ const touchEl=document.getElementById('touch');
 /* mobile PAUSE: a top-of-screen button (above the pause overlay so it stays
    tappable), plus tap-anywhere-on-the-overlay to resume. */
 const bPause=document.getElementById('bPause');
-if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='play') togglePause(); });
+if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='play') togglePause(); else if(GAME.mode==='day') toggleRecipes(); });
 { const pd=document.getElementById('planDone'); if(pd) pd.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='plan') endPlan(); }); }
+{ const br=document.getElementById('bRecipes'); if(br) br.addEventListener('pointerdown',ev=>{ ev.preventDefault(); openRecipes(); }); }
+{ const rc=document.getElementById('rcClose'); if(rc) rc.addEventListener('pointerdown',ev=>{ ev.preventDefault(); closeRecipes(); }); }
 { const pc=document.getElementById('planChairs'); if(pc) pc.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='plan') TOUCH.chairEdge=true; }); }
 { const pel=document.getElementById('pause');
   if(pel) pel.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.paused) togglePause(); }); }
@@ -4220,7 +4245,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r53';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r54';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4396,7 +4421,8 @@ function renderShop(){
     '<div class="sshelf">THE STORE — appliances &amp; tables</div>'+
     '<div class="shoplist">'+store+'</div>'+
     tray+
-    '<button class="btn" id="planBtn" style="background:#2a2018;color:var(--cream);margin-bottom:10px;margin-top:10px">🍳 REARRANGE KITCHEN'+(oc>0?' ('+oc+' to place)':'')+'</button>'+
+    '<button class="btn" id="recipesBtn" style="background:#2a2018;color:var(--cream);margin-bottom:10px;margin-top:10px">📖 RECIPE CARDS</button>'+
+    '<button class="btn" id="planBtn" style="background:#2a2018;color:var(--cream);margin-bottom:10px">🍳 REARRANGE KITCHEN'+(oc>0?' ('+oc+' to place)':'')+'</button>'+
     '<button class="btn" id="startDayBtn">OPEN THE DINER →</button></div>';
   const c=document.getElementById('card');
   if(c.querySelectorAll){
@@ -4404,6 +4430,7 @@ function renderShop(){
     c.querySelectorAll('.sbuy[data-i]').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); buyStore(+b.getAttribute('data-i')); }));
     c.querySelectorAll('.sbuy[data-fix]').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); const s=STATIONS.find(x=>x.id===b.getAttribute('data-fix')); if(s&&repairStation(s)) renderShop(); }));
   }
+  const rcb=document.getElementById('recipesBtn'); if(rcb) rcb.onclick=()=>{ openRecipes(); };
   const pb=document.getElementById('planBtn'); if(pb) pb.onclick=()=>{ goFullscreen(); startPlan(); };
   const sb=document.getElementById('startDayBtn'); if(sb) sb.onclick=()=>{ goFullscreen(); startDay(); };
 }
@@ -4510,10 +4537,12 @@ const PROC_STATE={ chop:'chopped', boil:'boiled', mash:'mashed', grill:'grilled'
 const PROC_STATION={ chop:'prep', mash:'mash', boil:'cook', grill:'cook', fry:'cook' };
 const STATE_PROC={}; for(const p in PROC_STATE) STATE_PROC[PROC_STATE[p]]=p;   // reverse: state -> process
 const RECIPES={
-  salad:{ name:'SALAD', pay:16, plateCol:0x8fd46a, need:[ {id:'lettuce',s:'chopped'}, {id:'tomato',s:'chopped'} ] },
-  rice: { name:'CILANTRO-LIME RICE', pay:15, plateCol:0xeee6c8, need:[ {id:'rice',s:'boiled'}, {id:'cilantro',s:'chopped'}, {id:'lime',s:'raw'} ] },
-  guac: { name:'CRAB GUAC', pay:22, plateCol:0x8bbf5a, need:[ {id:'avocado',s:'mashed'}, {id:'crab',s:'raw'}, {id:'lime',s:'raw'} ] },
+  salad:{ name:'SALAD', short:'SALAD', pay:16, plateCol:0x8fd46a, need:[ {id:'lettuce',s:'chopped'}, {id:'tomato',s:'chopped'} ] },
+  rice: { name:'CILANTRO-LIME RICE', short:'RICE', pay:15, plateCol:0xeee6c8, need:[ {id:'rice',s:'boiled'}, {id:'cilantro',s:'chopped'}, {id:'lime',s:'raw'} ] },
+  guac: { name:'CRAB GUAC', short:'GUAC', pay:22, plateCol:0x8bbf5a, need:[ {id:'avocado',s:'mashed'}, {id:'crab',s:'raw'}, {id:'lime',s:'raw'} ] },
 };
+const ING_EMOJI={ lettuce:'🥬', tomato:'🍅', rice:'🍚', cilantro:'🌿', lime:'🍈', avocado:'🥑', crab:'🦀' };
+function procVerb(s){ return s==='raw'?'add':s==='chopped'?'chop':s==='boiled'?'boil':s==='mashed'?'mash':s==='grilled'?'grill':s==='fried'?'fry':s; }
 const RECIPE_KEYS=Object.keys(RECIPES);
 const compKey=c=>c.id+':'+c.state;      // a carried/plated component's identity
 const needKey=n=>n.id+':'+n.s;
@@ -4537,6 +4566,39 @@ function canMake(rk){
   return true;
 }
 function availableRecipes(){ const a=RECIPE_KEYS.filter(canMake); return a.length?a:['salad']; }
+// what gear a locked recipe still needs (crates + process stations), for the card
+function missingFor(rk){
+  const r=RECIPES[rk], need=[], seen=new Set();
+  for(const n of r.need){
+    if(!haveCrate(n.id) && !seen.has('c'+n.id)){ seen.add('c'+n.id); need.push(INGREDIENTS[n.id].name+' crate'); }
+    if(n.s!=='raw'){ const proc=STATE_PROC[n.s], kind=PROC_STATION[proc];
+      const has = kind==='cook'?haveStationKind('cook',proc):haveStationKind(kind);
+      const label = kind==='prep'?'a chop board':kind==='mash'?'a mash bowl':proc==='boil'?'a pot':proc==='grill'?'a griddle':proc==='fry'?'a fryer':'a station';
+      if(!has && !seen.has('p'+label)){ seen.add('p'+label); need.push(label); } } }
+  if(!haveStationKind('plate')) need.push('a plating station');
+  return need.join(', ')||'gear';
+}
+// one recipe card: the dish, its pay, and its ordered component steps (+ plate up)
+function recipeCard(rk){
+  const r=RECIPES[rk], ok=canMake(rk);
+  const steps=r.need.map(n=>'<span class="rcstep">'+(ING_EMOJI[n.id]||'')+' '+INGREDIENTS[n.id].name+' <b>'+procVerb(n.s)+'</b></span>').join('');
+  return '<div class="rcard'+(ok?'':' locked')+'"><div class="rchead"><span class="rcname">'+r.name+'</span><span class="rcpay">$'+r.pay+'</span></div>'+
+    '<div class="rcsteps">'+steps+'<span class="rcstep rcplate">🍽️ <b>plate up</b></span></div>'+
+    (ok?'':'<div class="rcneed">🔒 need '+missingFor(rk)+'</div>')+'</div>';
+}
+function renderRecipeCards(){ return RECIPE_KEYS.map(recipeCard).join(''); }
+function openRecipes(){
+  const el=document.getElementById('recipes'); if(!el) return;
+  const cc=document.getElementById('rccards'); if(cc) cc.innerHTML=renderRecipeCards();
+  el.classList.add('on'); GAME.menuOpen=true;
+  if(master){ try{ master.gain.value=0.0; }catch(e){} }
+}
+function closeRecipes(){
+  const el=document.getElementById('recipes'); if(el) el.classList.remove('on');
+  GAME.menuOpen=false;
+  if(master && GAME.mode==='day'){ try{ master.gain.value=0.5; }catch(e){} }
+}
+function toggleRecipes(){ GAME.menuOpen ? closeRecipes() : openRecipes(); }
 // The regulars. Each is a face (skin/hair/outfit) + a signature BAD ORDER: the
 // off-menu thing they wrongly ask for. A good order you cook; a bad order you
 // can't -- you WAVE THEM OFF. Either way, anyone you shoo or let walk out is
@@ -5010,7 +5072,7 @@ function updateDiners(dt){
 function takeOrder(d){
   d.state='ordered'; d.hearts=1;
   if(d.bad){ setBubble(d, d.cast.bad, 'bad'); toast(d.cast.name+': “You got '+d.cast.bad+'?”'); }
-  else { setBubble(d, RECIPES[d.dish].name, 'good'); toast(d.cast.name+': “'+RECIPES[d.dish].name+' — '+recipeNeedStr(d.dish)+'.”'); }
+  else { setBubble(d, RECIPES[d.dish].short||RECIPES[d.dish].name, 'good'); toast(d.cast.name+': “'+RECIPES[d.dish].name+' — '+recipeNeedStr(d.dish)+'.”'); }
   if(AC) sfx.pickup();
 }
 function tickCooks(dt){
@@ -5475,6 +5537,7 @@ function dayCleanup(){
   DAY.carry=null; updateCarryMesh();
   if(kitchenGrp) kitchenGrp.visible=false;
   const dh=document.getElementById('dayhud'); if(dh) dh.classList.remove('on');
+  closeRecipes(); { const br=document.getElementById('bRecipes'); if(br) br.classList.remove('on'); }
   const pr=document.getElementById('prompt'); if(pr) pr.classList.remove('on');
   document.body.classList.remove("cookmode");
 }
@@ -5503,11 +5566,12 @@ function startDay(){
   dayScene(true);                                          // bright daytime lights + hide the night decor
   document.body.classList.add("cookmode");
   CAM.yaw=player.facing; CAM.lockK=0;
-  GAME.mode='day'; GAME.paused=false;
+  GAME.mode='day'; GAME.paused=false; GAME.menuOpen=false;
   document.getElementById('hud').classList.remove('on');
   document.getElementById('dayhud').classList.add('on');
   document.getElementById('veil').classList.add('hide');
   document.getElementById('prompt').classList.remove('on');
+  { const br=document.getElementById('bRecipes'); if(br) br.classList.add('on'); }
   if(TOUCHCAP){ touchEl.classList.add('on'); if(bPause) bPause.classList.add('on'); }
   if(master){ try{ master.gain.value=0.5; }catch(e){} }
 }
@@ -5620,6 +5684,7 @@ function tick(){
   // time advance; we just keep re-rendering the last frame until you resume.
   if((pad.start||tapK('escape')||tapK('p')) && GAME.mode==='play'){ togglePause(); }
   if((pad.start||tapK('escape')) && GAME.mode==='plan'){ endPlan(); }
+  if((pad.start||tapK('escape')||tapK('p')) && GAME.mode==='day'){ toggleRecipes(); }
   if(GAME.paused){
     renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,camera);
     renderer.setRenderTarget(null); renderer.render(postScene, postCam);
@@ -5643,8 +5708,7 @@ function tick(){
       if(WAVE.winT>0.7) endNight(true);
     } else WAVE.winT=0;
   } else if(GAME.mode==='day'){
-    updatePlayer(sdt, pad);
-    updateDay(sdt);
+    if(!GAME.menuOpen){ updatePlayer(sdt, pad); updateDay(sdt); }   // recipe cards freeze the shift
   } else if(GAME.mode==='plan'){
     updatePlayer(sdt, pad);
     updatePlan(sdt);
