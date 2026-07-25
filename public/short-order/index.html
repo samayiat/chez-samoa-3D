@@ -133,6 +133,11 @@
     color:#f4e4c1;text-shadow:0 4px 0 #000a,0 0 30px #ff8a3a55}
   #pause .psub{margin-top:calc(var(--u)*1.5);font-size:calc(var(--u)*2.1);letter-spacing:.22em;color:#b79a6e}
   #pause .pver{margin-top:calc(var(--u)*3);font-size:calc(var(--u)*2.4);letter-spacing:.14em;color:#ff8a3a;font-family:"Anton",sans-serif}
+  #pause .pbtn{margin-top:calc(var(--u)*3.5);display:inline-block;pointer-events:auto;cursor:pointer;
+    padding:calc(var(--u)*1.4) calc(var(--u)*3);border:2px solid #c56aa0;border-radius:calc(var(--u)*1.2);
+    background:rgba(60,20,55,.55);color:#ffbfe4;font-family:"DM Mono",monospace;font-size:calc(var(--u)*2.4);
+    letter-spacing:.14em;-webkit-tap-highlight-color:transparent;user-select:none}
+  #pause .pbtn:active{background:rgba(197,106,160,.4);transform:translateY(2px)}
   .mpause{position:fixed;left:50%;top:calc(var(--u)*1.2);transform:translateX(-50%);z-index:31;
     width:calc(var(--u)*7);height:calc(var(--u)*5.4);display:none;place-items:center;
     border:1px solid #6b5230;border-radius:calc(var(--u)*1.1);background:rgba(20,14,8,.5);
@@ -235,7 +240,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r22</div></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r23</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1780,6 +1785,11 @@ const bPause=document.getElementById('bPause');
 if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='play') togglePause(); });
 { const pel=document.getElementById('pause');
   if(pel) pel.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.paused) togglePause(); }); }
+// DEV: pause-menu button to jump straight to max drunk (stopPropagation so it
+// doesn't also resume via the tap-to-resume handler above).
+{ const dd=document.getElementById('devDrunk');
+  if(dd) dd.addEventListener('pointerdown',ev=>{ ev.preventDefault(); ev.stopPropagation();
+    if(player){ player.drinks=DRINK_WASTED_AT+2; player.wastedT=WASTED_TIME; player._drunk=1; player.drinkCD=0; } }); }
 
 /* FLOATING analog stick: touch anywhere on the LEFT half and the stick spawns
    under your thumb (transparent), tracks from there, and vanishes on release. */
@@ -3943,7 +3953,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r22';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r23';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
