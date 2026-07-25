@@ -98,7 +98,10 @@
   #planbar .pbtitle{font-family:"Anton",sans-serif;font-size:calc(var(--u)*3);letter-spacing:.05em;color:var(--cream);text-shadow:0 2px 0 #0009}
   #planbar .pbhint{font-size:calc(var(--u)*1.7);letter-spacing:.03em;color:#f4e4c1cc;background:#120b06cc;border-radius:5px;padding:calc(var(--u)*0.7) calc(var(--u)*1.4)}
   #planbar .pbhint b{color:var(--flame)}
-  #planbar .pbdone{pointer-events:auto;margin-top:calc(var(--u)*0.4);font-family:"Anton",sans-serif;font-size:calc(var(--u)*2.6);letter-spacing:.08em;color:var(--ink);background:var(--flame);border:none;border-radius:7px;padding:calc(var(--u)*1) calc(var(--u)*3.2);box-shadow:0 4px 0 #0007;cursor:pointer}
+  #planbar .pbrow{display:flex;gap:calc(var(--u)*1.4);align-items:center;margin-top:calc(var(--u)*0.4)}
+  #planbar .pbchairs,#planbar .pbdone{pointer-events:auto;font-family:"Anton",sans-serif;font-size:calc(var(--u)*2.6);letter-spacing:.08em;border:none;border-radius:7px;padding:calc(var(--u)*1) calc(var(--u)*3.2);box-shadow:0 4px 0 #0007;cursor:pointer}
+  #planbar .pbdone{color:var(--ink);background:var(--flame)}
+  #planbar .pbchairs{color:var(--cream);background:#2a6a4a}
   #daytop{position:absolute;top:calc(var(--u)*2.2);left:50%;transform:translateX(-50%);display:flex;gap:calc(var(--u)*1.4)}
   .dchip{background:#120b06e0;border:2px solid var(--copper);border-radius:6px;padding:calc(var(--u)*0.9) calc(var(--u)*1.6);text-align:center;min-width:calc(var(--u)*9);box-shadow:0 4px 0 #0007}
   .dchip b{display:block;font-family:"Anton",sans-serif;font-size:calc(var(--u)*3.2);line-height:.9;color:var(--cream)}
@@ -341,9 +344,9 @@
   <div id="tickets"></div>
   <div id="dcarry"></div>
 </div>
-<div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint">Walk up &middot; <b>ACT</b> to lift &middot; carry to a free tile &middot; <b>ACT</b> to set down</div><button id="planDone" class="pbdone">DONE ✓</button></div>
+<div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint"><b>ACT</b> to lift/place appliances &amp; tables &middot; <b>CHAIRS</b> to toggle a seat (1–4)</div><div class="pbrow"><button id="planChairs" class="pbchairs">CHAIRS</button><button id="planDone" class="pbdone">DONE ✓</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r48</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r49</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1935,7 +1938,7 @@ function clientToStage(dx,dy){ return ROT===90 ? {x:dy,y:-dx} : {x:dx,y:dy}; }
 /* touch input state, merged into the same controls the pad/keyboard feed */
 const TOUCH={ moveX:0, moveY:0, guard:false, camL:false, camR:false, lookDX:0,
   lightEdge:false, heavyEdge:false, pickupEdge:false, dodgeEdge:false, lockEdge:false,
-  camLedge:false, camRedge:false };
+  chairEdge:false, camLedge:false, camRedge:false };
 /* map a client POINT into stage-local coords (inverse of the forced-landscape
    rotate) so the floating stick spawns exactly under the thumb */
 function clientToStagePoint(cx,cy){ return ROT===90 ? {x:cy, y:(window.innerWidth-cx)} : {x:cx, y:cy}; }
@@ -1947,6 +1950,7 @@ const touchEl=document.getElementById('touch');
 const bPause=document.getElementById('bPause');
 if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='play') togglePause(); });
 { const pd=document.getElementById('planDone'); if(pd) pd.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='plan') endPlan(); }); }
+{ const pc=document.getElementById('planChairs'); if(pc) pc.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='plan') TOUCH.chairEdge=true; }); }
 { const pel=document.getElementById('pause');
   if(pel) pel.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.paused) togglePause(); }); }
 // DEV: pause-menu button to jump straight to max drunk (stopPropagation so it
@@ -4210,7 +4214,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r48';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r49';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4391,9 +4395,38 @@ function buyUpgrade(key){
 // you stage plated dishes on, and 4 two-seat TABLES out front where customers sit.
 const KZ=-8.5;                                   // the cook line runs along the back wall
 const SERVE_REACH=3.2, STATION_REACH=2.3;
-const TABLES=[ {x:-7.5,z:4.2},{x:-2.5,z:4.2},{x:2.5,z:4.2},{x:7.5,z:4.2} ];
+// --- DINING: movable tables + per-table configurable chairs (PlateUp-style) ---
+// Tables live on their own placement grid over the front of the room, same as the
+// kitchen appliances. Each table has 4 chair sides (W,E,N,S); each toggles on/off,
+// so a table seats 1..4. SEATS are DERIVED from the active chairs (rebuildSeats),
+// and only ever rebuilt in prep -- never mid-day, so diner slot indices stay stable.
+const DGRID={ cols:4, rows:2, cellX:5, cellZ:3.6, z0:4.2 };
+function tblX(c){ return (c-(DGRID.cols-1)/2)*DGRID.cellX; }
+function tblZ(r){ return DGRID.z0 + r*DGRID.cellZ; }
+const dcellKey=(c,r)=>'t'+c+'|'+r;
+const CHAIR_OFF=[ {x:-0.95,z:0}, {x:0.95,z:0}, {x:0,z:-0.95}, {x:0,z:0.95} ]; // 0=W 1=E 2=N 3=S
+const DEFAULT_TABLES=[
+  {c:0,r:0,chairs:[1,1,0,0]},{c:1,r:0,chairs:[1,1,0,0]},
+  {c:2,r:0,chairs:[1,1,0,0]},{c:3,r:0,chairs:[1,1,0,0]},
+];
+let TABLES=[];
+let DOCC={};   // dining occupancy: 't c|r' -> table index
+function applyTables(layout){
+  TABLES.length=0; DOCC={};
+  for(const t of layout){
+    const tb={ c:t.c, r:t.r, x:tblX(t.c), z:tblZ(t.r), chairs:(t.chairs?t.chairs.slice():[1,1,0,0]) };
+    TABLES.push(tb); DOCC[dcellKey(t.c,t.r)]=TABLES.length-1;
+  }
+  return TABLES;
+}
+function chairWorld(tb,side){ const o=CHAIR_OFF[side]; return {x:tb.x+o.x, z:tb.z+o.z}; }
+function tableCap(tb){ return tb.chairs.reduce((a,b)=>a+(b?1:0),0); }
 const SEATS=[];
-TABLES.forEach((t,ti)=>{ SEATS.push({x:t.x-0.95,z:t.z,table:ti}); SEATS.push({x:t.x+0.95,z:t.z,table:ti}); });
+function rebuildSeats(){
+  SEATS.length=0;
+  TABLES.forEach((tb,ti)=>{ tb.chairs.forEach((on,side)=>{ if(on){ const p=chairWorld(tb,side); SEATS.push({x:p.x,z:p.z,table:ti,side}); } }); });
+}
+applyTables(DEFAULT_TABLES); rebuildSeats();
 // the PASS is the SAME counter the night weapons sit on (PASS, defined in ARENA).
 // By day you stage plated dishes on it, then run them out to the tables.
 const PASSD={ x:PASS.x, z:PASS.z, w:PASS.w, top:1.3, slots:4 };
@@ -4494,13 +4527,14 @@ const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, 
    (bigger, tougher mob) and, at week boundaries, the rent. Cash banks across
    days; the night pays a bounty that funds tomorrow. Persisted to localStorage. */
 const RENT_BASE=1500, RENT_STEP=500, WEEK_DAYS=5, RATING_WINDOW=5;
-const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[], upgrades:{}, holiday:0, layout:null };
-function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; if(RUN.holiday==null) RUN.holiday=0; if(!RUN.layout) RUN.layout=null; GAME.debt=RUN.debt; }
+const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[], upgrades:{}, holiday:0, layout:null, tables:null };
+function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; if(RUN.holiday==null) RUN.holiday=0; if(!RUN.layout) RUN.layout=null; if(!RUN.tables) RUN.tables=null; GAME.debt=RUN.debt; }
 function saveRun(){ try{ localStorage.setItem('so_run', JSON.stringify(RUN)); }catch(e){} }
-function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; RUN.holiday=0; RUN.layout=null; GAME.debt=1500; saveRun(); }
+function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; RUN.holiday=0; RUN.layout=null; RUN.tables=null; GAME.debt=1500; saveRun(); }
 loadRun();
-// re-resolve stations from the saved layout (falls back to the default kitchen).
+// re-resolve stations + tables from the saved layout (falls back to the defaults).
 applyLayout(RUN.layout && RUN.layout.length ? RUN.layout : DEFAULT_LAYOUT);
+applyTables(RUN.tables && RUN.tables.length ? RUN.tables : DEFAULT_TABLES); rebuildSeats();
 // The back-office shop -- a FIXED menu (no RNG, per the research's bad-luck-floor
 // rule), leveled, each level costing more. Day-side upgrades ease the cook; the
 // SECURITY buys (locks) are the cash sink that thins the night. Persisted in
@@ -4620,17 +4654,41 @@ function buildDining(){
   const lamp=new THREE.Mesh(new THREE.BoxGeometry(PASSD.w-0.4,0.1,0.14),dmat(0x2a2018,.6,.3)); lamp.position.set(0,2.05,0); pg.add(lamp);
   const glow=new THREE.Mesh(new THREE.BoxGeometry(PASSD.w-0.6,0.02,0.9),new THREE.MeshBasicMaterial({color:0xff9a2e,transparent:true,opacity:0.22,depthWrite:false})); glow.position.set(0,1.94,0); pg.add(glow);
   PASSD._sign=makeSign('PASS',0xe6a721); PASSD._sign.position.set(0,2.4,0); pg.add(PASSD._sign);
-  // dining TABLES: round top, pedestal, two chairs
-  for(const t of TABLES){
-    const tg=new THREE.Group(); tg.position.set(t.x,0,t.z); kitchenGrp.add(tg);
+  // dining TABLES: round top, pedestal, and up to 4 chairs (one per side, shown
+  // per the table's chair config). A capacity badge floats above each.
+  for(const tb of TABLES){
+    const tg=new THREE.Group(); tg.position.set(tb.x,0,tb.z); kitchenGrp.add(tg); tb._g=tg;
     const tt=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,0.1,20),dmat(0xc07a44,.55,.05)); tt.position.y=0.95; tt.castShadow=true; tg.add(tt);
     const post=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,0.9,10),dmat(0x4a3626,.6,.1)); post.position.y=0.47; tg.add(post);
     const foot=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.42,0.06,14),dmat(0x3a2a1c,.6,.1)); foot.position.y=0.04; tg.add(foot);
-    for(const sx of [-0.95,0.95]){
-      const seatm=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.5),dmat(0x6a4c34,.7,.05)); seatm.position.set(sx,0.5,0); tg.add(seatm);
-      const back=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.62,0.08),dmat(0x6a4c34,.7,.05)); back.position.set(sx,0.82,0.24); tg.add(back);
-    }
+    tb._chairs=[];
+    CHAIR_OFF.forEach((o,side)=>{
+      const cg=new THREE.Group(); cg.position.set(o.x,0,o.z);
+      const seatm=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.1,0.5),dmat(0x6a4c34,.7,.05)); seatm.position.set(0,0.5,0); cg.add(seatm);
+      const back=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.62,0.08),dmat(0x6a4c34,.7,.05)); back.position.set(o.x*0.29,0.82,o.z*0.29); cg.add(back);
+      cg.visible=!!tb.chairs[side];
+      tg.add(cg); tb._chairs[side]=cg;
+    });
+    tb._cap=null; updateCapBadge(tb);
   }
+}
+function makeCapBadge(n){
+  const cv=document.createElement('canvas'); cv.width=64; cv.height=64;
+  try{ const x=cv.getContext('2d');
+    if(x.beginPath){ x.fillStyle='rgba(20,14,8,0.92)'; x.beginPath(); x.arc(32,32,28,0,TAU); x.fill(); x.strokeStyle='#e6a721'; x.lineWidth=4; x.stroke(); }
+    x.fillStyle='#f4e4c1'; x.textAlign='center'; x.textBaseline='middle'; x.font='bold 40px Anton, system-ui, sans-serif';
+    if(x.fillText) x.fillText(String(n),32,34);
+  }catch(e){}
+  const tex=new THREE.CanvasTexture(cv);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(0.6,0.6), new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,fog:false}));
+  m.renderOrder=1160; return m;
+}
+// refresh a table's chair visibility + capacity badge after a chair toggle
+function updateCapBadge(tb){
+  if(!tb._g) return;
+  if(tb._chairs) tb._chairs.forEach((cg,side)=>{ if(cg) cg.visible=!!tb.chairs[side]; });
+  if(tb._cap){ tb._g.remove(tb._cap); if(tb._cap.material){ if(tb._cap.material.map) tb._cap.material.map.dispose&&tb._cap.material.map.dispose(); tb._cap.material.dispose&&tb._cap.material.dispose(); } }
+  const badge=makeCapBadge(tableCap(tb)); badge.position.y=2.15; tb._g.add(badge); tb._cap=badge;
 }
 // the pass's staging slots (finished plates sit here until you run them out)
 function passSlotPos(i){ return { x: PASSD.x + (i-(PASSD.slots-1)/2)*1.3, y:PASSD.top+0.06, z:PASSD.z }; }
@@ -4911,82 +4969,125 @@ function cookVerbs(P,pad,dt){
    a station, LIFT it, carry it to any free grid cell, SET IT DOWN. The layout is
    the strategy: cluster your cook line, keep the sink near the pass, whatever
    suits tonight. Persisted in RUN.layout. No automation -- you still cook by hand. */
-const PLAN={ lift:null, cell:null };   // lift = station being carried; cell = target under player
+const PLAN={ lift:null, cell:null };   // lift = {kind:'station'|'table', obj}; cell = target under player
+const TABLE_REACH=2.7;
+// persist helpers -- write the live layouts back into the run
+function saveKitchen(){ RUN.layout=STATIONS.map(st=>({id:st.id,c:st.c,r:st.r})); saveRun(); }
+function saveTables(){ RUN.tables=TABLES.map(tb=>({c:tb.c,r:tb.r,chairs:tb.chairs.slice()})); saveRun(); }
 function buildGridOverlay(){
   if(gridGrp) return;
   gridGrp=new THREE.Group(); arena.add(gridGrp); gridGrp.visible=false;
+  // kitchen grid (square cells)
   const gsz=GRID.cell*0.9;
   for(let r=0;r<GRID.rows;r++) for(let c=0;c<GRID.cols;c++){
-    const geo=new THREE.PlaneGeometry(gsz,gsz);
-    const mat=new THREE.MeshBasicMaterial({color:0x49d05a, transparent:true, opacity:0.16, depthWrite:false, fog:false});
-    const t=new THREE.Mesh(geo,mat);
+    const t=new THREE.Mesh(new THREE.PlaneGeometry(gsz,gsz),
+      new THREE.MeshBasicMaterial({color:0x49d05a, transparent:true, opacity:0.16, depthWrite:false, fog:false}));
     if(t.rotation) t.rotation.x=-Math.PI/2;
-    t.position.set(gridX(c),0.03,gridZ(r));
-    t.userData={c,r};
-    gridGrp.add(t);
+    t.position.set(gridX(c),0.03,gridZ(r)); t.userData={grid:'k',c,r}; gridGrp.add(t);
+  }
+  // dining grid (wider rectangular cells)
+  for(let r=0;r<DGRID.rows;r++) for(let c=0;c<DGRID.cols;c++){
+    const t=new THREE.Mesh(new THREE.PlaneGeometry(DGRID.cellX*0.82,DGRID.cellZ*0.82),
+      new THREE.MeshBasicMaterial({color:0x4aa0e0, transparent:true, opacity:0.14, depthWrite:false, fog:false}));
+    if(t.rotation) t.rotation.x=-Math.PI/2;
+    t.position.set(tblX(c),0.02,tblZ(r)); t.userData={grid:'d',c,r}; gridGrp.add(t);
   }
 }
-// nearest grid cell to the player, within reach; returns {c,r,key,occId} or null.
-function nearestCell(P){
-  let best=null,bd=GRID.cell*0.72;
-  for(let r=0;r<GRID.rows;r++) for(let c=0;c<GRID.cols;c++){
-    const d=Math.hypot(gridX(c)-P.pos.x, gridZ(r)-P.pos.z);
-    if(d<bd){ bd=d; best={c,r,key:cellKey(c,r),occId:OCC[cellKey(c,r)]||null}; }
+function cellOccupied(grid,c,r){ return grid==='k' ? (OCC[cellKey(c,r)]!==undefined) : (DOCC[dcellKey(c,r)]!==undefined); }
+// nearest cell on a given grid to the player, within reach; or null.
+function nearestCellFor(P,grid){
+  let best=null;
+  if(grid==='k'){ let bd=GRID.cell*0.72;
+    for(let r=0;r<GRID.rows;r++) for(let c=0;c<GRID.cols;c++){ const d=Math.hypot(gridX(c)-P.pos.x,gridZ(r)-P.pos.z);
+      if(d<bd){ bd=d; best={grid:'k',c,r,occupied:OCC[cellKey(c,r)]!==undefined}; } }
+  } else { let bd=Math.min(DGRID.cellX,DGRID.cellZ)*0.75;
+    for(let r=0;r<DGRID.rows;r++) for(let c=0;c<DGRID.cols;c++){ const d=Math.hypot(tblX(c)-P.pos.x,tblZ(r)-P.pos.z);
+      if(d<bd){ bd=d; best={grid:'d',c,r,occupied:DOCC[dcellKey(c,r)]!==undefined}; } }
   }
   return best;
 }
-// recolour the tiles each frame: green=free, red=occupied, bright=the cell you'd
-// drop on. While carrying, the lifted station's own cell reads as free (valid).
+// which cell is highlighted: the carried item's own grid, else whichever grid is nearer.
+function nearestCell(P){
+  const lift=PLAN.lift;
+  if(lift) return nearestCellFor(P, lift.kind==='table'?'d':'k');
+  const k=nearestCellFor(P,'k'), d=nearestCellFor(P,'d');
+  if(!k) return d; if(!d) return k;
+  const dk=Math.hypot(gridX(k.c)-P.pos.x,gridZ(k.r)-P.pos.z), dd=Math.hypot(tblX(d.c)-P.pos.x,tblZ(d.r)-P.pos.z);
+  return dk<=dd?k:d;
+}
 function updateGridOverlay(P){
   if(!gridGrp) return;
   const tgt=PLAN.cell, lift=PLAN.lift;
   for(const t of gridGrp.children){
-    const {c,r}=t.userData, occ=OCC[cellKey(c,r)];
-    const isSelf=lift && occ===undefined && false;  // (lifted cell already cleared from OCC)
-    const isTarget=tgt && tgt.c===c && tgt.r===r;
-    let col=0x49d05a, op=0.14;                        // free
-    if(occ){ col=0xd2593a; op=0.16; }                 // occupied
-    if(isTarget){
-      const valid = lift ? !occ : !!occ;              // carrying: land on empty; empty-handed: pick up an occupied
-      col = valid?0x9be86a:0xff6a3a; op=0.42;
-    }
+    const {grid,c,r}=t.userData, occ=cellOccupied(grid,c,r);
+    const isTarget=tgt && tgt.grid===grid && tgt.c===c && tgt.r===r;
+    let col = grid==='k'?0x49d05a:0x4aa0e0, op=0.13;
+    if(occ){ col=0xd2593a; op=0.16; }
+    if(isTarget){ const valid = lift ? !occ : !!occ; col=valid?0x9be86a:0xff6a3a; op=0.42; }
     if(t.material.color&&t.material.color.setHex) t.material.color.setHex(col);
     t.material.opacity=op;
   }
 }
-function liftStation(s){
-  if(PLAN.lift||!s) return;
-  PLAN.lift=s; s._origC=s.c; s._origR=s.r;
-  delete OCC[cellKey(s.c,s.r)];                       // free the cell so it can be re-dropped there
-  if(AC) sfx.pickup();
-  toast('LIFTED '+(STATION_LABEL[s.id]||s.id)+' — carry it to a free tile');
+// nearest placeable (station OR table) within its reach; returns {kind,obj,dist} or null.
+function nearestPlaceable(P){
+  let best=null,bd=1e9;
+  const s=nearestStation(P);
+  if(s){ const d=Math.hypot(s.x-P.pos.x,s.z-P.pos.z); if(d<bd){ bd=d; best={kind:'station',obj:s}; } }
+  for(const tb of TABLES){ const d=Math.hypot(tb.x-P.pos.x,tb.z-P.pos.z); if(d<TABLE_REACH && d<bd){ bd=d; best={kind:'table',obj:tb}; } }
+  return best;
 }
-function placeStation(c,r){
-  const s=PLAN.lift; if(!s) return false;
-  if(OCC[cellKey(c,r)]) return false;                 // taken
-  s.c=c; s.r=r; s.x=gridX(c); s.z=gridZ(r);
-  if(s._g) s._g.position.set(s.x,0,s.z);
-  OCC[cellKey(c,r)]=s.id;
-  PLAN.lift=null; s._origC=s._origR=undefined;
-  RUN.layout=STATIONS.map(st=>({id:st.id,c:st.c,r:st.r})); saveRun();
+function placeableName(pl){ return pl.kind==='table' ? 'TABLE' : (STATION_LABEL[pl.obj.id]||pl.obj.id); }
+function liftPlaceable(pl){
+  if(PLAN.lift||!pl) return;
+  const o=pl.obj; o._origC=o.c; o._origR=o.r;
+  if(pl.kind==='station') delete OCC[cellKey(o.c,o.r)];
+  else delete DOCC[dcellKey(o.c,o.r)];
+  PLAN.lift={kind:pl.kind, obj:o};
+  if(AC) sfx.pickup();
+  toast('LIFTED '+placeableName(pl)+' — carry it to a free tile');
+}
+function placeAt(cell){
+  const lift=PLAN.lift; if(!lift||!cell) return false;
+  const wantGrid = lift.kind==='table'?'d':'k';
+  if(cell.grid!==wantGrid || cell.occupied) return false;
+  const o=lift.obj;
+  if(lift.kind==='station'){ o.c=cell.c; o.r=cell.r; o.x=gridX(cell.c); o.z=gridZ(cell.r); if(o._g) o._g.position.set(o.x,0,o.z); OCC[cellKey(cell.c,cell.r)]=o.id; saveKitchen(); }
+  else { o.c=cell.c; o.r=cell.r; o.x=tblX(cell.c); o.z=tblZ(cell.r); if(o._g) o._g.position.set(o.x,0,o.z); DOCC[dcellKey(cell.c,cell.r)]=TABLES.indexOf(o); saveTables(); rebuildSeats(); }
+  PLAN.lift=null; o._origC=o._origR=undefined;
   if(AC) sfx.pickup();
   return true;
 }
 // drop whatever's carried back onto its original cell (used on exit / cancel)
 function returnLift(){
-  const s=PLAN.lift; if(!s) return;
-  placeStation(s._origC, s._origR);
+  const lift=PLAN.lift; if(!lift) return;
+  const o=lift.obj;
+  placeAt({grid:lift.kind==='table'?'d':'k', c:o._origC, r:o._origR, occupied:false});
+}
+// toggle the chair on the side of the nearest table closest to the player (min 1 seat).
+function toggleChair(P){
+  let tb=null,bd=TABLE_REACH+0.6;
+  for(const t of TABLES){ const d=Math.hypot(t.x-P.pos.x,t.z-P.pos.z); if(d<bd){ bd=d; tb=t; } }
+  if(!tb) return false;
+  let side=0,sd=1e9;
+  CHAIR_OFF.forEach((o,i)=>{ const d=Math.hypot((tb.x+o.x)-P.pos.x,(tb.z+o.z)-P.pos.z); if(d<sd){ sd=d; side=i; } });
+  const turningOff=!!tb.chairs[side];
+  if(turningOff && tableCap(tb)<=1){ toast('A TABLE NEEDS A SEAT'); return false; }   // keep at least 1
+  tb.chairs[side]=turningOff?0:1;
+  updateCapBadge(tb); rebuildSeats(); saveTables();
+  if(AC) sfx.pickup();
+  return true;
 }
 function planVerbs(P,pad,dt){
+  const chair = consume('chairEdge')||tapK('c');
+  if(chair && !PLAN.lift){ toggleChair(P); return; }
   const tap = pad.pickup||pad.rush||tapK('f')||consume('pickupEdge');
   if(!tap) return;
   if(PLAN.lift){
-    const cell=PLAN.cell;
-    if(cell && !OCC[cell.key]){ placeStation(cell.c,cell.r); }
-    else { toast('BLOCKED — find a free tile'); }
+    if(PLAN.cell && !PLAN.cell.occupied && placeAt(PLAN.cell)){}
+    else toast('BLOCKED — find a free tile');
   } else {
-    const s=nearestStation(P);
-    if(s) liftStation(s);
+    const pl=nearestPlaceable(P);
+    if(pl) liftPlaceable(pl);
   }
 }
 function planPrompt(P){
@@ -4994,12 +5095,13 @@ function planPrompt(P){
   if(!_promptEl) return;
   let html='';
   if(PLAN.lift){
-    const nm=STATION_LABEL[PLAN.lift.id]||PLAN.lift.id;
-    const ok=PLAN.cell && !OCC[PLAN.cell.key];
+    const nm = PLAN.lift.kind==='table' ? 'TABLE' : (STATION_LABEL[PLAN.lift.obj.id]||PLAN.lift.obj.id);
+    const ok=PLAN.cell && !PLAN.cell.occupied;
     html='<span class="pname">'+nm+'</span><span class="pact">'+(ok?'set down':'find a free tile')+'</span>';
   } else {
-    const s=nearestStation(P);
-    if(s){ html='<span class="pname">'+(STATION_LABEL[s.id]||s.id)+'</span><span class="pact">lift</span>'; }
+    const pl=nearestPlaceable(P);
+    if(pl){ const act = pl.kind==='table' ? 'lift · CHAIRS to seat' : 'lift';
+      html='<span class="pname">'+placeableName(pl)+'</span><span class="pact">'+act+'</span>'; }
   }
   if(html){ _promptEl.innerHTML=html; _promptEl.classList.add('on'); }
   else _promptEl.classList.remove('on');
@@ -5038,14 +5140,15 @@ function endPlan(){
 }
 function updatePlan(dt){
   PLAN.cell = player ? nearestCell(player) : null;
-  // the carried appliance floats in front of the chef
-  if(PLAN.lift && PLAN.lift._g && player){
+  // the carried appliance/table floats in front of the chef
+  if(PLAN.lift && PLAN.lift.obj._g && player){
     const P=player;
-    PLAN.lift._g.position.set(P.pos.x+Math.sin(P.facing)*1.1, 1.15, P.pos.z+Math.cos(P.facing)*1.1);
+    PLAN.lift.obj._g.position.set(P.pos.x+Math.sin(P.facing)*1.2, PLAN.lift.kind==='table'?0.9:1.15, P.pos.z+Math.cos(P.facing)*1.2);
   }
   updateGridOverlay(player);
   planPrompt(player);
   for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); }
+  for(const tb of TABLES){ if(tb._cap){ tb._cap.visible=true; tb._cap.quaternion.copy(camera.quaternion); } }
   if(PASSD._sign) PASSD._sign.quaternion.copy(camera.quaternion);
 }
 
@@ -5122,6 +5225,7 @@ function dayCleanup(){
 }
 function startDay(){
   buildKitchen(); kitchenGrp.visible=true;
+  for(const tb of TABLES){ if(tb._cap) tb._cap.visible=false; }   // capacity badges are a prep-phase readout
   // clear any lingering night/pickups
   for(const e of enemies) scene.remove(e.chef); enemies.length=0;
   for(const p of PICKUPS) scene.remove(p.g); PICKUPS.length=0;
