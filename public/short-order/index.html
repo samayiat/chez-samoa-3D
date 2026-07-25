@@ -68,12 +68,18 @@
     text-shadow:0 3px 0 #0009,0 0 26px #ff6a1eaa}
   #comboL{font-size:12px;letter-spacing:.3em;color:#f4e4c1cc}
 
-  /* prompt (pick up weapon) */
-  #prompt{position:absolute;left:50%;bottom:32%;transform:translateX(-50%) translateY(10px);
-    background:#120b06e0;border:2px solid var(--flame);border-radius:4px;padding:8px 14px;
-    box-shadow:0 6px 0 #0008;opacity:0;transition:opacity .15s,transform .15s;text-align:center}
+  /* prompt (pick up weapon / appliance name) -- scales with the stage so it
+     reads on a phone; the appliance NAME pops big when you stand in front */
+  #prompt{position:absolute;left:50%;bottom:26%;transform:translateX(-50%) translateY(10px);
+    background:#120b06ee;border:2px solid var(--flame);border-radius:6px;
+    padding:calc(var(--u,6.4px)*1.1) calc(var(--u,6.4px)*2.4);
+    box-shadow:0 6px 0 #0008;opacity:0;transition:opacity .12s,transform .12s;text-align:center;white-space:nowrap}
   #prompt.on{opacity:1;transform:translateX(-50%) translateY(0)}
-  #prompt b{font-family:"Anton",sans-serif;color:var(--flame);font-size:15px}
+  #prompt b{font-family:"Anton",sans-serif;color:var(--flame);font-size:clamp(15px,calc(var(--u,6.4px)*2.6),22px)}
+  #prompt .pname{display:block;font-family:"Anton",sans-serif;color:var(--cream);letter-spacing:.06em;
+    font-size:clamp(22px,calc(var(--u,6.4px)*4.4),40px);line-height:1}
+  #prompt .pact{display:block;margin-top:calc(var(--u,6.4px)*0.5);color:var(--flame);letter-spacing:.18em;
+    font-size:clamp(11px,calc(var(--u,6.4px)*1.9),16px);text-transform:uppercase}
   #prompt .k{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 5px;margin:0 2px;
     background:var(--cream);color:var(--ink);border-radius:4px;font-weight:700;font-size:12px;
     box-shadow:0 2px 0 #0007;vertical-align:middle}
@@ -326,7 +332,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r41</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r42</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4189,7 +4195,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r41';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r42';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4672,6 +4678,36 @@ function nearestDiner(P, pred){
     const dist=Math.hypot(d.x-P.pos.x,d.z-P.pos.z); if(dist<bd){ bd=dist; best=d; } }
   return best;
 }
+// the appliance name (+ its current action) that pops up when you stand in front
+function stationPrompt(s){
+  const name=STATION_LABEL[s.id]||s.id, c=DAY.carry; let act='';
+  if(s.kind==='source') act = c?'':'grab';
+  else if(s.kind==='prep') act = (c&&c.kind==='raw')?'chop':'';
+  else if(s.kind==='cook'){
+    if(s.item&&(s.item.state==='ready'||s.item.state==='burnt')) act='collect';
+    else if(s.item&&s.item.state==='fire') act='hold to douse';
+    else if(!s.item&&c&&c.kind===s.needs) act='cook'; }
+  else if(s.kind==='assemble') act = (c&&c.kind==='chopped')?'toss':'';
+  else if(s.kind==='plate') act = (c&&c.kind==='cooked')?'plate up':'';
+  else if(s.kind==='sink') act = c?'bin':(DAY.dirty>0?'hold to wash':'');
+  return '<span class="pname">'+name+'</span>'+(act?'<span class="pact">'+act+'</span>':'');
+}
+// drive the big HUD pop-up: counter action if a diner's in reach, else the
+// appliance you're standing at.
+let _promptEl=null;
+function dayPrompt(P){
+  if(!_promptEl) _promptEl=document.getElementById('prompt');
+  const el=_promptEl; if(!el||!P) return;
+  const dR=nearestDiner(P, x=>x.state==='ready');
+  const dO=nearestDiner(P, x=>x.state==='ordered');
+  const s=nearestStation(P);
+  let html=null;
+  if(dR) html='<span class="pname">GREET</span><span class="pact">'+dR.cast.name+'</span>';
+  else if(dO && dO.bad) html='<span class="pname">'+dO.cast.name+'</span><span class="pact">wants '+dO.cast.bad+' — wave off</span>';
+  else if(dO && !dO.bad && DAY.carry && DAY.carry.kind==='plated') html='<span class="pname">SERVE</span><span class="pact">'+dO.cast.name+'</span>';
+  else if(s) html=stationPrompt(s);
+  if(html){ el.innerHTML=html; el.classList.add('on'); } else el.classList.remove('on');
+}
 function waveOff(d){
   DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=HALFD-1.0;
   if(d.bubble) d.bubble.visible=false;
@@ -4809,6 +4845,7 @@ function dayCleanup(){
   DAY.carry=null; updateCarryMesh();
   if(kitchenGrp) kitchenGrp.visible=false;
   const dh=document.getElementById('dayhud'); if(dh) dh.classList.remove('on');
+  const pr=document.getElementById('prompt'); if(pr) pr.classList.remove('on');
 }
 function startDay(){
   buildKitchen(); kitchenGrp.visible=true;
@@ -4847,6 +4884,7 @@ function updateDay(dt){
   tickCooks(dt);
   updateCarryMesh();
   for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); }   // signs face the fixed cam
+  dayPrompt(player);
   renderDayHUD();
   // end of shift: clock done AND the counter has cleared
   if(DAY.t<=0 && DAY.diners.length===0){ finishDay(); }
