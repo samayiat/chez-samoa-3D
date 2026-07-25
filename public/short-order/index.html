@@ -253,7 +253,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r28</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r29</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1366,10 +1366,12 @@ function makeChef(o){
     // stopping at barely the head's own size and getting swallowed by the
     // hair sitting outside it. A cuff has to be bigger than the head+hair
     // it wraps, same as a real hatband would be.
-    const cuff=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.18,14),toqueMat); toque.add(cuff);
-    const cuffLip=new THREE.Mesh(new THREE.CylinderGeometry(0.345,0.345,0.04,14),toqueMat); cuffLip.position.y=-0.09; toque.add(cuffLip);
-    const puff=new THREE.Mesh(new THREE.SphereGeometry(0.29,14,10),toqueMat); puff.position.y=0.20; puff.scale.y=1.15; toque.add(puff);
-    toque.position.set(0,0.06,0);
+    // sit the band UP on the crown (was y0.06 -> covered her whole face); the
+    // cuff caps over the loc-tops, the puff balloons above it.
+    const cuff=new THREE.Mesh(new THREE.CylinderGeometry(0.30,0.33,0.14,14),toqueMat); cuff.position.y=0.02; toque.add(cuff);
+    const cuffLip=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.04,14),toqueMat); cuffLip.position.y=-0.06; toque.add(cuffLip);
+    const puff=new THREE.Mesh(new THREE.SphereGeometry(0.30,14,10),toqueMat); puff.position.y=0.22; puff.scale.y=1.15; toque.add(puff);
+    toque.position.set(0,0.22,0);
   }
   toque.children.forEach(c=>c.castShadow=true); head.add(toque);
   // her dreadlocks, worn under the toque (chez-samoa-3D's default chef look --
@@ -1622,7 +1624,8 @@ const sfx={
 };
 
 /* ================================================================ STATE */
-const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500 };   // debt: what you owe Vince -> scales him (economy wires this later)
+const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500, male:false };   // debt: what you owe Vince -> scales him (economy wires this later); male: chef gender
+try{ GAME.male = localStorage.getItem('so_chef')==='male'; }catch(e){}   // remembered chef choice
 const enemies=[];
 let player=null;
 
@@ -1633,7 +1636,7 @@ function makePlayer(){
   // colors match preview/chef.js's SKIN/TOP/APRON exactly; her established
   // look is a hard invariant, not a style choice). `?chef=male` swaps in her
   // canonical male counterpart (teal top + afro, left-handed, reverse knife grip).
-  const male = (typeof location!=='undefined' && location.search && /[?&]chef=male\b/.test(location.search));
+  const male = GAME.male || (typeof location!=='undefined' && location.search && /[?&]chef=male\b/.test(location.search));
   const chef = male
     ? makeChef({ skin:0x7a4328, jacket:0x356b7a, apron:0xf1ede2, boot:0x1a1a20, male:true })
     : makeChef({ skin:0x7a4328, jacket:0xb56a92, apron:0xf1ede2, boot:0x1a1a20, locs:true });
@@ -1855,6 +1858,11 @@ if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(G
   if(dv) dv.addEventListener('pointerdown',ev=>{ ev.preventDefault(); ev.stopPropagation();
     if(GAME.mode==='play' && !enemies.some(e=>e.boss&&!e.dead)) spawnVince();
     if(GAME.paused) togglePause(); }); }   // summon Vince and un-pause into the fight
+{ const dc=document.getElementById('devChef');
+  if(dc) dc.addEventListener('pointerdown',ev=>{ ev.preventDefault(); ev.stopPropagation();
+    GAME.male=!GAME.male; try{ localStorage.setItem('so_chef', GAME.male?'male':'female'); }catch(e){}
+    if(player){ scene.remove(player.chef); player=null; }               // rebuild the chef mesh with the new look
+    ended=false; if(GAME.paused) togglePause(); startNight(SLICE, onNightEnd); }); }   // swap her/him and restart the night
 
 /* FLOATING analog stick: touch anywhere on the LEFT half and the stick spawns
    under your thumb (transparent), tracks from there, and vanishes on release. */
@@ -4086,7 +4094,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r28';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r29';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
