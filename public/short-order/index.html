@@ -111,20 +111,20 @@
   #dcarry.on{opacity:1}
 
   /* ---------- back-office shop ---------- */
-  .card.shop{max-width:min(92vw,560px)}
-  .card.shop .sbank{font-family:"Anton",sans-serif;color:var(--cream);font-size:20px;letter-spacing:.06em;margin:2px 0 14px}
+  .card.shop{max-width:min(92%,560px)}
+  .card.shop .sbank{font-family:"Anton",sans-serif;color:var(--cream);font-size:clamp(15px,calc(var(--u,6.4px)*2.4),20px);letter-spacing:.06em;margin:2px 0 14px}
   .card.shop .sbank b{color:#8be27a}
-  .shoplist{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;text-align:left}
-  .shoprow{display:flex;align-items:center;gap:12px;background:#1a0f08cc;border:2px solid #3a2a1a;border-radius:8px;padding:9px 12px}
-  .shoprow .sic{font-size:26px;line-height:1;flex:0 0 auto}
+  .shoplist{display:flex;flex-direction:column;gap:clamp(5px,calc(var(--u,6.4px)*1),8px);margin-bottom:14px;text-align:left}
+  .shoprow{display:flex;align-items:center;gap:clamp(7px,calc(var(--u,6.4px)*1.6),12px);background:#1a0f08cc;border:2px solid #3a2a1a;border-radius:8px;padding:clamp(6px,calc(var(--u,6.4px)*1.2),9px) clamp(9px,calc(var(--u,6.4px)*1.6),12px)}
+  .shoprow .sic{font-size:clamp(19px,calc(var(--u,6.4px)*3.4),26px);line-height:1;flex:0 0 auto}
   .shoprow .sinfo{flex:1 1 auto;min-width:0}
-  .shoprow .sname{font-family:"Anton",sans-serif;color:var(--cream);font-size:17px;letter-spacing:.03em}
-  .shoprow .sdesc{font-size:12px;color:#f4e4c1aa;margin-top:1px}
+  .shoprow .sname{font-family:"Anton",sans-serif;color:var(--cream);font-size:clamp(13px,calc(var(--u,6.4px)*2.3),17px);letter-spacing:.03em}
+  .shoprow .sdesc{font-size:clamp(9.5px,calc(var(--u,6.4px)*1.6),12px);color:#f4e4c1aa;margin-top:1px}
   .spips{display:inline-flex;gap:3px;vertical-align:middle;margin-left:6px}
   .spips .sp{width:8px;height:8px;border-radius:2px;background:#4a3a2a;display:inline-block}
   .spips .sp.on{background:var(--flame);box-shadow:0 0 6px #ff6a1e88}
-  .sbuy{flex:0 0 auto;font-family:"Anton",sans-serif;font-size:16px;letter-spacing:.04em;color:var(--ink);
-    background:var(--flame);border:none;border-radius:6px;padding:8px 14px;cursor:pointer;box-shadow:0 3px 0 #0007}
+  .sbuy{flex:0 0 auto;font-family:"Anton",sans-serif;font-size:clamp(13px,calc(var(--u,6.4px)*2.1),16px);letter-spacing:.04em;color:var(--ink);
+    background:var(--flame);border:none;border-radius:6px;padding:clamp(6px,calc(var(--u,6.4px)*1.1),8px) clamp(10px,calc(var(--u,6.4px)*1.9),14px);cursor:pointer;box-shadow:0 3px 0 #0007}
   .sbuy.off{background:#3a3026;color:#8a7a68;box-shadow:none;cursor:default}
 
   /* toast */
@@ -134,36 +134,45 @@
   #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
   /* ---------- cards / overlays ---------- */
-  #veil{position:fixed;inset:0;z-index:20;display:grid;place-items:center;
+  /* overlay: scroll-safe (flex + margin:auto centres when it fits, scrolls when
+     it doesn't -- grid place-items:center clipped tall cards on short mobile
+     stages). All card type scales with --u (the stage unit) so it fits the
+     play area on a phone, with px clamps keeping desktop sane. */
+  #veil{position:fixed;inset:0;z-index:20;display:flex;overflow:auto;-webkit-overflow-scrolling:touch;
     background:radial-gradient(120% 90% at 50% 30%, #2a1a0c 0%, #0d0906 70%);
     transition:opacity .5s}
   #veil.hide{opacity:0;pointer-events:none}
-  .card{text-align:center;max-width:min(92%,640px);padding:24px}
-  .kick{font-size:12px;letter-spacing:.5em;color:var(--flame);margin-bottom:10px}
-  .title{font-family:"Anton",sans-serif;font-size:clamp(52px,calc(var(--u,6.4px)*15),150px);line-height:.82;
+  .card{text-align:center;max-width:min(92%,640px);margin:auto;
+    padding:clamp(14px,calc(var(--u,6.4px)*2.6),24px)}
+  .kick{font-size:clamp(9px,calc(var(--u,6.4px)*1.6),12px);letter-spacing:.42em;color:var(--flame);
+    margin-bottom:clamp(6px,calc(var(--u,6.4px)*1.2),10px)}
+  .title{font-family:"Anton",sans-serif;font-size:clamp(40px,calc(var(--u,6.4px)*12),130px);line-height:.82;
     color:var(--cream);text-shadow:0 6px 0 #000a, 0 0 44px #ff6a1e44;letter-spacing:.01em}
   .title .b{color:var(--flame)}
-  .sub{margin:14px auto 0;max-width:440px;color:#d9c4a0;font-size:14px;line-height:1.6}
-  .btn{pointer-events:auto;cursor:pointer;margin-top:26px;display:inline-block;
-    font-family:"Anton",sans-serif;font-size:24px;letter-spacing:.06em;color:var(--ink);
-    background:var(--flame);padding:12px 34px;border:0;border-radius:5px;
-    box-shadow:0 6px 0 #7a2d06, 0 10px 22px #0007;transition:transform .08s, box-shadow .08s}
+  .sub{margin:clamp(9px,calc(var(--u,6.4px)*1.6),14px) auto 0;max-width:min(440px,94%);color:#d9c4a0;
+    font-size:clamp(11px,calc(var(--u,6.4px)*1.9),14px);line-height:1.55}
+  .btn{pointer-events:auto;cursor:pointer;margin-top:clamp(12px,calc(var(--u,6.4px)*2.6),26px);display:inline-block;
+    font-family:"Anton",sans-serif;font-size:clamp(16px,calc(var(--u,6.4px)*3),24px);letter-spacing:.06em;color:var(--ink);
+    background:var(--flame);padding:clamp(9px,calc(var(--u,6.4px)*1.5),12px) clamp(20px,calc(var(--u,6.4px)*4.4),34px);
+    border:0;border-radius:5px;box-shadow:0 6px 0 #7a2d06, 0 10px 22px #0007;transition:transform .08s, box-shadow .08s}
   .btn:hover{transform:translateY(-1px)}
   .btn:active{transform:translateY(4px);box-shadow:0 2px 0 #7a2d06}
-  .end .title{font-size:clamp(40px,calc(var(--u,6.4px)*12),120px)}
+  .end .title{font-size:clamp(34px,calc(var(--u,6.4px)*11),120px)}
   .end.win .title{color:var(--herb);text-shadow:0 6px 0 #000a,0 0 44px #8fc86655}
   .end.lose .title{color:var(--tomato);text-shadow:0 6px 0 #000a,0 0 44px #ff3b3055}
-  .stat{margin-top:16px;font-size:14px;color:#d9c4a0;letter-spacing:.06em}
+  .stat{margin-top:clamp(10px,calc(var(--u,6.4px)*1.8),16px);font-size:clamp(11px,calc(var(--u,6.4px)*1.8),14px);color:#d9c4a0;letter-spacing:.06em}
   .stat b{color:var(--cream)}
 
-  /* controls sheet */
-  #ctrls{margin:22px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:6px 22px;
-    max-width:520px;text-align:left;font-size:12.5px;color:#cbb28c}
+  /* controls sheet -- two columns always (the rotated stage is landscape, so a
+     viewport-width media query is the wrong signal); scales with --u */
+  #ctrls{margin:clamp(12px,calc(var(--u,6.4px)*2),22px) auto 0;display:grid;grid-template-columns:1fr 1fr;
+    gap:clamp(2px,calc(var(--u,6.4px)*0.6),6px) clamp(10px,calc(var(--u,6.4px)*2.2),22px);
+    max-width:520px;text-align:left;font-size:clamp(8.5px,calc(var(--u,6.4px)*1.45),12.5px);color:#cbb28c}
   #ctrls .r{display:flex;justify-content:space-between;gap:12px;
-    border-bottom:1px dotted #ffffff1a;padding:4px 0}
+    border-bottom:1px dotted #ffffff1a;padding:clamp(2px,calc(var(--u,6.4px)*0.5),4px) 0}
   #ctrls .r b{color:var(--cream);font-weight:500}
   #ctrls .pad{color:var(--steel)}
-  @media (max-width:560px){ #ctrls{grid-template-columns:1fr} #plate{top:14px;left:14px} #cooks{top:12px;right:14px} }
+  @media (max-width:560px){ #plate{top:14px;left:14px} #cooks{top:12px;right:14px} }
 
   .hint{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:10;
     font-size:11px;letter-spacing:.18em;color:#7a6647;opacity:0;transition:opacity .5s}
@@ -307,7 +316,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r37</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r38</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4170,7 +4179,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r37';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r38';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
