@@ -93,6 +93,12 @@
   /* ---------- DAY (cooking shift) HUD ---------- */
   #dayhud{position:fixed;inset:0;pointer-events:none;z-index:11;opacity:0;transition:opacity .25s;font-family:system-ui,sans-serif}
   #dayhud.on{opacity:1}
+  #planbar{position:fixed;top:calc(var(--u)*2.2);left:50%;transform:translateX(-50%);z-index:20;display:none;flex-direction:column;align-items:center;gap:calc(var(--u)*1);font-family:system-ui,sans-serif;text-align:center;pointer-events:none}
+  #planbar.on{display:flex}
+  #planbar .pbtitle{font-family:"Anton",sans-serif;font-size:calc(var(--u)*3);letter-spacing:.05em;color:var(--cream);text-shadow:0 2px 0 #0009}
+  #planbar .pbhint{font-size:calc(var(--u)*1.7);letter-spacing:.03em;color:#f4e4c1cc;background:#120b06cc;border-radius:5px;padding:calc(var(--u)*0.7) calc(var(--u)*1.4)}
+  #planbar .pbhint b{color:var(--flame)}
+  #planbar .pbdone{pointer-events:auto;margin-top:calc(var(--u)*0.4);font-family:"Anton",sans-serif;font-size:calc(var(--u)*2.6);letter-spacing:.08em;color:var(--ink);background:var(--flame);border:none;border-radius:7px;padding:calc(var(--u)*1) calc(var(--u)*3.2);box-shadow:0 4px 0 #0007;cursor:pointer}
   #daytop{position:absolute;top:calc(var(--u)*2.2);left:50%;transform:translateX(-50%);display:flex;gap:calc(var(--u)*1.4)}
   .dchip{background:#120b06e0;border:2px solid var(--copper);border-radius:6px;padding:calc(var(--u)*0.9) calc(var(--u)*1.6);text-align:center;min-width:calc(var(--u)*9);box-shadow:0 4px 0 #0007}
   .dchip b{display:block;font-family:"Anton",sans-serif;font-size:calc(var(--u)*3.2);line-height:.9;color:var(--cream)}
@@ -335,8 +341,9 @@
   <div id="tickets"></div>
   <div id="dcarry"></div>
 </div>
+<div id="planbar"><div class="pbtitle">REARRANGE THE KITCHEN</div><div class="pbhint">Walk up &middot; <b>ACT</b> to lift &middot; carry to a free tile &middot; <b>ACT</b> to set down</div><button id="planDone" class="pbdone">DONE ✓</button></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r47</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r48</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1939,6 +1946,7 @@ const touchEl=document.getElementById('touch');
    tappable), plus tap-anywhere-on-the-overlay to resume. */
 const bPause=document.getElementById('bPause');
 if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='play') togglePause(); });
+{ const pd=document.getElementById('planDone'); if(pd) pd.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.mode==='plan') endPlan(); }); }
 { const pel=document.getElementById('pause');
   if(pel) pel.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(GAME.paused) togglePause(); }); }
 // DEV: pause-menu button to jump straight to max drunk (stopPropagation so it
@@ -2363,7 +2371,7 @@ function updateCOM(a){
 }
 function updatePlayer(dt, pad){
   const P=player; if(!P) return;
-  const COOKING=(GAME.mode==='day');   // day shift: movement + the cook verbs only, no combat
+  const COOKING=(GAME.mode==='day'||GAME.mode==='plan');   // day shift / kitchen planning: movement only, no combat
   if(P.dead){ poseChef(P,true,dt); return; }
   if(P.grabbed){ handleGrab(P,dt,pad); poseChef(P,true,dt); return; }
   if(P.steal){ updateSteal(P,dt,pad); poseChef(P,true,dt); return; }   // wrestling an armed enemy for their weapon
@@ -2476,7 +2484,8 @@ function updatePlayer(dt, pad){
   //  - stationary + bare hands -> grab someone in reach (armed enemy = wrestle for their weapon),
   //                               else pick up a utensil you're standing on
   // HOLD the grab button at the bar to keep chugging (chugDrink self-throttles via drinkCD)
-  if(COOKING){ cookVerbs(P,pad,dt); }
+  if(GAME.mode==='day'){ cookVerbs(P,pad,dt); }
+  else if(GAME.mode==='plan'){ planVerbs(P,pad,dt); }
   if(!COOKING && !P.attack && !P.hold && atBar(P) && (KEY['f']||pad.pickupHeld||TOUCH.pickupHeld)) chugDrink(P);
   if(!COOKING && !P.attack && (pad.pickup||pad.rush||tapK('f')||consume('pickupEdge'))){   // no grab/throw/drop/pickup mid-swing
     if(P.hold){ throwHeld(P); }
@@ -4201,7 +4210,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r47';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r48';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4352,9 +4361,11 @@ function renderShop(){
     '<div class="title">BACK <span class="b">OFFICE</span></div>'+
     '<div class="sbank">BANK <b>$'+RUN.bank+'</b> &nbsp;·&nbsp; RENT $'+rentFor(weekOf(RUN.day))+' in '+rin+(rin===1?' day':' days')+'</div>'+
     '<div class="shoplist">'+rows+'</div>'+
+    '<button class="btn" id="planBtn" style="background:#2a2018;color:var(--cream);margin-bottom:10px">🍳 REARRANGE KITCHEN</button>'+
     '<button class="btn" id="startDayBtn">OPEN THE DINER →</button></div>';
   const c=document.getElementById('card');
   if(c.querySelectorAll) c.querySelectorAll('.sbuy').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); buyUpgrade(b.getAttribute('data-k')); }));
+  const pb=document.getElementById('planBtn'); if(pb) pb.onclick=()=>{ goFullscreen(); startPlan(); };
   const sb=document.getElementById('startDayBtn'); if(sb) sb.onclick=()=>{ goFullscreen(); startDay(); };
 }
 function buyUpgrade(key){
@@ -4527,6 +4538,7 @@ function nightCfgFor(){
   return Object.assign({}, SLICE, { waves, waveSizes:chunkSizes(count), roster, player });
 }
 let kitchenGrp=null;
+let gridGrp=null;   // the placement-grid overlay (visible only in plan mode)
 const SURF=1.12;    // shared worktop surface height -- every appliance sits on THIS
 // one uniform counter unit (cabinet + flush worktop) so the run reads as one
 // continuous countertop, Overcooked/PlateUp style.
@@ -4893,6 +4905,150 @@ function cookVerbs(P,pad,dt){
   }
   if(s) stationAct(P,s);
 }
+
+/* ================================================================ PLAN (rearrange the kitchen)
+   PlateUp / tower-defense-style appliance placement. Before opening, walk up to
+   a station, LIFT it, carry it to any free grid cell, SET IT DOWN. The layout is
+   the strategy: cluster your cook line, keep the sink near the pass, whatever
+   suits tonight. Persisted in RUN.layout. No automation -- you still cook by hand. */
+const PLAN={ lift:null, cell:null };   // lift = station being carried; cell = target under player
+function buildGridOverlay(){
+  if(gridGrp) return;
+  gridGrp=new THREE.Group(); arena.add(gridGrp); gridGrp.visible=false;
+  const gsz=GRID.cell*0.9;
+  for(let r=0;r<GRID.rows;r++) for(let c=0;c<GRID.cols;c++){
+    const geo=new THREE.PlaneGeometry(gsz,gsz);
+    const mat=new THREE.MeshBasicMaterial({color:0x49d05a, transparent:true, opacity:0.16, depthWrite:false, fog:false});
+    const t=new THREE.Mesh(geo,mat);
+    if(t.rotation) t.rotation.x=-Math.PI/2;
+    t.position.set(gridX(c),0.03,gridZ(r));
+    t.userData={c,r};
+    gridGrp.add(t);
+  }
+}
+// nearest grid cell to the player, within reach; returns {c,r,key,occId} or null.
+function nearestCell(P){
+  let best=null,bd=GRID.cell*0.72;
+  for(let r=0;r<GRID.rows;r++) for(let c=0;c<GRID.cols;c++){
+    const d=Math.hypot(gridX(c)-P.pos.x, gridZ(r)-P.pos.z);
+    if(d<bd){ bd=d; best={c,r,key:cellKey(c,r),occId:OCC[cellKey(c,r)]||null}; }
+  }
+  return best;
+}
+// recolour the tiles each frame: green=free, red=occupied, bright=the cell you'd
+// drop on. While carrying, the lifted station's own cell reads as free (valid).
+function updateGridOverlay(P){
+  if(!gridGrp) return;
+  const tgt=PLAN.cell, lift=PLAN.lift;
+  for(const t of gridGrp.children){
+    const {c,r}=t.userData, occ=OCC[cellKey(c,r)];
+    const isSelf=lift && occ===undefined && false;  // (lifted cell already cleared from OCC)
+    const isTarget=tgt && tgt.c===c && tgt.r===r;
+    let col=0x49d05a, op=0.14;                        // free
+    if(occ){ col=0xd2593a; op=0.16; }                 // occupied
+    if(isTarget){
+      const valid = lift ? !occ : !!occ;              // carrying: land on empty; empty-handed: pick up an occupied
+      col = valid?0x9be86a:0xff6a3a; op=0.42;
+    }
+    if(t.material.color&&t.material.color.setHex) t.material.color.setHex(col);
+    t.material.opacity=op;
+  }
+}
+function liftStation(s){
+  if(PLAN.lift||!s) return;
+  PLAN.lift=s; s._origC=s.c; s._origR=s.r;
+  delete OCC[cellKey(s.c,s.r)];                       // free the cell so it can be re-dropped there
+  if(AC) sfx.pickup();
+  toast('LIFTED '+(STATION_LABEL[s.id]||s.id)+' — carry it to a free tile');
+}
+function placeStation(c,r){
+  const s=PLAN.lift; if(!s) return false;
+  if(OCC[cellKey(c,r)]) return false;                 // taken
+  s.c=c; s.r=r; s.x=gridX(c); s.z=gridZ(r);
+  if(s._g) s._g.position.set(s.x,0,s.z);
+  OCC[cellKey(c,r)]=s.id;
+  PLAN.lift=null; s._origC=s._origR=undefined;
+  RUN.layout=STATIONS.map(st=>({id:st.id,c:st.c,r:st.r})); saveRun();
+  if(AC) sfx.pickup();
+  return true;
+}
+// drop whatever's carried back onto its original cell (used on exit / cancel)
+function returnLift(){
+  const s=PLAN.lift; if(!s) return;
+  placeStation(s._origC, s._origR);
+}
+function planVerbs(P,pad,dt){
+  const tap = pad.pickup||pad.rush||tapK('f')||consume('pickupEdge');
+  if(!tap) return;
+  if(PLAN.lift){
+    const cell=PLAN.cell;
+    if(cell && !OCC[cell.key]){ placeStation(cell.c,cell.r); }
+    else { toast('BLOCKED — find a free tile'); }
+  } else {
+    const s=nearestStation(P);
+    if(s) liftStation(s);
+  }
+}
+function planPrompt(P){
+  if(!_promptEl) _promptEl=document.getElementById('prompt');
+  if(!_promptEl) return;
+  let html='';
+  if(PLAN.lift){
+    const nm=STATION_LABEL[PLAN.lift.id]||PLAN.lift.id;
+    const ok=PLAN.cell && !OCC[PLAN.cell.key];
+    html='<span class="pname">'+nm+'</span><span class="pact">'+(ok?'set down':'find a free tile')+'</span>';
+  } else {
+    const s=nearestStation(P);
+    if(s){ html='<span class="pname">'+(STATION_LABEL[s.id]||s.id)+'</span><span class="pact">lift</span>'; }
+  }
+  if(html){ _promptEl.innerHTML=html; _promptEl.classList.add('on'); }
+  else _promptEl.classList.remove('on');
+}
+function startPlan(){
+  buildKitchen(); kitchenGrp.visible=true;
+  buildGridOverlay(); if(gridGrp) gridGrp.visible=true;
+  for(const e of enemies) scene.remove(e.chef); enemies.length=0;
+  for(const p of PICKUPS) scene.remove(p.g); PICKUPS.length=0;
+  if(!player){ player=makePlayer(); attachPlayerHelpers(player); }
+  player.pos.set(0,0,-3.5); player.vel.set(0,0,0); player.facing=Math.PI; player.hp=player.hpMax;
+  player.wpn='fists'; player.dur=Infinity; equip(player.chef,'fists');
+  player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null; player.hold=null; player.grabbed=null;
+  player._drunk=0; player.vy=0; player.pos.y=0; resetRagPose(player);
+  PLAN.lift=null; PLAN.cell=null;
+  DAY.on=false; GAME.inRun=true;
+  dayScene(true);
+  document.body.classList.add("cookmode");
+  CAM.yaw=player.facing; CAM.lockK=0;
+  GAME.mode='plan'; GAME.paused=false;
+  document.getElementById('veil').classList.add('hide');
+  document.getElementById('hud').classList.remove('on');
+  document.getElementById('dayhud').classList.remove('on');
+  const pb=document.getElementById('planbar'); if(pb) pb.classList.add('on');
+  if(TOUCHCAP){ touchEl.classList.add('on'); }
+  if(master){ try{ master.gain.value=0.5; }catch(e){} }
+}
+function endPlan(){
+  if(PLAN.lift) returnLift();
+  if(gridGrp) gridGrp.visible=false;
+  document.body.classList.remove("cookmode");
+  const pr=document.getElementById('prompt'); if(pr) pr.classList.remove('on');
+  const pb=document.getElementById('planbar'); if(pb) pb.classList.remove('on');
+  touchEl.classList.remove('on');
+  openShop();   // back to the back office
+}
+function updatePlan(dt){
+  PLAN.cell = player ? nearestCell(player) : null;
+  // the carried appliance floats in front of the chef
+  if(PLAN.lift && PLAN.lift._g && player){
+    const P=player;
+    PLAN.lift._g.position.set(P.pos.x+Math.sin(P.facing)*1.1, 1.15, P.pos.z+Math.cos(P.facing)*1.1);
+  }
+  updateGridOverlay(player);
+  planPrompt(player);
+  for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); }
+  if(PASSD._sign) PASSD._sign.quaternion.copy(camera.quaternion);
+}
+
 function carrySig(c){ return !c?'':c.kind+(c.dish||'')+(c.quality||''); }
 function updateCarryMesh(){
   const c=DAY.carry, sig=carrySig(c);
@@ -5104,6 +5260,7 @@ function tick(){
   // PAUSE: Start button / Esc / P -- only mid-fight. A true freeze: no sim, no
   // time advance; we just keep re-rendering the last frame until you resume.
   if((pad.start||tapK('escape')||tapK('p')) && GAME.mode==='play'){ togglePause(); }
+  if((pad.start||tapK('escape')) && GAME.mode==='plan'){ endPlan(); }
   if(GAME.paused){
     renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,camera);
     renderer.setRenderTarget(null); renderer.render(postScene, postCam);
@@ -5129,6 +5286,9 @@ function tick(){
   } else if(GAME.mode==='day'){
     updatePlayer(sdt, pad);
     updateDay(sdt);
+  } else if(GAME.mode==='plan'){
+    updatePlayer(sdt, pad);
+    updatePlan(sdt);
   } else {
     // idle breathing on title
     if(player){ poseChef(player,true,dt); }
@@ -5257,7 +5417,7 @@ function dayCamera(dt){
   FX.trauma=Math.max(0,FX.trauma-dt*2.4);
 }
 function updateCamera(dt){
-  if(GAME.mode==='day'){ dayCamera(dt); return; }
+  if(GAME.mode==='day'||GAME.mode==='plan'){ dayCamera(dt); return; }
   updateCameraVectors();
   const P=player;
   // trail the COM's ground position (body centre, incl. lean/sway) rather than the
