@@ -161,15 +161,10 @@
      washes a shifting neon tint, and darkens the edges. Sits UNDER the HUD (z-index)
      so health stays readable while the room swims. Opacity + blur are driven from
      player._drunk each frame in the loop. */
+  /* the warp + double-vision are done in the post shader (uDrunk); this overlay
+     just adds the soft edge vignette + a touch of blur, like the 2D vignette. */
   #drunk{position:absolute;inset:0;pointer-events:none;z-index:8;opacity:0;will-change:opacity;
-    background:
-      radial-gradient(120% 90% at 50% 42%, rgba(255,110,205,.16) 0%, rgba(140,60,210,.14) 38%, rgba(20,4,40,0) 60%),
-      radial-gradient(150% 130% at 50% 55%, rgba(0,0,0,0) 46%, rgba(24,0,44,.62) 100%);
-    animation:drunksway 7s ease-in-out infinite}
-  @keyframes drunksway{
-    0%,100%{ transform:scale(1.03) translate(0,0); filter:hue-rotate(0deg) }
-    30%{ transform:scale(1.06) translate(1.2%,-0.7%); filter:hue-rotate(28deg) }
-    60%{ transform:scale(1.045) translate(-1.2%,0.7%); filter:hue-rotate(-22deg) }}
+    background:radial-gradient(150% 130% at 50% 52%, rgba(0,0,0,0) 46%, rgba(12,2,22,.55) 100%)}
 
   /* ---------- stage: always-landscape rotation ---------- */
   html,body{background:#000;overscroll-behavior:none}
@@ -240,7 +235,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r23</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r24</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -311,25 +306,31 @@ const POST = new THREE.ShaderMaterial({
   uniforms:{
     tDiffuse:{value:rt.texture},
     uAber:{value:0}, uZoom:{value:0}, uFlash:{value:0}, uGlitch:{value:0},
-    uShock:{value:0}, uSat:{value:1}, uTime:{value:0}, uImpact:{value:0},
+    uShock:{value:0}, uSat:{value:1}, uTime:{value:0}, uImpact:{value:0}, uDrunk:{value:0},
     uFlashCol:{value:new THREE.Color(0xffffff)},
     uImpA:{value:new THREE.Color(0xFFE03D)}, uImpB:{value:new THREE.Color(0x140c07)}
   },
   vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }',
   fragmentShader:[
   'uniform sampler2D tDiffuse;',
-  'uniform float uAber,uZoom,uFlash,uGlitch,uShock,uSat,uTime,uImpact;',
+  'uniform float uAber,uZoom,uFlash,uGlitch,uShock,uSat,uTime,uImpact,uDrunk;',
   'uniform vec3 uFlashCol, uImpA, uImpB;',
   'varying vec2 vUv;',
   'float hash(float n){ return fract(sin(n)*43758.5453); }',
   'void main(){',
   '  vec2 uv=vUv; vec2 c=uv-0.5; float r=length(c); vec2 dir=c/max(r,0.0001);',
+  // DRUNK strip-warp: horizontal bands ride a travelling sine (the 2D "room breathes"),
+  // layered so it swims. Warps the sampling UV so the WHOLE frame ripples.
+  '  if(uDrunk>0.001){ uv.x += (sin(uv.y*34.0+uTime*1.7)*0.006 + sin(uv.y*12.0-uTime*1.05)*0.011)*uDrunk;',
+  '                    uv.y += sin(uv.x*22.0+uTime*1.3)*0.004*uDrunk; }',
   '  if(uShock>0.001){ float d=abs(r-uShock*0.85); float w=smoothstep(0.10,0.0,d)*(1.0-uShock); uv+=dir*w*0.075; }',
   '  if(uGlitch>0.001){ float band=floor(uv.y*22.0); float n=hash(band*13.13+floor(uTime*46.0)); uv.x+=(n-0.5)*uGlitch*0.14*step(0.55,n); }',
   '  float ab=uAber*(0.18+r*1.4); vec3 sum=vec3(0.0); float tot=0.0;',
   '  for(int i=0;i<6;i++){ float t=float(i)/5.0; vec2 s=uv-c*uZoom*t; float w=1.0-t*0.55;',
   '    sum.r+=texture2D(tDiffuse,s+dir*ab).r*w; sum.g+=texture2D(tDiffuse,s).g*w; sum.b+=texture2D(tDiffuse,s-dir*ab).b*w; tot+=w; }',
   '  vec3 col=sum/tot;',
+  // DRUNK double-vision: a translucent second image offset sideways (the afterimage smear).
+  '  if(uDrunk>0.001){ vec3 gh=texture2D(tDiffuse, uv+vec2(0.014*uDrunk,0.0)).rgb; col=mix(col,max(col,gh),0.42*uDrunk); }',
   '  float l=dot(col,vec3(0.299,0.587,0.114)); col=mix(vec3(l),col,uSat);',
   '  col+=uFlashCol*uFlash;',
   '  if(uImpact>0.5){ float li=dot(col,vec3(0.299,0.587,0.114)); float e=smoothstep(0.30,0.46,li); col=mix(uImpB,uImpA,step(0.5,e)); }',
@@ -3484,7 +3485,7 @@ const PARRY_WINDOW=0.2;   // seconds after a fresh guard tap that an incoming hi
 // are, the harder you hit -- but the room swims (camera + pose sway) and your feet
 // wander (movement drift). player._drunk is the 0..1 source of truth every drunk
 // visual/feel reads (ported from the 2D game's wastedAmt). ----
-const DRINK_BUZZ_AT=2, DRINK_WASTED_AT=4, WASTED_TIME=14, DRINK_CD=0.7, DRINK_ANIM_TIME=0.7;
+const DRINK_BUZZ_AT=2, DRINK_WASTED_AT=4, WASTED_TIME=28, DRINK_CD=0.7, DRINK_ANIM_TIME=0.7;   // 28s wasted window (doubled)
 // generous zone in FRONT of the bar so you don't have to hunt for the exact spot
 function atBar(P){ return Math.abs(P.pos.x-BAR.x)<BAR.w/2+1.4 && Math.abs(P.pos.z-BAR.z)<BAR.d/2+3.0; }
 function chugDrink(P){
@@ -3953,7 +3954,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r23';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r24';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4093,11 +4094,11 @@ function tick(){
   updateWeaponTrail();
   // DRUNK VISION: drive the CSS overlay -- blur + colour-shift the world, wash a
   // shifting tint, darken the edges. Scales with player._drunk; HUD stays crisp.
-  if(drunkEl){ const d=player?(player._drunk||0):0;
-    drunkEl.style.opacity = Math.min(1, d*1.15).toFixed(3);
-    if(d>0.01){ const f='blur('+(d*3.2).toFixed(2)+'px) saturate('+(1+d*1.0).toFixed(2)+') hue-rotate('+(Math.sin(GAME.t*0.5)*d*28).toFixed(1)+'deg) contrast('+(1+d*0.12).toFixed(2)+')';
-      drunkEl.style.backdropFilter=f; drunkEl.style.webkitBackdropFilter=f; }
-    else { drunkEl.style.backdropFilter='none'; drunkEl.style.webkitBackdropFilter='none'; } }
+  { const d=player?(player._drunk||0):0;
+    POST.uniforms.uDrunk.value=d;                       // shader strip-warp + double-vision (the 2D drunk look)
+    if(drunkEl){ drunkEl.style.opacity=Math.min(1,d*1.0).toFixed(3);   // CSS just adds the edge vignette + a touch of blur
+      if(d>0.01){ const f='blur('+(d*1.4).toFixed(2)+'px)'; drunkEl.style.backdropFilter=f; drunkEl.style.webkitBackdropFilter=f; }
+      else { drunkEl.style.backdropFilter='none'; drunkEl.style.webkitBackdropFilter='none'; } } }
   postTick(dt);
   renderer.setRenderTarget(rt); renderer.clear(); renderer.render(scene,camera);
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
