@@ -375,7 +375,7 @@
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r54</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r55</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4245,7 +4245,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r54';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r55';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -5049,7 +5049,7 @@ function updateDiners(dt){
       d.hearts -= dt/(PATIENCE*1.7);                                // annoyed slowly if you never greet them
       if(d.hearts<=0){ d.hearts=0; DAY.lost++; grudge(d); toast(d.cast.name+' LEFT UNGREETED'); releaseDiner(d,false); }
     } else if(d.state==='ordered'){
-      d.hearts -= dt/PATIENCE;                                      // the real order clock, once taken
+      d.hearts -= dt/(PATIENCE*2);                                  // the real order clock, once taken (doubled -- more time to cook)
       if(d.hearts<=0){ d.hearts=0; DAY.lost++; grudge(d); toast(d.cast.name+' WALKED OUT'); releaseDiner(d,false); }
     } else if(d.state==='eating'){                                  // sit and enjoy it, THEN leave a dirty plate + free the stool
       d.eatT-=dt;
@@ -5434,7 +5434,8 @@ function startPlan(){
   player.pos.set(0,0,-3.5); player.vel.set(0,0,0); player.facing=Math.PI; player.hp=player.hpMax;
   player.wpn='fists'; player.dur=Infinity; equip(player.chef,'fists');
   player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null; player.hold=null; player.grabbed=null;
-  player._drunk=0; player.vy=0; player.pos.y=0; resetRagPose(player);
+  player.drinks=0; player.wastedT=0; player.drinkCD=0; player._drunk=0;   // fully sober -- else stale night drinks re-inflate _drunk in prep
+  player.vy=0; player.pos.y=0; resetRagPose(player);
   PLAN.lift=null; PLAN.cell=null;
   DAY.on=false; GAME.inRun=true;
   dayScene(true);
