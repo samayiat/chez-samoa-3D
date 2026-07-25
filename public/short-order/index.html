@@ -157,6 +157,14 @@
   #grabui #grabfill{display:block;height:100%;width:100%;transform-origin:left;transform:scaleX(0);
     background:linear-gradient(90deg,#ff8a3a,#ffe03d)}
   #dmgflash{position:fixed;inset:0;pointer-events:none;z-index:8;background:var(--tomato);opacity:0}
+  /* boss health bar -- shown while a boss (Vince) is alive */
+  #bossbar{position:absolute;left:50%;top:calc(var(--u)*4.5);transform:translateX(-50%);width:62%;max-width:calc(var(--u)*120);
+    z-index:11;opacity:0;transition:opacity .3s;pointer-events:none;text-align:center}
+  #bossbar.on{opacity:1}
+  #bossbar .bname{font-family:"Anton",sans-serif;font-size:calc(var(--u)*3.4);letter-spacing:.14em;color:#ffbf5a;text-shadow:0 2px 0 #000a,0 0 18px #ff6a2a66}
+  #bossbar .bwrap{height:calc(var(--u)*2.6);margin-top:calc(var(--u)*0.8);background:#000a;border:2px solid #ffbf5a;overflow:hidden;box-shadow:0 0 14px #ff6a2a44}
+  #bossbar .bfill{display:block;height:100%;width:100%;transform-origin:left;transform:scaleX(1);
+    background:linear-gradient(90deg,#ff3b30,#ff8a3a);transition:transform .12s linear}
   /* DRUNK VISION overlay: blurs + colour-shifts the world behind it (backdrop-filter),
      washes a shifting neon tint, and darkens the edges. Sits UNDER the HUD (z-index)
      so health stays readable while the room swims. Opacity + blur are driven from
@@ -237,6 +245,7 @@
   </div>
   <div id="cooks"><div id="cooksN">0</div><div id="cooksL">COOKS ON THE LINE</div><div id="waveL"></div></div>
   <div id="combo"><div id="comboN">0</div><div id="comboL">HIT COMBO</div></div>
+  <div id="bossbar"><div class="bname">VINCE &middot; THE LANDLORD</div><div class="bwrap"><i class="bfill" id="bfill"></i></div></div>
   <div id="prompt"></div>
   <div id="toast"></div>
   <div id="grabui"><div class="gmsg">MASH TO BREAK FREE!</div><div class="gbarwrap"><i id="grabfill"></i></div></div>
@@ -244,7 +253,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r26</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r27</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1613,7 +1622,7 @@ const sfx={
 };
 
 /* ================================================================ STATE */
-const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null };
+const GAME={ mode:'title', t:0, kills:0, hitsLanded:0, combo:0, comboT:0, maxCombo:0, onEnd:null, debt:1500 };   // debt: what you owe Vince -> scales him (economy wires this later)
 const enemies=[];
 let player=null;
 
@@ -1671,6 +1680,47 @@ function makeEnemy(kind, spawnPos){
     _an:{ idle:Math.random()*10, twist:0, sway:0, toqueX:0, toqueXv:0, toqueZ:0, toqueZv:0, rx:0, rxv:0, rz:0, rzv:0, prevPh:0 }
   };
   chef.position.copy(spawnPos);
+  return e;
+}
+/* ---- VINCE, the landlord boss. A big brute in a charcoal suit + orange foreman
+   hard-hat + blood-red tie, glowing angry eyes, a wrecking ball on a chain. Reuses
+   the chef rig (so he walks/attacks with the full movement system), dressed up and
+   scaled up, with boss stats that scale off GAME.debt -- the more you owe, the
+   nastier he is. (Faithful to culinary-dash-3d's buildVince.) ---- */
+const VINCE_PAL={ suit:0x2b2f3a, suitDk:0x1d2028, skin:0xb9835b, hat:0xf6a01f, tie:0x8a1f24, metal:0x3a3f47 };
+function dressAsVince(chef){
+  const u=chef.userData, hatMat=M(VINCE_PAL.hat,.5);
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(0.3,14,10,0,TAU,0,Math.PI/2), hatMat);
+  dome.scale.set(1.05,0.82,1.15); dome.position.set(0,0.12,0); u.head.add(dome);      // foreman dome
+  const brim=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.05,16), hatMat); brim.position.set(0,0.06,0.05); u.head.add(brim);
+  const badge=new THREE.Mesh(new THREE.BoxGeometry(0.13,0.1,0.02), M(0x140c07,.6)); badge.position.set(0,0.2,0.29); u.head.add(badge);
+  for(const sx of [-1,1]){ const eye=new THREE.Mesh(new THREE.SphereGeometry(0.05,8,8),   // glowing angry eyes
+      new THREE.MeshStandardMaterial({color:VINCE_PAL.hat,emissive:0xff5a2a,emissiveIntensity:2.6}));
+    eye.position.set(sx*0.1,1.87,0.25); u.upper.add(eye); }
+  const tie=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.5,0.05), M(VINCE_PAL.tie,.5)); tie.position.set(0,1.35,0.3); u.upper.add(tie);   // blood-red tie
+  const wh=u.arms[u.whand==null?1:u.whand].hand;   // wrecking ball on a short chain from the grip hand
+  const chain=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,0.55,6), M(VINCE_PAL.metal,.5,.6)); chain.position.set(0,-0.42,0.12); wh.add(chain);
+  const ball=new THREE.Mesh(new THREE.SphereGeometry(0.32,12,10), M(VINCE_PAL.metal,.4,.75)); ball.position.set(0,-0.78,0.16); wh.add(ball);
+}
+function spawnVince(){
+  const dk=clamp((GAME.debt||0)/2500,0,3);                    // 0 (square with him) .. 3 (deep in the hole)
+  const chef=makeChef({ skin:VINCE_PAL.skin, jacket:VINCE_PAL.suit, apron:VINCE_PAL.suitDk, scarf:0, hair:0x14161c, customer:true, boot:0x14161c });
+  chef.scale.setScalar(1.5); equip(chef,'fists'); dressAsVince(chef);
+  const hp=320 + Math.round(dk*260);                          // 320 .. 1100 HP, by debt
+  const px=player?player.pos.x:0, pz=player?player.pos.z:0;
+  const pos=new V3(clamp(-px,-HALFW+2.5,HALFW-2.5), 0, clamp(-pz,-HALFD+2.5,HALFD-2.5));   // opposite the chef
+  const e={
+    chef, kind:'vince', boss:true, pos, vel:new V3(), yaw:0, facing:0,
+    hp, hpMax:hp, wpn:'fists', spd:2.5+dk*0.35, wind:0.6, aggr:[0.5,1.0],
+    state:'spawn', stateT:0.8, movePhase:0, speed:0,
+    attack:null, hasToken:false, stagger:0, hurt:0, dead:false, deadT:0, _sq:0,
+    standoff:2.6, commit:0.9, circleDir:Math.random()<0.5?1:-1, r:0.55,
+    dmgMul:1.7+dk*0.6, reachBonus:1.1,                         // hits harder + reaches further the more you owe
+    _an:{ idle:Math.random()*10, twist:0, sway:0, toqueX:0, toqueXv:0, toqueZ:0, toqueZv:0, rx:0, rxv:0, rz:0, rzv:0, prevPh:0 }
+  };
+  chef.position.copy(pos); enemies.push(e);
+  const cp=pos.clone(); cp.y=2.4; burst(cp,22,VINCE_PAL.hat,1.7); shake(0.7); if(AC) sfx.thud(1.0);
+  toast('VINCE WANTS HIS RENT.');
   return e;
 }
 function pick(a){ return a[(Math.random()*a.length)|0]; }
@@ -1801,6 +1851,10 @@ if(bPause) bPause.addEventListener('pointerdown',ev=>{ ev.preventDefault(); if(G
 { const dd=document.getElementById('devDrunk');
   if(dd) dd.addEventListener('pointerdown',ev=>{ ev.preventDefault(); ev.stopPropagation();
     if(player){ player.drinks=DRINK_WASTED_AT+2; player.wastedT=1e9; player._drunk=1; player.drinkCD=0; } }); }   // stays maxed the rest of the night
+{ const dv=document.getElementById('devVince');
+  if(dv) dv.addEventListener('pointerdown',ev=>{ ev.preventDefault(); ev.stopPropagation();
+    if(GAME.mode==='play' && !enemies.some(e=>e.boss&&!e.dead)) spawnVince();
+    if(GAME.paused) togglePause(); }); }   // summon Vince and un-pause into the fight
 
 /* FLOATING analog stick: touch anywhere on the LEFT half and the stick spawns
    under your thumb (transparent), tracks from there, and vanishes on release. */
@@ -1974,8 +2028,8 @@ function attackDrive(a){
 }
 function resolveHit(A, isPlayer){
   const w=WEAPONS[A.attack.wpn], heavy=A.attack.heavy;
-  const reach=w.reach + (isPlayer?0.25:0.1);
-  const dmg=(heavy?w.heavy:w.light) * (isPlayer? (1+Math.min(GAME.combo,8)*0.03)*(1+0.45*(player._drunk||0)) : 1);   // drunk hits harder
+  const reach=w.reach + (isPlayer?0.25:0.1) + (A.reachBonus||0);   // a boss (Vince) reaches further
+  const dmg=(heavy?w.heavy:w.light) * (isPlayer? (1+Math.min(GAME.combo,8)*0.03)*(1+0.45*(player._drunk||0)) : (A.dmgMul||1));   // drunk hits harder; a boss hits WAY harder
   const facing=A.facing;
   const origin=A.pos;
   let landed=false;
@@ -3516,7 +3570,7 @@ function updateDrunk(P,dt){
 }
 // GRABBABLE: anyone NOT mid-swing, OR a heavy (tough) patron -- the big guys can
 // be grabbed even out of their wind-up. (Replaces the old "must be staggered".)
-function canGrab(e){ return e && !e.dead && e.state!=='held' && (!e.attack || e.kind==='tough'); }
+function canGrab(e){ return e && !e.dead && !e.boss && e.state!=='held' && (!e.attack || e.kind==='tough'); }   // a boss is too big to grab/throw
 // nearest grabbable enemy within `reach`, roughly in front (cone). Ground only.
 function grabTarget(P, reach, cone){
   if(P.hold||P.steal||P.grabbed||P.grabCD>0||P.attack||P.tackle||P.dodge||P.stagger>0) return null;
@@ -3669,7 +3723,7 @@ function throwContext(P){
 // Shared by the shove, a clean parry, and a decisive heavy hit. updateEnemy's
 // knockdown branch drives the prone pose + getup.
 function knockDown(e, ang, time){
-  if(!e || e.dead) return;
+  if(!e || e.dead || e.boss) return;   // a boss doesn't get floored -- he just staggers
   e.down=time||1.3; e._downK=0; e._roseCue=false; e.state='engage'; e.stateT=0.2; e.attack=null;
   if(e.hasToken){ e.hasToken=false; tokensUsed--; }
   e.vel.x=Math.sin(ang)*6; e.vel.z=Math.cos(ang)*6;
@@ -3861,6 +3915,12 @@ function updateHUDWave(){
   el.textContent = WAVE.chunks && WAVE.chunks.length>1
     ? 'WAVE '+(WAVE.wave+1)+' / '+WAVE.chunks.length : '';
 }
+const bossbarEl=document.getElementById('bossbar'), bfillEl=document.getElementById('bfill');
+function updateBossBar(){
+  const b=enemies.find(e=>e.boss && !e.dead);
+  if(bossbarEl) bossbarEl.classList.toggle('on', !!b && GAME.mode==='play');
+  if(b && bfillEl) bfillEl.style.transform='scaleX('+clamp(b.hp/(b.hpMax||1),0,1).toFixed(3)+')';
+}
 function spawnWaveChunk(delay){
   const first=Math.min(4, WAVE.total);
   WAVE.pending=first;
@@ -3964,7 +4024,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r26';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r27';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4101,6 +4161,7 @@ function tick(){
 
   updateCamera(dt);
   updateLockUI();
+  updateBossBar();
   updateWeaponTrail();
   // DRUNK VISION: drive the CSS overlay -- blur + colour-shift the world, wash a
   // shifting tint, darken the edges. Scales with player._drunk; HUD stays crisp.
