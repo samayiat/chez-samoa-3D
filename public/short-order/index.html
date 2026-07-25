@@ -336,7 +336,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r45</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r46</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -603,9 +603,10 @@ const WINDOWS=[
 const postMat=new THREE.MeshStandardMaterial({color:0x4a3320,roughness:.85,flatShading:true});
 const railMat=new THREE.MeshStandardMaterial({color:0x2f2116,roughness:.9,flatShading:true});
 const RAIL_H=0.85, POST_TOP=WALL_H-0.3, POST_R=0.19;
+const PERGOLA=[]; arena.userData.pergola=PERGOLA;   // the overhead colonnade (posts/lintels/rafters) -- hidden by day
 function post(x,z){ const m=new THREE.Mesh(new THREE.BoxGeometry(POST_R*2,POST_TOP,POST_R*2),postMat);
-  m.position.set(x,POST_TOP/2,z); m.castShadow=m.receiveShadow=true; arena.add(m);
-  const cap=new THREE.Mesh(new THREE.BoxGeometry(POST_R*2.6,0.18,POST_R*2.6),postMat); cap.position.set(x,POST_TOP,z); cap.castShadow=true; arena.add(cap); }
+  m.position.set(x,POST_TOP/2,z); m.castShadow=m.receiveShadow=true; arena.add(m); PERGOLA.push(m);
+  const cap=new THREE.Mesh(new THREE.BoxGeometry(POST_R*2.6,0.18,POST_R*2.6),postMat); cap.position.set(x,POST_TOP,z); cap.castShadow=true; arena.add(cap); PERGOLA.push(cap); }
 function terraceEdge(orient, fixed, span, postCenters){
   const half=span/2;
   // low parapet: a solid kick-wall + a top rail bar, the full length of the edge
@@ -618,8 +619,8 @@ function terraceEdge(orient, fixed, span, postCenters){
   }
   for(const c of postCenters){ if(orient==='x') post(c,fixed); else post(fixed,c); }
   // pergola lintel along the top, tying the posts together
-  if(orient==='x'){ const b=new THREE.Mesh(new THREE.BoxGeometry(span,0.2,0.28),postMat); b.position.set(0,POST_TOP,fixed); b.castShadow=true; arena.add(b); }
-  else            { const b=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.2,span),postMat); b.position.set(fixed,POST_TOP,0); b.castShadow=true; arena.add(b); }
+  if(orient==='x'){ const b=new THREE.Mesh(new THREE.BoxGeometry(span,0.2,0.28),postMat); b.position.set(0,POST_TOP,fixed); b.castShadow=true; arena.add(b); PERGOLA.push(b); }
+  else            { const b=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.2,span),postMat); b.position.set(fixed,POST_TOP,0); b.castShadow=true; arena.add(b); PERGOLA.push(b); }
 }
 // posts at each window-bay edge + the corners, so the colonnade frames the views
 const backPosts=[-HALFW,-WXB-WHW,-WXB+WHW,WXB-WHW,WXB+WHW,HALFW];
@@ -630,7 +631,7 @@ terraceEdge('z', -HALFW, ARENA.d, sidePosts);
 terraceEdge('z',  HALFW, ARENA.d, sidePosts);
 // a few pergola rafters spanning front-to-back overhead, for dappled dusk
 for(let i=-2;i<=2;i++){ const rf=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.14,ARENA.d),postMat);
-  rf.position.set(i*(HALFW/2.6),POST_TOP+0.14,0); rf.castShadow=true; arena.add(rf); }
+  rf.position.set(i*(HALFW/2.6),POST_TOP+0.14,0); rf.castShadow=true; arena.add(rf); PERGOLA.push(rf); }
 
 /* ============================================================ LOCALE VIEWS
    The daytime loop's 2D game (culinary-dash_src.html) already solved "what's
@@ -4200,7 +4201,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r45';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r46';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4968,14 +4969,17 @@ function dayScene(on){
     LIGHT0.bg=(scene.background&&scene.background.getHex)?scene.background.getHex():0x140d07;
     if(scene.fog){ LIGHT0.fogcol=(scene.fog.color&&scene.fog.color.getHex)?scene.fog.color.getHex():0x140d07; LIGHT0.fogfar=scene.fog.far; }
   }
-  hemi.intensity = on?0.5:LIGHT0.hemi;    // keep ambient LOW so shadows stay -> contrast
-  key.intensity  = on?2.4:LIGHT0.key;     // the sun does the work
-  fill.intensity = on?0.45:LIGHT0.fill;
-  if(hemi.color&&hemi.color.setHex) hemi.color.setHex(on?0xf4ead6:LIGHT0.hcol);       // soft daylight, not blown out
-  if(scene.background&&scene.background.setHex) scene.background.setHex(on?0xbcd6e4:LIGHT0.bg);  // bright day sky
-  if(scene.fog){ if(scene.fog.color&&scene.fog.color.setHex) scene.fog.color.setHex(on?0xc6dae6:LIGHT0.fogcol); scene.fog.far=on?80:LIGHT0.fogfar; }
+  // natural EVENING SUNLIGHT: a low warm key does the work, low ambient keeps the
+  // shadows (contrast). No overhead-lamp look -- the beams are hidden.
+  hemi.intensity = on?0.5:LIGHT0.hemi;
+  key.intensity  = on?2.6:LIGHT0.key;
+  fill.intensity = on?0.4:LIGHT0.fill;
+  if(hemi.color&&hemi.color.setHex) hemi.color.setHex(on?0xf1dcc0:LIGHT0.hcol);       // warm sky fill
+  if(scene.background&&scene.background.setHex) scene.background.setHex(on?0xc9b48c:LIGHT0.bg);  // hazy golden-hour sky
+  if(scene.fog){ if(scene.fog.color&&scene.fog.color.setHex) scene.fog.color.setHex(on?0xceba94:LIGHT0.fogcol); scene.fog.far=on?85:LIGHT0.fogfar; }
   const bg=arena.userData.barG; if(bg) bg.visible=!on;                                // hide the liquor 'island'
   const pl=arena.userData.palmsG; if(pl) for(const p of pl) p.visible=!on;            // and the after-hours palms
+  const pg=arena.userData.pergola; if(pg) for(const m of pg) m.visible=!on;           // and the overhead beams/colonnade
 }
 function updateDay(dt){
   DAY.t-=dt;
