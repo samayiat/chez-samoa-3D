@@ -253,7 +253,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r27</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r28</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1705,17 +1705,17 @@ function dressAsVince(chef){
 function spawnVince(){
   const dk=clamp((GAME.debt||0)/2500,0,3);                    // 0 (square with him) .. 3 (deep in the hole)
   const chef=makeChef({ skin:VINCE_PAL.skin, jacket:VINCE_PAL.suit, apron:VINCE_PAL.suitDk, scarf:0, hair:0x14161c, customer:true, boot:0x14161c });
-  chef.scale.setScalar(1.5); equip(chef,'fists'); dressAsVince(chef);
-  const hp=320 + Math.round(dk*260);                          // 320 .. 1100 HP, by debt
+  chef.scale.setScalar(2.9); equip(chef,'fists'); dressAsVince(chef);   // a GIANT -- towers over the chef
+  const hp=360 + Math.round(dk*300);                          // 360 .. 1260 HP, by debt
   const px=player?player.pos.x:0, pz=player?player.pos.z:0;
-  const pos=new V3(clamp(-px,-HALFW+2.5,HALFW-2.5), 0, clamp(-pz,-HALFD+2.5,HALFD-2.5));   // opposite the chef
+  const pos=new V3(clamp(-px,-HALFW+3,HALFW-3), 0, clamp(-pz,-HALFD+3,HALFD-3));   // opposite the chef
   const e={
     chef, kind:'vince', boss:true, pos, vel:new V3(), yaw:0, facing:0,
-    hp, hpMax:hp, wpn:'fists', spd:2.5+dk*0.35, wind:0.6, aggr:[0.5,1.0],
+    hp, hpMax:hp, wpn:'fists', spd:2.4+dk*0.35, wind:0.6, aggr:[0.5,1.0],
     state:'spawn', stateT:0.8, movePhase:0, speed:0,
     attack:null, hasToken:false, stagger:0, hurt:0, dead:false, deadT:0, _sq:0,
-    standoff:2.6, commit:0.9, circleDir:Math.random()<0.5?1:-1, r:0.55,
-    dmgMul:1.7+dk*0.6, reachBonus:1.1,                         // hits harder + reaches further the more you owe
+    standoff:3.4, commit:0.9, circleDir:Math.random()<0.5?1:-1, r:0.95,   // big body
+    dmgMul:1.9+dk*0.7, reachBonus:2.3,                         // giant reach; hits harder the more you owe
     _an:{ idle:Math.random()*10, twist:0, sway:0, toqueX:0, toqueXv:0, toqueZ:0, toqueZv:0, rx:0, rxv:0, rz:0, rzv:0, prevPh:0 }
   };
   chef.position.copy(pos); enemies.push(e);
@@ -2093,19 +2093,24 @@ function resolveHit(A, isPlayer){
       continue;
     }
     const preStag=T.stagger;                                      // reeling already? (for the heavy knockdown)
+    const boss=T.boss;
+    // BOSS ARMOUR: a giant world boss (Vince) has hit i-frames (a fresh blow chips
+    // far less while he's still shrugging off the last, so you can't stunlock-melt
+    // him), and he NEVER staggers or gets knocked back -- he eats your combo and
+    // keeps swinging. Forces you to respect his attacks instead of face-tanking.
+    if(boss){ if((T._hitCD||0)>0) taken*=0.20; else T._hitCD=0.24; }
     T.hp-=taken;
     T.hurt=1;
     // knockback
     let kb=(heavy?0.9:0.5)*(w.knock?1.7:1)*(blocked?0.3:1)*Emul;   // swing energy drives the shove
-    T.stagger=Math.max(T.stagger, (blocked?0.15:w.stagger*(heavy?1.2:0.8)) );
-    // Every clean hit on an ENEMY makes them stumble -- a knockback push plus a
-    // stagger floor -- so the mob reels off each blow instead of tanking hits
-    // standing still until they drop. Gated to isPlayer (player-dealt) so it
-    // does NOT also make the player easier to stun-lock; the player's own
-    // hit-reaction stays as tuned. Light stumble 0.42s, heavy 0.6s.
-    if(isPlayer && !blocked){ T.stagger=Math.max(T.stagger, heavy?0.6:0.42); kb*=1.5; }
-    T.vel.x+=Math.sin(ang)*kb*6; T.vel.z+=Math.cos(ang)*kb*6;
-    punchScale(T.chef, heavy?0.3:0.18);
+    if(!boss){
+      T.stagger=Math.max(T.stagger, (blocked?0.15:w.stagger*(heavy?1.2:0.8)) );
+      // Every clean hit on an ENEMY makes them stumble -- knockback + a stagger
+      // floor -- so the mob reels off each blow. Player-dealt only; a boss is exempt.
+      if(isPlayer && !blocked){ T.stagger=Math.max(T.stagger, heavy?0.6:0.42); kb*=1.5; }
+      T.vel.x+=Math.sin(ang)*kb*6; T.vel.z+=Math.cos(ang)*kb*6;
+    }
+    punchScale(T.chef, heavy?(boss?0.14:0.3):0.18);
     // ---- JUICE, scaled by how heavy the weapon is ----
     const heft = w.heft==null?0.3:w.heft;
     const weight = clamp((heft*(heavy?1.0:0.6) + Math.min(GAME.combo,10)*0.015) * clamp(Emul,0.9,1.4), 0, 1.3);  // felt weight of the blow, amplified by swing energy (clamped so heavy weapons stay the ceiling)
@@ -2565,6 +2570,8 @@ function updateEnemy(e, dt){
   }
   e.hurt=damp(e.hurt,0,8,dt);
   e.stagger=Math.max(0,e.stagger-dt);
+  if(e._hitCD>0) e._hitCD-=dt; if(e._slamCD>0) e._slamCD-=dt;   // boss: damage i-frame + ground-pound cooldown
+  if(e.boss){ updateVince(e,dt); return; }                      // world-boss AI (giant, hyper-armour, AOE slams)
 
   // HELD: the player authoritatively drives us (updateHold) -- no AI. Invariant #8:
   // if the grab was dropped without clearing us, fall back to engage.
@@ -2764,6 +2771,59 @@ function beginEnemyAttack(e,aim){
 function syncEnemyMesh(e,dt,wantYaw){
   e.chef.position.copy(e.pos); e.chef.rotation.y=e.facing;
   poseChef(e,false,dt);
+}
+/* ---- VINCE world-boss AI: a giant that STOMPS toward you and can't be
+   stunlocked. Two moves: a heavy swing when you're in reach, and a telegraphed
+   GROUND POUND -- he plants, an orange ring swells to the blast radius, then a
+   shockwave floors anything on the ground inside it (jump to clear it). ---- */
+const SLAM_WIND=0.95, SLAM_STRIKE=0.35, SLAM_R=4.8, SLAM_CD=3.4;
+function updateVince(e,dt){
+  e.stagger=0; if(!e.slam) e._slamWind=0;                      // hyper-armour: never staggered
+  const toP=new V3(player.pos.x-e.pos.x,0,player.pos.z-e.pos.z);
+  const dist=toP.length()||1, dx=toP.x/dist, dz=toP.z/dist, wantYaw=Math.atan2(dx,dz);
+  // ---- GROUND POUND ----
+  if(e.slam){ const S=e.slam; S.t+=dt; e.vel.multiplyScalar(Math.exp(-9*dt));
+    if(!S.hit){ const k=clamp(S.t/SLAM_WIND,0,1);              // swelling telegraph ring
+      if(!S.rt||GAME.t-S.rt>0.09){ S.rt=GAME.t; const cp=e.pos.clone(); cp.y=0.05; ring(cp,0xff6a2a, SLAM_R*(0.5+k*1.5)); } }
+    e._slamWind = S.hit?0:clamp(S.t/SLAM_WIND,0,1);            // pose: rear the wrecking ball up
+    if(!S.hit && S.t>=SLAM_WIND){ S.hit=true;                  // STRIKE
+      const cp=e.pos.clone(); cp.y=0.1; ring(cp,0xffb060,SLAM_R*2.2); ring(cp,0xffffff,SLAM_R*1.4);
+      const bp=e.pos.clone(); bp.y=0.5; burst(bp,28,0xffb060,2.3); shake(1.3); hitstop(0.08);
+      POST.uniforms.uShock.value=Math.max(POST.uniforms.uShock.value,0.45);
+      if(AC) sfx.thud(1.3); haptic(1.0,0.85,280);
+      const pd=Math.hypot(player.pos.x-e.pos.x,player.pos.z-e.pos.z), air=player.pos.y>0.4;
+      if(pd<SLAM_R && !air && player.iframe<=0 && !player.dead){   // grounded + in radius = you eat it (JUMP to clear)
+        player.hp-=Math.round(14+(e.dmgMul-1)*12); player.hurt=1; player.stagger=Math.max(player.stagger,0.75);
+        const a=Math.atan2(player.pos.x-e.pos.x,player.pos.z-e.pos.z);
+        player.vel.x=Math.sin(a)*13; player.vel.z=Math.cos(a)*13; applyImpact(player,a,2.2); shake(1.5);
+        updateHUDHealth(); if(player.hp<=0) playerDown();
+      }
+    }
+    if(S.t>=SLAM_WIND+SLAM_STRIKE){ e.slam=null; e._slamCD=SLAM_CD; e.state='engage'; e.stateT=0.5; }
+    e.pos.addScaledVector(e.vel,dt); collide(e.pos,e.r); e.facing=angLerp(e.facing,wantYaw,Math.min(1,dt*3));
+    syncEnemyMesh(e,dt,e.facing); return;
+  }
+  // ---- heavy swing integrate ----
+  if(e.attack){ const A=e.attack; A.t+=dt; e.facing=angLerp(e.facing,A.aim,Math.min(1,dt*8));
+    const lv=attackDrive(e); e.vel.x=damp(e.vel.x,Math.sin(e.facing)*lv,10,dt); e.vel.z=damp(e.vel.z,Math.cos(e.facing)*lv,10,dt);
+    if(!A.hit&&A.t>=A.hitAt){ A.hit=true; syncEnemyMesh(e,dt,e.facing); resolveHit(e,false); }
+    if(A.t>=A.dur){ e.attack=null; e.state='engage'; e.stateT=0.4; }
+    e.pos.addScaledVector(e.vel,dt); collide(e.pos,e.r); syncEnemyMesh(e,dt,e.facing); return;
+  }
+  // ---- approach + decide ----
+  e.stateT-=dt;
+  const reach=WEAPONS[e.wpn].reach+(e.reachBonus||0);
+  if(dist > reach+0.7){ e.vel.x=damp(e.vel.x,dx*e.spd,5,dt); e.vel.z=damp(e.vel.z,dz*e.spd,5,dt); }   // stomp in
+  else { e.vel.multiplyScalar(Math.exp(-6*dt));
+    if(e.stateT<=0){
+      if((e._slamCD||0)<=0 && Math.random()<0.55){ e.slam={t:0,hit:false}; e.state='attacking'; }   // ground pound
+      else { beginEnemyAttack(e,wantYaw); e.stateT=rand(0.5,1.0); }                                   // heavy swing
+    }
+  }
+  e.pos.addScaledVector(e.vel,dt); collide(e.pos,e.r);
+  e.speed=Math.hypot(e.vel.x,e.vel.z); e.movePhase+=dt*e.speed*2.4;
+  e.facing=angLerp(e.facing,wantYaw,Math.min(1,dt*4));
+  syncEnemyMesh(e,dt,e.facing);
 }
 
 /* ================================================================ POSE */
@@ -3211,6 +3271,8 @@ function solveArmsIK(a, dt, atk){
     }
     const air=a._air||0, slamHit=a.slamHit||0;
     if(a.slam){ tx=sign*0.07; ty=2.20; tz=-0.28; }              // WIND-UP: arms fully extended overhead, hands clasped near centre, cocked back (Rivals-style)
+    else if((a._slamWind||0)>0.01){ const k=a._slamWind;        // VINCE ground-pound wind-up: haul the wrecking ball overhead
+      tx=lerp(tx,sign*0.12,k); ty=lerp(ty,2.15,k); tz=lerp(tz,-0.22,k); }
     else if(slamHit>0){ const k=slamHit/SLAM_HIT;                    // HAMMER: whip the fists straight down on contact, then recover
       tx=lerp(tx, sign*0.14, k); ty=lerp(ty, 0.55, k); tz=lerp(tz, 0.62, k); }
     else if(air>0.12 && !atk){ tx=A.sh.x+sign*0.15; ty=lerp(ty,1.30+air*0.18,air); tz=lerp(tz,0.30,air); }  // jump: arms out for balance
@@ -4024,7 +4086,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r27';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r28';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
