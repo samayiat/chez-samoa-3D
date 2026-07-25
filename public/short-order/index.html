@@ -332,7 +332,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r43</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r44</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4195,7 +4195,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r43';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r44';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4423,7 +4423,7 @@ const dmat=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.7
 const STATION_LABEL={ icebox:'ICEBOX', sink:'SINK', prep:'PREP', pot:'SOUP POT', griddle:'GRIDDLE', fryer:'FRYER', saladbar:'SALAD', plate:'PLATES' };
 // fixed 2.5D daytime camera (Overcooked/PlateUp-style): high, angled, framing the
 // whole kitchen line + the counter. Tunable by eye.
-const DAYCAM={ x:-1.5, y:15.5, z:12.5, lookY:0.7, lookZ:-3.4, fov:50 };
+const DAYCAM={ x:-1.5, y:14.5, z:8.5, lookY:0.7, lookZ:-3.1, fov:44 };
 const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, cleanPlates:6, dirty:0,
   diners:[], slotTaken:[false,false,false,false], carry:null, spawnT:1.4, washT:0, _carrySig:'', carryMesh:null,
   ledger:[], spawnMul:1 };   // cast indices of everyone shooed or walked-out today -> tonight's roster
