@@ -110,6 +110,23 @@
     font-size:calc(var(--u)*2.4);letter-spacing:.1em;color:var(--cream);background:#120b06cc;border-radius:4px;padding:calc(var(--u)*0.6) calc(var(--u)*1.6);opacity:0;transition:opacity .15s}
   #dcarry.on{opacity:1}
 
+  /* ---------- back-office shop ---------- */
+  .card.shop{max-width:min(92vw,560px)}
+  .card.shop .sbank{font-family:"Anton",sans-serif;color:var(--cream);font-size:20px;letter-spacing:.06em;margin:2px 0 14px}
+  .card.shop .sbank b{color:#8be27a}
+  .shoplist{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;text-align:left}
+  .shoprow{display:flex;align-items:center;gap:12px;background:#1a0f08cc;border:2px solid #3a2a1a;border-radius:8px;padding:9px 12px}
+  .shoprow .sic{font-size:26px;line-height:1;flex:0 0 auto}
+  .shoprow .sinfo{flex:1 1 auto;min-width:0}
+  .shoprow .sname{font-family:"Anton",sans-serif;color:var(--cream);font-size:17px;letter-spacing:.03em}
+  .shoprow .sdesc{font-size:12px;color:#f4e4c1aa;margin-top:1px}
+  .spips{display:inline-flex;gap:3px;vertical-align:middle;margin-left:6px}
+  .spips .sp{width:8px;height:8px;border-radius:2px;background:#4a3a2a;display:inline-block}
+  .spips .sp.on{background:var(--flame);box-shadow:0 0 6px #ff6a1e88}
+  .sbuy{flex:0 0 auto;font-family:"Anton",sans-serif;font-size:16px;letter-spacing:.04em;color:var(--ink);
+    background:var(--flame);border:none;border-radius:6px;padding:8px 14px;cursor:pointer;box-shadow:0 3px 0 #0007}
+  .sbuy.off{background:#3a3026;color:#8a7a68;box-shadow:none;cursor:default}
+
   /* toast */
   #toast{position:absolute;left:50%;top:76px;transform:translateX(-50%) translateY(-8px);
     background:#120b06e0;border-left:4px solid var(--copper);padding:7px 14px;font-size:13px;
@@ -290,7 +307,7 @@
   <div id="dcarry"></div>
 </div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r34</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r35</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4110,6 +4127,7 @@ function startNight(cfg, onEnd){
   if(!player){ player=makePlayer(); attachPlayerHelpers(player); }
   const ppos=(cfg.player&&cfg.player.pos)||{x:0,z:2.5};
   const pfacing=(cfg.player&&cfg.player.facing!=null)?cfg.player.facing:Math.PI;
+  player.hpMax = 150 + 30*upLvl('brawn');                   // 'line-cook grit' toughens the chef for the night
   player.pos.set(ppos.x,0,ppos.z); player.vel.set(0,0,0); player.facing=pfacing; player.hp=player.hpMax; player._feet=false;
   player.wpn=cfg.player&&cfg.player.wpn||'fists'; player.dur=WEAPONS[player.wpn].dur; equip(player.chef,player.wpn);
   player.dead=false; player.attack=null; player.dodge=null; player.lockOn=null;
@@ -4151,7 +4169,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r34';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r35';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4165,7 +4183,7 @@ function showTitle(){
     '<button class="btn" id="playBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">🌙 STEP TO THE PASS (NIGHT ONLY)</button>'+
     '<div style="margin-top:18px;color:#ff8a3a;letter-spacing:.14em;font-size:14px">'+BUILD_VERSION+'</div>'+
     '<div id="ctrls">'+ctrlRows()+'</div>';
-  document.getElementById('dayBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; startDay(); };
+  document.getElementById('dayBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; openShop(); };
   document.getElementById('playBtn').onclick=()=>{ goFullscreen(); audioInit(); if(AC&&AC.state==='suspended')AC.resume(); ended=false; GAME.inRun=false; startNight(SLICE, onNightEnd); };
   document.getElementById('veil').classList.remove('hide');
   touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
@@ -4238,8 +4256,49 @@ function showMorning(res, bounty, rentLine){
     '<br>Bank <b>$'+RUN.bank+'</b>'+(RUN.debt>1500?' &nbsp;·&nbsp; Owed to Vince <b>$'+RUN.debt+'</b>':'')+'</div>'+
     '<button class="btn" id="nextDayBtn">OPEN UP — DAY '+RUN.day+'</button>'+
     '<button class="btn" id="quitRunBtn" style="margin-top:10px;background:#2a2018;color:var(--cream)">CALL IT — BACK TO TITLE</button></div>';
-  document.getElementById('nextDayBtn').onclick=()=>{ goFullscreen(); startDay(); };
+  document.getElementById('nextDayBtn').onclick=()=>{ goFullscreen(); openShop(); };
   document.getElementById('quitRunBtn').onclick=()=>{ GAME.inRun=false; showTitle(); };
+}
+
+/* the back-office SHOP: spend the bank before opening. Fixed menu, no RNG. */
+function openShop(){
+  GAME.inRun=true; GAME.mode='shop'; GAME.paused=false;
+  document.getElementById('veil').classList.remove('hide');
+  document.getElementById('hud').classList.remove('on');
+  document.getElementById('dayhud').classList.remove('on');
+  document.getElementById('hint').classList.remove('on');
+  touchEl.classList.remove('on'); if(bPause) bPause.classList.remove('on');
+  renderShop();
+}
+function renderShop(){
+  const rows=SHOP.map(u=>{
+    const lv=upLvl(u.key), maxed=lv>=u.max, cost=upCost(u), afford=RUN.bank>=cost && !maxed;
+    let pips=''; for(let i=0;i<u.max;i++) pips+='<i class="sp'+(i<lv?' on':'')+'"></i>';
+    return '<div class="shoprow">'+
+      '<div class="sic">'+u.icon+'</div>'+
+      '<div class="sinfo"><div class="sname">'+u.name+' <span class="spips">'+pips+'</span></div>'+
+        '<div class="sdesc">'+u.desc+'</div></div>'+
+      '<button class="sbuy'+(afford?'':' off')+'" data-k="'+u.key+'"'+(afford?'':' disabled')+'>'+(maxed?'MAX':'$'+cost)+'</button>'+
+    '</div>';
+  }).join('');
+  const rin=daysToRent(RUN.day);
+  document.getElementById('card').innerHTML='<div class="card shop">'+
+    '<div class="kick">BEFORE OPEN · DAY '+RUN.day+'</div>'+
+    '<div class="title">BACK<br><span class="b">OFFICE</span></div>'+
+    '<div class="sbank">BANK <b>$'+RUN.bank+'</b> &nbsp;·&nbsp; RENT $'+rentFor(weekOf(RUN.day))+' in '+rin+(rin===1?' day':' days')+'</div>'+
+    '<div class="shoplist">'+rows+'</div>'+
+    '<button class="btn" id="startDayBtn">OPEN THE DINER →</button></div>';
+  const c=document.getElementById('card');
+  if(c.querySelectorAll) c.querySelectorAll('.sbuy').forEach(b=>b.addEventListener('click',ev=>{ ev.preventDefault(); buyUpgrade(b.getAttribute('data-k')); }));
+  const sb=document.getElementById('startDayBtn'); if(sb) sb.onclick=()=>{ goFullscreen(); startDay(); };
+}
+function buyUpgrade(key){
+  const u=SHOP.find(x=>x.key===key); if(!u) return;
+  if(upLvl(key)>=u.max) return;
+  const cost=upCost(u); if(RUN.bank<cost) return;
+  RUN.bank-=cost; RUN.upgrades[key]=upLvl(key)+1; saveRun();
+  if(AC) sfx.pickup();
+  renderShop();
 }
 
 /* ================================================================ DAY (the cooking shift)
@@ -4299,11 +4358,26 @@ const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, 
    (bigger, tougher mob) and, at week boundaries, the rent. Cash banks across
    days; the night pays a bounty that funds tomorrow. Persisted to localStorage. */
 const RENT_BASE=1500, RENT_STEP=500, WEEK_DAYS=5, RATING_WINDOW=5;
-const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[] };
-function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} GAME.debt=RUN.debt; }
+const RUN={ day:1, bank:0, debt:1500, rating:6, ratingHist:[], upgrades:{} };
+function loadRun(){ try{ const s=localStorage.getItem('so_run'); if(s) Object.assign(RUN, JSON.parse(s)); }catch(e){} if(!RUN.upgrades) RUN.upgrades={}; GAME.debt=RUN.debt; }
 function saveRun(){ try{ localStorage.setItem('so_run', JSON.stringify(RUN)); }catch(e){} }
-function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; GAME.debt=1500; saveRun(); }
+function resetRun(){ RUN.day=1; RUN.bank=0; RUN.debt=1500; RUN.rating=6; RUN.ratingHist=[]; RUN.upgrades={}; GAME.debt=1500; saveRun(); }
 loadRun();
+// The back-office shop -- a FIXED menu (no RNG, per the research's bad-luck-floor
+// rule), leveled, each level costing more. Day-side upgrades ease the cook; the
+// SECURITY buys (locks) are the cash sink that thins the night. Persisted in
+// RUN.upgrades. (Random daily deals + an escalating reroll are a later layer.)
+const SHOP=[
+  { key:'plates', name:'Plate Rack',      desc:'+2 clean plates to open with',        max:4, base:120, icon:'🍽️' },
+  { key:'grip',   name:'Steady Burners',  desc:'Wider green window — forgiving cook',  max:3, base:150, icon:'🔥' },
+  { key:'rush',   name:'Word of Mouth',   desc:'Diners arrive faster — busier, richer',max:2, base:200, icon:'📣' },
+  { key:'tipjar', name:'Bigger Tip Jar',  desc:'+20% on every serve',                  max:3, base:180, icon:'💰' },
+  { key:'locks',  name:'Reinforced Door', desc:'Fewer patrons force in at night',      max:3, base:240, icon:'🔒' },
+  { key:'brawn',  name:'Line-Cook Grit',  desc:'+30 HP in the night brawl',            max:3, base:200, icon:'💪' },
+  { key:'blade',  name:'Good Knife',      desc:'Start the night armed with a knife',   max:1, base:420, icon:'🔪' },
+];
+function upLvl(k){ return (RUN.upgrades && RUN.upgrades[k]) || 0; }
+function upCost(u){ return Math.round(u.base*Math.pow(1.6, upLvl(u.key))); }
 function weekOf(day){ return Math.floor((day-1)/WEEK_DAYS); }             // 0-based week index
 function rentFor(week){ return RENT_BASE + RENT_STEP*week; }
 function rentDueOn(day){ return day>1 && (day-1)%WEEK_DAYS===0; }          // rent hits at the start of each new week
@@ -4316,10 +4390,11 @@ function chunkSizes(n){ const out=[]; let w=3, left=n; while(left>0){ const s=Ma
 function nightCfgFor(){
   const roster=GAME.nightRoster;
   const grudges=roster?roster.length:0;
-  const count=clamp(grudges,3,16);
+  const count=clamp(grudges - upLvl('locks'), 3, 16);       // reinforced door turns some away
   const toughRatio=clamp((RUN.rating-4)/6, 0.1, 0.8);
   const waves=[]; for(let i=0;i<count;i++) waves.push(Math.random()<toughRatio?'tough':'weak');
-  return Object.assign({}, SLICE, { waves, waveSizes:chunkSizes(count), roster });
+  const player=Object.assign({}, SLICE.player, { wpn: upLvl('blade')?'knife':'fists' });
+  return Object.assign({}, SLICE, { waves, waveSizes:chunkSizes(count), roster, player });
 }
 let kitchenGrp=null;
 function buildKitchen(){
@@ -4427,7 +4502,7 @@ function tickCooks(dt){
     if(it){
       it.t+=dt;
       if(it.state==='cooking' && it.t>=COOK_TIME){ it.state='ready'; it.t=0; if(AC)sfx.pickup(); }
-      else if(it.state==='ready' && it.t>=READY_HOLD){ it.state='burnt'; it.t=0; }
+      else if(it.state==='ready' && it.t>=(DAY.readyHold||READY_HOLD)){ it.state='burnt'; it.t=0; }
       else if(it.state==='burnt' && it.t>=BURN_TO_FIRE){ it.state='fire'; it.t=0; toast('FIRE ON THE '+s.dish.toUpperCase()+'!'); }
     }
     // visuals
@@ -4468,7 +4543,7 @@ function serveDiner(P,d){
   DAY.combo++; DAY.best=Math.max(DAY.best,DAY.combo);
   const mult=Math.min(4, 1+(DAY.combo-1)*0.5);                        // Overcooked-style streak, capped x4
   const tip=Math.round(base*0.5*clamp(d.hearts,0,1));                 // served fast (hearts left) -> bigger tip
-  const pay=Math.round(base*qualMul*mult)+tip;
+  const pay=Math.round((base*qualMul*mult+tip)*(1+0.2*upLvl('tipjar')));   // + Bigger Tip Jar
   DAY.cash+=pay; DAY.served++; DAY.dirty++; DAY.carry=null;
   const wp=new V3(d.x,1.9,d.z-0.5); popWord(wp,'$'+pay,c.quality==='perfect'?'#49d05a':'#e3b53a',30);
   if(AC){ sfx.pickup(); } burst(new V3(d.x,1.4,d.z),8,COL.cream,0.7);
@@ -4583,10 +4658,11 @@ function startDay(){
   resetRagPose(player);
   GAME.inRun=true;
   DAY.on=true; DAY.t=DAY_LEN+(RUN.day-1)*4;                 // days lengthen as the run goes (more volume)
-  DAY.spawnMul=clamp(1-(RUN.day-1)*0.03, 0.55, 1);          // ...and the rush comes faster
+  DAY.spawnMul=clamp((1-(RUN.day-1)*0.03)*Math.pow(0.85,upLvl('rush')), 0.4, 1);  // day-ramp + 'word of mouth'
+  DAY.readyHold=READY_HOLD*(1+0.35*upLvl('grip'));          // 'steady burners' widens the green window
   DAY.cash=0; DAY.served=0; DAY.lost=0; DAY.shooed=0; DAY.combo=0; DAY.best=0;
   DAY.ledger.length=0;
-  DAY.cleanPlates=6; DAY.dirty=0; DAY.diners.length=0; DAY.slotTaken=[false,false,false,false];
+  DAY.cleanPlates=6+2*upLvl('plates'); DAY.dirty=0; DAY.diners.length=0; DAY.slotTaken=[false,false,false,false];
   DAY.carry=null; DAY.spawnT=1.4; DAY.washT=0; updateCarryMesh();
   for(const s of STATIONS){ if(s.kind==='cook') s.item=null; }
   CAM.yaw=player.facing; CAM.lockK=0;
