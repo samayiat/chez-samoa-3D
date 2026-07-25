@@ -253,7 +253,7 @@
 </div>
 <div class="hint" id="hint"></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r30</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r31</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -1253,6 +1253,9 @@ function applyDeform(mesh, d, scale){
 
 function makeChef(o){
   const skin=M(o.skin,.7), apronMat=M(o.apron,.6), toqueMat=M(0xf7f2e8,.85), bootMat=M(o.boot||0x241a12,.6);
+  // male chef wears black trousers -- his legs are pants top-to-bottom, not the
+  // female's apron-thigh + bare-skin-shin. null for everyone else keeps their look.
+  const pantsMat = o.male ? M(0x121216,.45) : null;
   const root=new THREE.Group();
   const body=new THREE.Group(); root.add(body);       // bob/lean/squash lives here
   const WAIST=1.06;
@@ -1427,7 +1430,7 @@ function makeChef(o){
   // legs: IK bones under `root`; feet plant in world space (footwork)
   const legs=[];
   for(let i=0;i<2;i++){
-    const th=boneIK(0.13,0.1,apronMat), sh=boneIK(0.1,0.085,skin);
+    const th=boneIK(0.13,0.1,pantsMat||apronMat), sh=boneIK(0.1,0.085,pantsMat||skin);
     const boot=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.1,0.3),bootMat); boot.castShadow=true;
     root.add(th); root.add(sh); root.add(boot);
     legs.push({ thigh:th, shin:sh, boot,
@@ -4094,7 +4097,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r30';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r31';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
