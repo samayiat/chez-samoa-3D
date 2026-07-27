@@ -375,7 +375,7 @@
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r58</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r59</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4257,7 +4257,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r58';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r59';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4709,9 +4709,12 @@ const STATION_LABEL={ lettucecrate:'LETTUCE', tomatocrate:'TOMATO', ricecrate:'R
 // bold, distinct accent colour per station -- painted on the counter FRONT so you
 // can read what each is from across the room (Overcooked/PlateUp colour-coding).
 const STATION_ACCENT={ lettucecrate:0x4fb03a, tomatocrate:0xd23f2a, ricecrate:0xd9c98a, cilantrocrate:0x3f8f34, limecrate:0x9fce3a, avocadocrate:0x5a7a2a, crabcrate:0xe08a5a, prep:0x8a5a2c, prep2:0x8a5a2c, mash:0x8a6a3a, counter:0xb89a6a, plate:0xdfe4e8, sink:0x2f9fb8, pot:0xc23a2a, griddle:0x394048, fryer:0xe6a721 };
+// a big glanceable icon per station -- shown in the proximity magnify bubble so you
+// never have to read the tiny counter labels.
+const STATION_EMOJI={ lettucecrate:'🥬', tomatocrate:'🍅', ricecrate:'🍚', cilantrocrate:'🌿', limecrate:'🍈', avocadocrate:'🥑', crabcrate:'🦀', prep:'🔪', prep2:'🔪', mash:'🥣', counter:'🍽', plate:'🍽️', sink:'🚰', pot:'🍲', griddle:'🥩', fryer:'🍟' };
 // fixed 2.5D daytime camera (Overcooked/PlateUp-style): high, angled, framing the
 // whole kitchen line + the counter. Tunable by eye.
-const DAYCAM={ x:0, y:19, z:15, lookY:0.9, lookZ:-2.0, fov:45 };
+const DAYCAM={ x:0, y:14.5, z:11.5, lookY:0.9, lookZ:-1.6, fov:45 };   // zoomed in; gently follows the chef (see dayCamera)
 const DAY={ on:false, t:0, cash:0, served:0, lost:0, shooed:0, combo:0, best:0, cleanPlates:6, dirty:0,
   diners:[], slotTaken:[], carry:null, spawnT:1.4, washT:0, _carrySig:'', carryMesh:null, passDishes:[],
   ledger:[], spawnMul:1 };   // cast indices of everyone shooed or walked-out today -> tonight's roster
@@ -5173,6 +5176,33 @@ function dayPrompt(P){
   else if(s) html=stationPrompt(s);
   if(html){ el.innerHTML=html; el.classList.add('on'); } else el.classList.remove('on');
 }
+// a big ICON+NAME card that pops over the nearest appliance and grows as you close
+// in -- so you read a picture, not a tiny label.
+let _magBubble=null, _magDef=null;
+function makeMagPlane(def){
+  const emoji=STATION_EMOJI[def]||'🍳', name=STATION_LABEL[def]||def;
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=224;
+  try{ const x=cv.getContext('2d');
+    if(x.fillRect){ x.fillStyle='rgba(16,10,6,0.92)'; x.fillRect(0,0,256,224); }
+    if(x.strokeRect){ x.strokeStyle='#e8c98a'; x.lineWidth=7; x.strokeRect(5,5,246,214); }
+    x.textAlign='center'; x.textBaseline='middle';
+    x.font='120px system-ui, "Segoe UI Emoji", sans-serif'; if(x.fillText) x.fillText(emoji,128,92);
+    x.fillStyle='#f4e4c1'; x.font='bold 42px Anton, system-ui, sans-serif'; if(x.fillText) x.fillText(name,128,186);
+  }catch(e){}
+  const tex=new THREE.CanvasTexture(cv);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(1.5,1.31), new THREE.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false,fog:false}));
+  m.renderOrder=1300; return m;
+}
+function updateMagBubble(P){
+  if(!_magBubble){ _magBubble=new THREE.Group(); scene.add(_magBubble); }
+  let best=null,bd=3.7; for(const s of STATIONS){ const d=Math.hypot(s.x-P.pos.x,s.z-P.pos.z); if(d<bd){ bd=d; best=s; } }
+  if(!best){ _magBubble.visible=false; _magDef=null; return; }
+  if(best.def!==_magDef){ _magDef=best.def; while(_magBubble.children.length){ _magBubble.remove(_magBubble.children[0]); } _magBubble.add(makeMagPlane(best.def)); }
+  _magBubble.visible=true;
+  _magBubble.position.set(best.x, 2.75, best.z);
+  if(_magBubble.quaternion&&camera.quaternion) _magBubble.quaternion.copy(camera.quaternion);
+  const k=clamp((3.7-bd)/2.4,0,1); if(_magBubble.scale&&_magBubble.scale.setScalar) _magBubble.scale.setScalar(0.7+k*0.85);
+}
 function waveOff(d){
   DAY.slotTaken[d.slot]=false; d.state='leaving'; d.tz=ENTRANCE_Z;
   if(d.bubble) d.bubble.visible=false;
@@ -5209,19 +5239,20 @@ function serveDiner(P,d){
 // a plate (disc + a small mound per component, coloured by its ingredient)
 function plateStackMesh(items){
   const g=new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.36,0.05,18),dmat(0xf4efe4,.4,.05)));
+  const plate=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.5,0.07,22),dmat(0xf7f2ea,.35,.06)); g.add(plate);   // bigger, so you can tell you're holding a plate
+  const rim=new THREE.Mesh(new THREE.CylinderGeometry(0.63,0.6,0.04,22),dmat(0xdad0bd,.4,.05)); rim.position.y=0.045; g.add(rim);   // raised rim reads as a dish
   (items||[]).forEach((comp,i)=>{ const ang=(i/Math.max(1,items.length))*TAU;
-    const m=new THREE.Mesh(new THREE.SphereGeometry(0.15,10,8),dmat((INGREDIENTS[comp.id]||{col:0xcccccc}).col,.7,0));
-    m.position.set(Math.cos(ang)*0.15,0.11,Math.sin(ang)*0.15); g.add(m); });
+    const m=new THREE.Mesh(new THREE.SphereGeometry(0.21,10,8),dmat((INGREDIENTS[comp.id]||{col:0xcccccc}).col,.7,0));
+    m.position.set(Math.cos(ang)*0.2,0.15,Math.sin(ang)*0.2); g.add(m); });
   return g;
 }
 // a small mesh for a carried/held item (a raw/prepped ingredient, or a plate)
 function carryItemMesh(c){
   if(!c) return null;
   if(c.kind==='ing'){ const g=new THREE.Group(); const ing=INGREDIENTS[c.id]||{raw:0xd7c8a8,col:0xbfd88a};
-    if(c.state==='raw'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17,12,9),dmat(ing.raw,.7,0))); }
-    else if(c.state==='mashed'||c.state==='boiled'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8,0,TAU,0,Math.PI*0.5),dmat(ing.col,.85,0))); }
-    else { for(let i=0;i<5;i++){ const cube=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.1),dmat(c.state==='burnt'?0x241812:ing.col,.75,0)); cube.position.set((i%2?0.08:-0.08),0.02+((i%3)*0.07),((i>>1)%2?0.06:-0.06)); g.add(cube); } }
+    if(c.state==='raw'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.24,12,9),dmat(ing.raw,.7,0))); }
+    else if(c.state==='mashed'||c.state==='boiled'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(0.24,10,8,0,TAU,0,Math.PI*0.5),dmat(ing.col,.85,0))); }
+    else { for(let i=0;i<6;i++){ const cube=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.14,0.14),dmat(c.state==='burnt'?0x241812:ing.col,.75,0)); cube.position.set((i%2?0.11:-0.11),0.02+((i%3)*0.1),((i>>1)%2?0.09:-0.09)); g.add(cube); } }
     return g; }
   if(c.kind==='plate'){ return plateStackMesh(c.items); }
   return null;
@@ -5600,6 +5631,7 @@ function dayCleanup(){
   for(const s of STATIONS){ if(s.kind==='cook'){ s.item=null; if(s._flame)s._flame.visible=false; if(s._glow)s._glow.material.opacity=0; } if(s.kind==='plate'){ s.plate=null; syncStationPlate(s); } if(s.kind==='counter'){ s.held=null; syncCounterMesh(s); } }
   for(const pd of DAY.passDishes){ if(pd&&pd.mesh) scene.remove(pd.mesh); } DAY.passDishes.length=0;
   DAY.carry=null; updateCarryMesh();
+  if(_magBubble){ _magBubble.visible=false; _magDef=null; }
   if(kitchenGrp) kitchenGrp.visible=false;
   const dh=document.getElementById('dayhud'); if(dh) dh.classList.remove('on');
   closeRecipes(); { const br=document.getElementById('bRecipes'); if(br) br.classList.remove('on'); }
@@ -5671,6 +5703,7 @@ function updateDay(dt){
   for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); if(s._xmark&&s._xmark.visible) s._xmark.quaternion.copy(camera.quaternion); }   // signs face the fixed cam
   if(PASSD._sign) PASSD._sign.quaternion.copy(camera.quaternion);
   dayPrompt(player);
+  updateMagBubble(player);
   renderDayHUD();
   // end of shift: clock done AND the counter has cleared
   if(DAY.t<=0 && DAY.diners.length===0){ finishDay(); }
@@ -5895,11 +5928,16 @@ const _camTgt=new V3();
 // daytime: a FIXED 2.5D camera framing the kitchen line + counter (Overcooked/
 // PlateUp). It does not follow the chef -- the whole line stays on screen.
 function dayCamera(dt){
-  const want=_camTgt.set(DAYCAM.x, DAYCAM.y, DAYCAM.z);
-  CAM.pos.lerp(want, 1-Math.exp(-6*dt));
+  // gently PAN toward the chef so the action stays framed & large even though the
+  // room is big -- clamped so we never swing past the walls.
+  const P=player;
+  const px = P ? clamp(P.pos.x,-7,7) : 0;
+  const pz = P ? clamp(P.pos.z,-7,6) : 0;
+  const want=_camTgt.set(DAYCAM.x + px*0.55, DAYCAM.y, DAYCAM.z + pz*0.32);
+  CAM.pos.lerp(want, 1-Math.exp(-5*dt));
   camera.position.copy(CAM.pos);
   if(camera.up && camera.up.set) camera.up.set(0,1,0);
-  if(camera.lookAt) camera.lookAt(DAYCAM.x, DAYCAM.lookY, DAYCAM.lookZ);
+  if(camera.lookAt) camera.lookAt(DAYCAM.x + px*0.62, DAYCAM.lookY, DAYCAM.lookZ + pz*0.5);
   if(camera.updateProjectionMatrix && Math.abs((camera.fov||DAYCAM.fov)-DAYCAM.fov)>0.01){ camera.fov=DAYCAM.fov; camera.updateProjectionMatrix(); }
   // trauma shake still reads
   FX.trauma=Math.max(0,FX.trauma-dt*2.4);
