@@ -379,7 +379,7 @@
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r61</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r62</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4263,7 +4263,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r61';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r62';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4690,7 +4690,7 @@ const STATION_DEFS={
 // station, and the wash-up. grab -> chop -> plate up -> serve, no stove.
 const DEFAULT_LAYOUT=[
   {def:'lettucecrate',c:0,r:0},{def:'tomatocrate',c:1,r:0},{def:'prep',c:2,r:0},
-  {def:'prep',c:3,r:0},{def:'plate',c:4,r:0},{def:'sink',c:5,r:0},
+  {def:'counter',c:3,r:0},{def:'plate',c:4,r:0},{def:'sink',c:5,r:0},   // one board does both now -> a counter to park a plate mid-build
 ];
 let STATIONS=[];   // live station instances (carry mesh refs + cook state at runtime)
 let OCC={};        // occupancy map: 'c|r' -> instance id (for placement collision)
@@ -5290,22 +5290,32 @@ function syncCounterMesh(s){
   if(s._heldMesh){ s._g.remove(s._heldMesh); s._heldMesh=null; }
   if(s.held){ const m=carryItemMesh(s.held); if(m){ m.position.y=SURF+0.16; s._g.add(m); s._heldMesh=m; } }
 }
-// keep a PREP/MASH board's item + chop-progress bar in sync with s.board
+// a little chef's knife that bobs while you chop (built once per board, animated in updateDay)
+function makeKnife(){
+  const g=new THREE.Group();
+  const blade=new THREE.Mesh(new THREE.BoxGeometry(0.045,0.15,0.34), dmat(0xe6ecf2,.2,.65)); blade.position.set(0,0,0.05); g.add(blade);
+  const handle=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.09,0.17), dmat(0x3a2a1a,.6,0)); handle.position.set(0,0.02,-0.2); g.add(handle);
+  return g;
+}
+// keep a PREP/MASH board's item + chop-progress bar + knife in sync with s.board
 function syncBoardMesh(s){
   if(!s._g) return;
   if(s._boardMesh){ s._g.remove(s._boardMesh); s._boardMesh=null; }
   if(s.board){ const m=carryItemMesh({kind:'ing', id:s.board.id, state:s.board.state});
     if(m){ m.position.y=SURF+0.16; s._g.add(m); s._boardMesh=m; } }
-  // a left-anchored green bar that fills while you hold COOK over a raw item
-  if(!s._progBar){
+  // progress bar: a dark track with a left-anchored green fill that grows while you hold COOK
+  if(!s._track){
+    const track=new THREE.Mesh(new THREE.BoxGeometry(0.74,0.13,0.09), new THREE.MeshBasicMaterial({color:0x140d07}));
+    track.position.set(0, SURF+0.92, 0); if(track.renderOrder!==undefined) track.renderOrder=1199; s._g.add(track); s._track=track;
     const bar=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.1,0.1), new THREE.MeshBasicMaterial({color:0x49d05a}));
     if(bar.geometry&&bar.geometry.translate) bar.geometry.translate(0.35,0,0);   // pivot at the left edge
-    bar.position.set(-0.35, SURF+0.66, 0);
+    bar.position.set(-0.35, SURF+0.92, 0.01);
     if(bar.renderOrder!==undefined) bar.renderOrder=1200;
     s._g.add(bar); s._progBar=bar;
+    const kn=makeKnife(); kn.position.set(0.12, SURF+0.6, 0); s._g.add(kn); s._knife=kn;
   }
-  const show = !!(s.board && s.board.state==='raw');
-  s._progBar.visible=show;
+  const show = !!(s.board && s.board.state==='raw');   // knife + bar appear only while a raw item waits to be cut
+  s._track.visible=show; s._progBar.visible=show; s._knife.visible=show;
   if(show && s._progBar.scale && s._progBar.scale.set) s._progBar.scale.set(clamp((s.board.prog||0)/PREP_TIME,0.02,1),1,1);
 }
 function cookedState(proc){ return PROC_STATE[proc]||'cooked'; }
@@ -5376,7 +5386,8 @@ function cookVerbs(P,pad,dt){
   const act=(pad&&pad.actionHeld)||KEY['e']||TOUCH.cookHeld;
   if(s && (s.kind==='prep'||s.kind==='mash') && !s.broken && act && s.board && s.board.state==='raw'){
     s.board.prog=(s.board.prog||0)+dt;
-    if(s.board.prog>=PREP_TIME){ s.board.state=(s.kind==='prep'?'chopped':'mashed'); s.board.prog=0; syncBoardMesh(s); if(AC)sfx.pickup(); }
+    s._chopping=0.09;                                 // flag for the knife-bob animation in updateDay
+    if(s.board.prog>=PREP_TIME){ s.board.state=(s.kind==='prep'?'chopped':'mashed'); s.board.prog=0; s._chopping=0; syncBoardMesh(s); if(AC)sfx.pickup(); }
     else if(s._progBar && s._progBar.scale && s._progBar.scale.set){ s._progBar.scale.set(clamp(s.board.prog/PREP_TIME,0.02,1),1,1); }
   } else if(s && s.kind==='sink' && !s.broken && act && !DAY.carry && DAY.dirty>0){
     DAY.washT+=dt; if(DAY.washT>=0.55){ DAY.washT=0; DAY.dirty--; DAY.cleanPlates++; if(AC)sfx.pickup(); }
@@ -5755,6 +5766,33 @@ function dayScene(on){
   const pl=arena.userData.palmsG; if(pl) for(const p of pl) p.visible=!on;            // and the after-hours palms
   const pg=arena.userData.pergola; if(pg) for(const m of pg) m.visible=!on;           // and the overhead beams/colonnade
 }
+// bob every board's knife: fast up/down while COOK is held (s._chopping), easing
+// back to a raised rest otherwise. Flecks fly off the food on each down-stroke.
+const _KNIFE_REST=SURF+0.62;
+function chopAnim(dt){
+  for(const s of STATIONS){
+    if(!(s.kind==='prep'||s.kind==='mash') || !s._knife || !s._knife.visible) continue;
+    const chopping = s._chopping>0 && s.board && s.board.state==='raw';
+    if(s._chopping>0) s._chopping-=dt;
+    const kn=s._knife;
+    if(chopping){
+      s._chopPh=(s._chopPh||0)+dt*17;                                 // chop cadence
+      const sw=Math.abs(Math.sin(s._chopPh));                          // 0 (up) .. 1 (buried)
+      kn.position.y=_KNIFE_REST-sw*0.4;
+      if(kn.rotation) kn.rotation.z=-0.3+sw*0.7;
+      const ds=Math.sin(s._chopPh);
+      if(s._prevDs>0 && ds<=0){                                        // just crossed into a down-stroke -> fleck + tick
+        burst(new V3(s.x, SURF+0.22, s.z), 4, (INGREDIENTS[s.board.id]||{col:0xcccccc}).col, 0.45);
+      }
+      s._prevDs=ds;
+    } else {                                                           // ease the knife up to rest
+      const k=Math.min(1,dt*9);
+      kn.position.y += (_KNIFE_REST-kn.position.y)*k;
+      if(kn.rotation) kn.rotation.z += (-0.3-kn.rotation.z)*k;
+      s._prevDs=1;
+    }
+  }
+}
 function updateDay(dt){
   DAY.t-=dt;
   // spawn diners while open and a stool is free
@@ -5762,6 +5800,7 @@ function updateDay(dt){
   updateDiners(dt);
   tickCooks(dt);
   updateCarryMesh();
+  chopAnim(dt);
   for(const s of STATIONS){ if(s._sign) s._sign.quaternion.copy(camera.quaternion); if(s._xmark&&s._xmark.visible) s._xmark.quaternion.copy(camera.quaternion); }   // signs face the fixed cam
   if(PASSD._sign) PASSD._sign.quaternion.copy(camera.quaternion);
   dayPrompt(player);
