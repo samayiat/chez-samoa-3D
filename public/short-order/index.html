@@ -375,7 +375,7 @@
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r57</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r58</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4257,7 +4257,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r57';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r58';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -5182,6 +5182,13 @@ function waveOff(d){
   toast('WAVED OFF '+d.cast.name+' — NO '+d.cast.bad);
   if(AC) sfx.whiff(); burst(new V3(d.x,1.4,d.z),8,COL.herb,0.7);
 }
+// Overcooked-style freshness tiers -- the SAME green/amber/red thresholds the
+// ticket bar uses, so the colour you see IS the tip you'll get. Serve fast = green.
+function tipTier(h){ h=clamp(h,0,1);
+  if(h>0.5)  return { name:'FRESH', mult:1.0,  col:'#49d05a' };
+  if(h>0.25) return { name:'OK',    mult:0.5,  col:'#e3b53a' };
+  return               { name:'LATE',  mult:0.15, col:'#ff3b30' };
+}
 function serveDiner(P,d){
   const c=DAY.carry;
   if(!c||c.kind!=='plate') return;
@@ -5191,10 +5198,11 @@ function serveDiner(P,d){
   const base=RECIPES[d.dish].pay;
   DAY.combo++; DAY.best=Math.max(DAY.best,DAY.combo);
   const mult=Math.min(4, 1+(DAY.combo-1)*0.5);                        // Overcooked-style streak, capped x4
-  const tip=Math.round(base*0.5*clamp(d.hearts,0,1));                 // served fast (hearts left) -> bigger tip
+  const tier=tipTier(d.hearts);                                       // Overcooked: green=full tip, yellow=half, red=scraps
+  const tip=Math.round(base*0.5*tier.mult);
   const pay=Math.round((base*mult+tip)*(1+0.2*upLvl('tipjar')));      // + Bigger Tip Jar
   DAY.cash+=pay; DAY.served++; DAY.carry=null;
-  const wp=new V3(d.x,1.9,d.z-0.5); popWord(wp,'$'+pay,'#49d05a',30);
+  const wp=new V3(d.x,1.9,d.z-0.5); popWord(wp, tier.name+' $'+pay, tier.col, 30);
   if(AC){ sfx.pickup(); } burst(new V3(d.x,1.4,d.z),8,COL.cream,0.7);
   d.state='eating'; d.eatT=1.9; setBubble(d,'YUM','good');   // they sit and eat; the dirty plate + freed stool come when they leave
 }
@@ -5573,7 +5581,7 @@ function renderDayHUD(){
       if(d.state==='reading'){ cls=' read'; order='reading menu…'; showBar=false; }
       else if(d.state==='ready'){ cls=' ready'; order='▲ GREET'; }
       else if(d.bad){ cls=' bad'; order='✕ '+d.cast.bad; }
-      else { order=RECIPES[d.dish].name+' 🔪'; }
+      else { const t=tipTier(d.hearts); order=RECIPES[d.dish].name+' <b style="color:'+t.col+'">'+t.name+'</b>'; }
       return '<div class="ticket'+cls+'"><div class="tname">'+d.cast.name+'</div><div class="tdish">'+order+'</div>'+
         (showBar?'<div class="tbarwrap"><i class="tbar" style="transform:scaleX('+f.toFixed(3)+');background:'+col+'"></i></div>':'')+'</div>';
     }).join('');
