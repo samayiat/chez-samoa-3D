@@ -379,7 +379,7 @@
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r60</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r61</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4263,7 +4263,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r60';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r61';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -5148,20 +5148,26 @@ function stationPrompt(s){
   const name=STATION_LABEL[s.def]||s.def, c=DAY.carry; let act='';
   if(s.broken) return '<span class="pname">'+name+'</span><span class="pact" style="color:#ff6a3a">broken</span>';
   const rawIng = c&&c.kind==='ing'&&c.state==='raw';
+  const plate = c&&c.kind==='plate';
   if(s.kind==='crate') act = c?'':'grab';
   else if(s.kind==='prep'||s.kind==='mash'){ const verb=s.kind==='prep'?'chop':'mash';
-    if(s.board&&s.board.state==='raw') act='hold to '+verb;
+    if(plate) act = (s.board&&s.board.state!=='raw')?'add to plate':'';
+    else if(s.board&&s.board.state==='raw') act='hold to '+verb;
     else if(s.board) act='pick up';
     else if(rawIng) act='set down'; }
-  else if(s.kind==='counter') act = c?(s.held?'':'set down'):(s.held?'pick up':'');
+  else if(s.kind==='counter'){
+    if(plate&&s.held&&s.held.kind==='ing'&&s.held.state!=='raw') act='add to plate';
+    else act = c?(s.held?'':'set down'):(s.held?'pick up':''); }
   else if(s.kind==='cook'){
-    if(s.item&&(s.item.state==='ready'||s.item.state==='burnt')) act='collect';
+    if(s.item&&s.item.state==='ready'&&plate) act='plate up';
+    else if(s.item&&(s.item.state==='ready'||s.item.state==='burnt')) act='collect';
     else if(s.item&&s.item.state==='fire') act='hold to douse';
     else if(!s.item&&rawIng) act=s.process; }
   else if(s.kind==='plate'){
-    if(c&&c.kind==='ing') act = s.plate&&matchRecipe(s.plate.items)?'take dish':'add';
-    else if(!c&&s.plate) act = matchRecipe(s.plate.items)?'take dish':'';
-  }
+    if(c&&c.kind==='ing') act = s.plate?'add to plate':'need a plate';
+    else if(plate) act = c.items.length?'set down':'return';
+    else if(s.plate) act = matchRecipe(s.plate.items)?'take dish':'pick up';
+    else act = DAY.cleanPlates>0?'take plate':'no plates'; }
   else if(s.kind==='sink') act = c?'bin':(DAY.dirty>0?'hold to wash':'');
   return '<span class="pname">'+name+'</span>'+(act?'<span class="pact">'+act+'</span>':'');
 }
@@ -5303,14 +5309,28 @@ function syncBoardMesh(s){
   if(show && s._progBar.scale && s._progBar.scale.set) s._progBar.scale.set(clamp((s.board.prog||0)/PREP_TIME,0.02,1),1,1);
 }
 function cookedState(proc){ return PROC_STATE[proc]||'cooked'; }
+// Overcooked/PlateUp plating: components are added onto a PLATE you carry. This
+// puts a finished component onto `plate.items` if it legally belongs and the
+// dish isn't already complete. Returns true if it took.
+function plateAdd(plate, comp){
+  if(matchRecipe(plate.items)){ toast('PLATE’S DONE — SERVE IT'); return false; }
+  if(!plateAddOk(plate.items, comp)){
+    toast((INGREDIENTS[comp.id]||{name:comp.id}).name+(comp.state==='raw'?' — PREP IT FIRST':' DOESN’T BELONG')); return false; }
+  plate.items.push(comp); if(AC)sfx.pickup(); return true;
+}
 function stationAct(P,s){
   if(s.broken){ toast((STATION_LABEL[s.def]||s.def)+' IS BROKEN — REPAIR IT'); return; }
-  const c=DAY.carry, ing=c&&c.kind==='ing';
+  const c=DAY.carry, ing=c&&c.kind==='ing', plate=c&&c.kind==='plate';
   if(s.kind==='crate'){ if(!c){ DAY.carry={kind:'ing', id:s.ingredient, state:'raw'}; if(AC)sfx.pickup(); } }
   else if(s.kind==='prep'||s.kind==='mash'){
-    // GRAB is a TAP now: set a raw item DOWN on the board, or pick the item back
-    // up. The cut itself is a held COOK action (see cookVerbs) that takes time.
-    if(ing){
+    // GRAB is a TAP: set a raw item DOWN on the board, or pick the item back up.
+    // The cut itself is a held COOK action (cookVerbs) that takes time. With a
+    // PLATE in hand, GRAB scoops the finished cut straight onto the plate.
+    if(plate){
+      if(s.board && s.board.state!=='raw'){ if(plateAdd(c,{id:s.board.id,state:s.board.state})){ s.board=null; syncBoardMesh(s); updateCarryMesh(); } }
+      else if(s.board){ toast('CHOP IT FIRST'); }
+    }
+    else if(ing){
       if(s.board){ toast('BOARD’S FULL'); }
       else if(c.state!=='raw'){ toast('ALREADY PREPPED'); }
       else { s.board={id:c.id, state:'raw', prog:0}; DAY.carry=null; syncBoardMesh(s); if(AC)sfx.pickup(); }
@@ -5321,28 +5341,29 @@ function stationAct(P,s){
     const it=s.item;
     if(!it && ing && c.state==='raw'){ s.item={id:c.id, t:0, state:'cooking'}; DAY.carry=null; if(AC)sfx.pickup(); }
     else if(!it && ing){ toast('COOK IT RAW'); }
+    else if(it && plate && it.state==='ready'){ if(plateAdd(c,{id:it.id,state:cookedState(s.process)})){ s.item=null; if(AC)sfx.pickup(); updateCarryMesh(); } }
     else if(it && !c && (it.state==='ready'||it.state==='burnt')){
       DAY.carry={kind:'ing', id:it.id, state:it.state==='ready'?cookedState(s.process):'burnt'}; s.item=null; if(AC)sfx.pickup(); }
   }
-  else if(s.kind==='plate'){
-    if(ing){
-      const comp={id:c.id, state:c.state};
-      if(!s.plate){
-        if(!plateAddOk([],comp)){ toast(INGREDIENTS[c.id].name+(c.state==='raw'?' — PREP IT FIRST':' DOESN’T BELONG')); }
-        else if(DAY.cleanPlates>0){ DAY.cleanPlates--; s.plate={items:[comp]}; DAY.carry=null; syncStationPlate(s); if(AC)sfx.pickup(); }
-        else toast('NO CLEAN PLATES — WASH UP');
-      } else if(matchRecipe(s.plate.items)){ toast('PLATE’S DONE — PICK IT UP'); }
-      else if(plateAddOk(s.plate.items,comp)){ s.plate.items.push(comp); DAY.carry=null; syncStationPlate(s); if(AC)sfx.pickup(); }
-      else toast(INGREDIENTS[c.id].name+(c.state==='raw'?' — PREP IT FIRST':' DOESN’T BELONG'));
+  else if(s.kind==='plate'){                                                            // the CLEAN-PLATE stack + a parking spot
+    if(ing){                                                                            // finished component -> onto a plate parked here
+      if(!s.plate){ toast('GRAB A PLATE FIRST'); }
+      else if(plateAdd(s.plate,{id:c.id,state:c.state})){ DAY.carry=null; syncStationPlate(s); }
     }
-    else if(!c && s.plate){                                                             // pick the plate up
-      const rk=matchRecipe(s.plate.items);
-      if(rk){ DAY.carry={kind:'plate', items:s.plate.items.slice(), recipe:rk}; s.plate=null; syncStationPlate(s); if(AC)sfx.pickup(); }
-      else { const m=plateMissing(s.plate.items); toast(m?('STILL NEEDS '+m):'THAT’S NOT A DISH'); }
+    else if(plate){                                                                     // set your plate down (empty -> back on the stack; partial -> park it)
+      if(c.items.length===0){ DAY.cleanPlates++; DAY.carry=null; if(AC)sfx.pickup(); }
+      else if(!s.plate){ s.plate=c; DAY.carry=null; syncStationPlate(s); if(AC)sfx.pickup(); }
+      else toast('ALREADY A PLATE HERE');
+    }
+    else if(!c){                                                                        // empty hands: take the parked plate, else draw a fresh clean one
+      if(s.plate){ DAY.carry=s.plate; s.plate=null; syncStationPlate(s); if(AC)sfx.pickup(); }
+      else if(DAY.cleanPlates>0){ DAY.cleanPlates--; DAY.carry={kind:'plate', items:[]}; if(AC)sfx.pickup(); }
+      else toast('NO CLEAN PLATES — WASH UP');
     }
   }
-  else if(s.kind==='counter'){                                                          // blank landing spot: set anything down / pick it back up
-    if(c && !s.held){ s.held=c; DAY.carry=null; syncCounterMesh(s); if(AC)sfx.pickup(); }
+  else if(s.kind==='counter'){                                                          // blank landing spot: stage anything / build onto a carried plate
+    if(plate && s.held && s.held.kind==='ing' && s.held.state!=='raw'){ if(plateAdd(c,{id:s.held.id,state:s.held.state})){ s.held=null; syncCounterMesh(s); updateCarryMesh(); } }
+    else if(c && !s.held){ s.held=c; DAY.carry=null; syncCounterMesh(s); if(AC)sfx.pickup(); }
     else if(!c && s.held){ DAY.carry=s.held; s.held=null; syncCounterMesh(s); if(AC)sfx.pickup(); }
   }
   else if(s.kind==='sink'){ if(c){ DAY.carry=null; toast('BINNED'); } }                 // tap w/ carry = trash it; empty = hold to wash
