@@ -11,13 +11,14 @@ GEN="$ROOT/public/short-order/assets.gen.js"
 mkdir -p "$ASSETS"
 
 echo "== modelling in Blender =="
-OUT="$ASSETS/plant.glb" blender --background --python "$ROOT/tools/blender/make_plant.py" 2>&1 | grep -E "WROTE|Error" || true
+OUT="$ASSETS/plant.glb"   blender --background --python "$ROOT/tools/blender/make_plant.py"   2>&1 | grep -E "WROTE|Error" || true
+OUT="$ASSETS/griddle.glb" blender --background --python "$ROOT/tools/blender/make_griddle.py" 2>&1 | grep -E "WROTE|Error" || true
 
 echo "== baking assets.gen.js =="
 python3 - "$GEN" "$ASSETS" <<'PY'
 import sys, base64, os, json
 gen, adir = sys.argv[1], sys.argv[2]
-manifest = [("plant", "plant.glb")]   # (registry key, file) -- add rows as assets grow
+manifest = [("plant", "plant.glb"), ("griddle", "griddle.glb")]   # (registry key, file) -- add rows as assets grow
 assets = {}
 for key, fname in manifest:
     with open(os.path.join(adir, fname), "rb") as f:

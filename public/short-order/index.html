@@ -379,7 +379,7 @@
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r63</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r64</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4279,7 +4279,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r63';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r64';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4895,7 +4895,9 @@ function buildAppliance(s,g){
     const inner=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.3,0.16,18),dmat(0x8bbf5a,.8,0)); inner.position.y=SURF+0.4; g.add(inner);
     const pestle=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.13,0.5,10),dmat(0x6a6058,.8,.05)); pestle.rotation.z=0.5; pestle.position.set(0.28,SURF+0.5,0); g.add(pestle);
   } else if(s.kind==='cook'){
-    if(s.process==='fry'){                       // FRYER: golden oil vat + wire basket
+    const model=assetClone(s.def);               // Blender-generated appliance body (falls back to procedural)
+    if(model){ if(model.position) model.position.y=SURF; g.add(model); s._model=model; }
+    else if(s.process==='fry'){                  // FRYER: golden oil vat + wire basket
       const vat=new THREE.Mesh(new THREE.BoxGeometry(1.25,0.6,1.05),dmat(0x2a2d32,.5,.5)); vat.position.y=SURF+0.3; g.add(vat);
       const oil=new THREE.Mesh(new THREE.BoxGeometry(1.05,0.1,0.85),dmat(0xf0b429,.25,.15)); oil.position.y=SURF+0.55; g.add(oil);
       const basket=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.28,0.6),dmat(0x8a8f96,.4,.7)); basket.position.set(0,SURF+0.5,0); g.add(basket);

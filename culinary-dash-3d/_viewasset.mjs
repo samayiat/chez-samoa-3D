@@ -15,7 +15,8 @@ const b = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium',
   args:['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--use-angle=swiftshader'] });
 const p = await (await b.newContext({viewport:{width:900,height:600},deviceScaleFactor:2})).newPage();
 const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-await p.goto(`http://localhost:${port}/viewer.html`,{waitUntil:'load',timeout:30000});
+const ASSET=process.env.ASSET||'plant.glb';
+await p.goto(`http://localhost:${port}/viewer.html?f=${ASSET}`,{waitUntil:'load',timeout:30000});
 await p.waitForFunction(()=>window.__done!==false,{timeout:15000}).catch(()=>{});
 const done=await p.evaluate(()=>window.__done);
 await p.waitForTimeout(300);
