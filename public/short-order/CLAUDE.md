@@ -185,10 +185,12 @@ Blender — it produces static assets.
   `assetClone(key)` hands out a copy. **Everything is guarded** — no GLTFLoader / no
   `SO_ASSETS` (the headless harness) means assets silently don't exist, and every
   placement must fall back to the procedural mesh (or simply skip, for pure decor).
-  Assets so far: `plant` (day-only decor, `placeDecorPlants()`) and `griddle` (an
-  appliance body — `buildAppliance` swaps `assetClone(s.def)` in for the procedural
-  cook body when present, keeping the dynamic glow/flame). Registry key == station
-  `def`, so appliance models drop in per-def with automatic procedural fallback.
+  Assets so far: `plant` (day-only decor, `placeDecorPlants()`), `counterbase`
+  (shared cabinet + chamfered worktop under every station, `buildCounter()`), and
+  the `cook`-kind appliance bodies `griddle` + `fryer` — `buildAppliance` swaps
+  `assetClone(s.def)` in for the procedural cook body when present, keeping the
+  dynamic glow/flame on top. Registry key == station `def`, so appliance models
+  drop in per-def with automatic procedural fallback (`pot` is still procedural).
 - **Render check:** `culinary-dash-3d/_plantgame.mjs` routes the vendored
   `GLTFLoader.js` for the unpkg URL; `_viewasset.mjs` previews a bare GLB over a
   local http server.
