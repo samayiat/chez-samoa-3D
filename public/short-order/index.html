@@ -379,7 +379,7 @@
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r64</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r65</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -4279,7 +4279,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r64';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r65';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4856,14 +4856,23 @@ const SURF=1.12;    // shared worktop surface height -- every appliance sits on 
 // one uniform counter unit (cabinet + flush worktop) so the run reads as one
 // continuous countertop, Overcooked/PlateUp style.
 function buildCounter(g, accent){
+  // colour-coded FRONT panel + accent lip stay procedural (the at-a-glance
+  // identifier); the neutral cabinet + chamfered worktop come from Blender when
+  // available, else the flat procedural base.
+  const front=new THREE.Mesh(new THREE.BoxGeometry(CELL-0.06,0.72,0.06),dmat(accent,.55,.1)); front.position.set(0,0.56,0.76);
+  const lip=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.07,0.08),dmat(accent,.5,.1)); lip.position.set(0,SURF-0.1,0.79);
+  const base=assetClone('counterbase');
+  if(base){
+    g.add(base); g.add(front); g.add(lip);
+    return base;
+  }
   const cab=new THREE.Mesh(new THREE.BoxGeometry(CELL,1.0,1.5),dmat(0x39414b,.7,.25));
   cab.position.y=0.5; cab.castShadow=true; cab.receiveShadow=true; g.add(cab);
   const kick=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.16,1.42),dmat(0x2b323b,.8,.2)); kick.position.y=0.08; g.add(kick);
-  // bold colour-coded FRONT panel -- this is the at-a-glance identifier
-  const front=new THREE.Mesh(new THREE.BoxGeometry(CELL-0.06,0.72,0.06),dmat(accent,.55,.1)); front.position.set(0,0.56,0.76); g.add(front);
+  g.add(front);
   const top=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.12,1.56),dmat(0xe4dfd2,.5,.05));   // flush -> continuous
   top.position.y=SURF-0.06; top.castShadow=true; g.add(top);
-  const lip=new THREE.Mesh(new THREE.BoxGeometry(CELL,0.07,0.08),dmat(accent,.5,.1)); lip.position.set(0,SURF-0.1,0.79); g.add(lip);
+  g.add(lip);
   return top;
 }
 // the distinct appliance that sits on the worktop, so each station reads at a glance
