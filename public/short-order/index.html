@@ -379,7 +379,7 @@
 <button id="bRecipes" aria-label="Recipes">📖</button>
 <div id="recipes"><div class="rcpanel"><div class="rctitle">RECIPES</div><div class="rcsub">grab each ingredient, run it through its step, then plate up</div><div id="rccards"></div><button id="rcClose" class="rcclose">CLOSE ✕</button></div></div>
 <button id="bPause" class="mpause" aria-label="Pause">&#10073;&#10073;</button>
-<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r62</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
+<div id="pause"><div class="pinner"><div class="ptitle">PAUSED</div><div class="psub">Start &middot; Esc &middot; tap to resume</div><div class="pver" id="pver">MOVEMENT BUILD r63</div><button id="devDrunk" class="pbtn">🍸 MAX DRUNK</button><button id="devVince" class="pbtn">🏗️ FIGHT VINCE</button><button id="devChef" class="pbtn">🧑‍🍳 SWAP CHEF</button><button id="devReset" class="pbtn">🔄 NEW RUN</button></div></div>
 
 <div id="touch">
   <div id="tmovezone"></div>
@@ -402,6 +402,8 @@
 </div><!--/stage-->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="assets.gen.js"></script>
 <script>
 "use strict";
 /* =========================================================================
@@ -438,6 +440,20 @@ app.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x140d07);
 scene.fog = new THREE.Fog(0x140d07, 14, 30);
+
+/* ---- generated assets: Blender models baked to GLB in assets.gen.js (build via
+   tools/blender/build.sh). ASSETS[key] holds a prototype Group; assetClone() hands
+   out a copy to place. Everything degrades to nothing if the loader/data is absent
+   (the headless harness), so the game never depends on an asset existing. */
+const ASSETS={};
+function assetClone(key){ const g=ASSETS[key]; return (g&&g.clone)? g.clone(true) : null; }
+(function loadAssets(){
+  if(typeof THREE==='undefined' || !THREE.GLTFLoader || typeof window==='undefined' || !window.SO_ASSETS) return;
+  const L=new THREE.GLTFLoader();
+  for(const key in window.SO_ASSETS){
+    try{ L.load(window.SO_ASSETS[key], g=>{ ASSETS[key]=g.scene; if(typeof placeDecorPlants==='function') placeDecorPlants(); }, undefined, ()=>{}); }catch(e){}
+  }
+})();
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 120);
 camera.position.set(0,6,9);
@@ -4263,7 +4279,7 @@ function endNight(survived){
 }
 
 /* ================================================================ CARDS */
-const BUILD_VERSION='MOVEMENT BUILD r62';   // shown on the start screen AND the pause menu -- bump every deploy
+const BUILD_VERSION='MOVEMENT BUILD r63';   // shown on the start screen AND the pause menu -- bump every deploy
 function showTitle(){
   GAME.mode='title';
   { const pv=document.getElementById('pver'); if(pv) pv.textContent=BUILD_VERSION; }
@@ -4938,6 +4954,21 @@ function buildKitchen(){
   kitchenGrp=new THREE.Group(); arena.add(kitchenGrp);
   for(const s of STATIONS) buildStationMesh(s);
   buildDining();
+  placeDecorPlants();
+}
+// potted-plant decor (first generated Blender asset). Idempotent + retried from
+// the async loader, so plants appear whether the GLB parses before or after the
+// kitchen is built. Pure decor: no collision, lives in kitchenGrp (day-only).
+let _plantsDone=false;
+function placeDecorPlants(){
+  if(_plantsDone || !kitchenGrp) return;
+  const first=assetClone('plant'); if(!first) return;         // not parsed yet -> loader will retry
+  _plantsDone=true;
+  const grp=new THREE.Group(); kitchenGrp.add(grp);
+  const spots=[ {x:-7.6,z:-7.4,s:1.2,ry:0.4}, {x:7.6,z:-7.4,s:1.2,ry:2.1},
+                {x:-8.8,z:2.4,s:1.05,ry:1.2}, {x:8.8,z:2.4,s:1.05,ry:-0.7} ];
+  spots.forEach((p,i)=>{ const m=i===0?first:assetClone('plant'); if(!m) return;
+    m.position.set(p.x,0,p.z); if(m.scale&&m.scale.setScalar) m.scale.setScalar(p.s); m.rotation.y=p.ry; grp.add(m); });
 }
 function buildDining(){
   // NO new pass counter -- the real PASS (arena) already sits here. Just dress it

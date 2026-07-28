@@ -163,6 +163,35 @@ room tone, haptics, touch controls, over-the-shoulder lock-on.
 - **Verlet ragdoll has a fallback** to a spring-topple if a build goes non-finite.
   If deaths ever look stiff, that fallback is firing.
 
+### Asset pipeline (Blender → GLB)
+
+A build-time asset factory: parametric `bpy` scripts model low-poly, flat-shaded
+props in Blender, export GLB, and get baked into the game. The player never runs
+Blender — it produces static assets.
+
+- `tools/blender/make_*.py` — one script per asset (e.g. `make_plant.py`). Pure
+  geometry + Principled materials in the warm game palette, `use_smooth=False` for
+  the faceted low-poly look. No rendering (headless-safe); GLB export needs numpy
+  (`apt install python3-numpy`, already done).
+- `tools/blender/build.sh` — runs every script and bakes the GLBs into
+  `public/short-order/assets.gen.js` as base64 data-URIs. Re-run after editing any
+  `make_*.py`.
+- **Delivery:** `assets.gen.js` (a `<script>` tag → `window.SO_ASSETS`) + the
+  matching `GLTFLoader` from unpkg. Script-tag + data-URI loads on both GitHub
+  Pages *and* `file://` (the render pipeline), so the single-file "double-click to
+  run" property survives — the asset bytes just live in a sibling generated JS
+  instead of inline in the HTML.
+- **In-game:** `loadAssets()` parses each data-URI into `ASSETS[key]`;
+  `assetClone(key)` hands out a copy. **Everything is guarded** — no GLTFLoader / no
+  `SO_ASSETS` (the headless harness) means assets silently don't exist, and every
+  placement must fall back to the procedural mesh (or simply skip, for pure decor).
+  First asset: potted plants (`placeDecorPlants()`), day-only decor in `kitchenGrp`.
+- **Render check:** `culinary-dash-3d/_plantgame.mjs` routes the vendored
+  `GLTFLoader.js` for the unpkg URL; `_viewasset.mjs` previews a bare GLB over a
+  local http server.
+- The **chef stays on the in-engine IK rig** — Blender assets are for static props
+  (food, plants, appliances, furniture), never the animated character.
+
 ### Godot port (parked)
 
 `godot-port/` holds a validated Godot 4 scaffold — a vertical slice with the rig,
