@@ -451,7 +451,8 @@ function assetClone(key){ const g=ASSETS[key]; return (g&&g.clone)? g.clone(true
   if(typeof THREE==='undefined' || !THREE.GLTFLoader || typeof window==='undefined' || !window.SO_ASSETS) return;
   const L=new THREE.GLTFLoader();
   for(const key in window.SO_ASSETS){
-    try{ L.load(window.SO_ASSETS[key], g=>{ ASSETS[key]=g.scene; if(typeof placeDecorPlants==='function') placeDecorPlants(); }, undefined, ()=>{}); }catch(e){}
+    try{ L.load(window.SO_ASSETS[key], g=>{ ASSETS[key]=g.scene; if(typeof placeDecorPlants==='function') placeDecorPlants();
+      if(key.indexOf('sky_')===0 && typeof buildSky==='function') buildSky(SKY_STATE.locale, SKY_STATE.isDay); }, undefined, ()=>{}); }catch(e){}
   }
 })();
 
@@ -914,17 +915,27 @@ function palmSilhouette(x,z,ry,scale){
     fr.position.set(0.3,4.3,0); fr.rotation.z=0.5-i*(Math.PI/6); fr.rotation.y=i*0.9; g.add(fr); }
   return g;
 }
-function buildOcean(){
-  // --- sky dome (far, barely parallaxes -- correct for sky) ---
+// the OLD canvas-gradient dome -- kept only as the 'ocean' locale's fallback
+// for when its Blender-baked sky_ocean_* asset hasn't loaded yet (the headless
+// harness has no GLTFLoader at all, or a slow first paint beats the async load).
+function buildProceduralDome(){
   const dome=new THREE.Mesh(new THREE.SphereGeometry(90,32,18),
     new THREE.MeshBasicMaterial({map:skyDomeTex(), side:THREE.BackSide, fog:false, depthWrite:false}));
-  dome.position.set(0,1.6,0); dome.renderOrder=-10; arena.add(dome);
+  dome.position.set(0,1.6,0); dome.renderOrder=-10;
+  return dome;
+}
+// sea, sun, island, boat, and the near window-palms -- the OCEAN locale's own
+// decor, kept as real geometry (see the header comment above) regardless of
+// which Blender sky is loaded. Grouped so buildSky() can show/hide it as a
+// unit when the locale isn't 'ocean' (a nebula doesn't want a sailboat in it).
+function buildOceanExtras(){
+  const oceanG=new THREE.Group(); arena.add(oceanG); arena.userData.oceanExtrasG=oceanG;
 
   // --- sea (mid: a big plane out to the horizon, texture drifts) ---
   const stex=seaTex(); OCEAN.sea=stex;
   const sea=new THREE.Mesh(new THREE.PlaneGeometry(320,320),
     new THREE.MeshBasicMaterial({map:stex, fog:false}));
-  sea.rotation.x=-Math.PI/2; sea.position.set(0,-1.9,0); sea.renderOrder=-8; arena.add(sea);   // below the deck -- you look out and slightly DOWN over the water past the railing
+  sea.rotation.x=-Math.PI/2; sea.position.set(0,-1.9,0); sea.renderOrder=-8; oceanG.add(sea);   // below the deck -- you look out and slightly DOWN over the water past the railing
 
   // --- the setting sun + glow, out the back on the horizon ---
   const sd=bearingDir(AZ_SUN), sunD=86, sunPos=[sd.x*sunD, 5.5, sd.z*sunD];
@@ -932,11 +943,11 @@ function buildOcean(){
     new THREE.MeshBasicMaterial({color:0xffb45a, fog:false, transparent:true, opacity:0.35}));
   const sun=new THREE.Mesh(new THREE.CircleGeometry(3.4,24),
     new THREE.MeshBasicMaterial({color:0xfff2cf, fog:false}));
-  for(const m of [glow,sun]){ m.position.set(sunPos[0],sunPos[1],sunPos[2]); m.lookAt(0,sunPos[1],0); m.renderOrder=-9; arena.add(m); }
+  for(const m of [glow,sun]){ m.position.set(sunPos[0],sunPos[1],sunPos[2]); m.lookAt(0,sunPos[1],0); m.renderOrder=-9; oceanG.add(m); }
 
   // --- distant island silhouette, off to the sun side ---
   const id=bearingDir(AZ_SUN-0.45), isleD=58;
-  const isle=new THREE.Group(); isle.position.set(id.x*isleD, 0, id.z*isleD); arena.add(isle);
+  const isle=new THREE.Group(); isle.position.set(id.x*isleD, 0, id.z*isleD); oceanG.add(isle);
   const islMat=new THREE.MeshBasicMaterial({color:0x121a30, fog:false});
   for(const [ox,w,h] of [[-6,10,2.4],[2,14,3.6],[10,8,1.9]]){
     const hump=new THREE.Mesh(new THREE.CylinderGeometry(0.1,w*0.5,h,5), islMat);
@@ -945,7 +956,7 @@ function buildOcean(){
 
   // --- a boat drifting across the bay (animated) ---
   const bd=bearingDir(AZ_SUN), boatD=34;
-  const boat=new THREE.Group(); boat.position.set(0,-0.4,bd.z*boatD); arena.add(boat); OCEAN.boat=boat; OCEAN.boatD=boatD;
+  const boat=new THREE.Group(); boat.position.set(0,-0.4,bd.z*boatD); oceanG.add(boat); OCEAN.boat=boat; OCEAN.boatD=boatD;
   const bMat=new THREE.MeshBasicMaterial({color:0x0a1020, fog:false});
   const hull=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.5,0.7),bMat); boat.add(hull);
   const sail=new THREE.Mesh(new THREE.BoxGeometry(0.08,1.6,0.5),bMat); sail.position.set(0,1.0,0); boat.add(sail);
@@ -954,10 +965,40 @@ function buildOcean(){
   for(const win of WINDOWS){
     const o=bearingDir((win.ry+Math.PI));            // outward normal of this window
     const px=win.x + o.x*2.8 + o.z*2.4, pz=win.z + o.z*2.8 - o.x*2.4;   // outside + to one side
-    palmSilhouette(px, pz, win.ry+0.3, 0.9);
+    oceanG.add(palmSilhouette(px, pz, win.ry+0.3, 0.9));
   }
 }
-buildOcean();
+/* ---- MULTI-LOCALE SKYBOX ----------------------------------------------
+   One Blender-baked dome per {locale x day/night}, modelled by
+   tools/blender/make_sky_*.py and baked into assets.gen.js as
+   sky_<locale>_<day|night> (see loadAssets() above). Which locale is
+   "tonight" rotates with the run so the view outside changes night to
+   night: ocean -> nebula -> city -> underwater -> aurora -> warp -> repeat.
+   Day and night are genuinely different bakes per locale (not a tint), so
+   the sky visibly changes at every day<->night transition too.
+   currentLocale() reads RUN.day, so never call it before RUN exists --
+   the very first paint (module init, below) primes with a literal 'ocean'
+   default instead and dayScene() takes over once the run is live. */
+const LOCALE_ORDER=['ocean','nebula','city','underwater','aurora','warp'];
+function currentLocale(){ return LOCALE_ORDER[((RUN.day-1)%LOCALE_ORDER.length+LOCALE_ORDER.length)%LOCALE_ORDER.length]; }
+let SKY_STATE={locale:'ocean', isDay:true};
+function buildSky(locale, isDay){
+  SKY_STATE.locale=locale; SKY_STATE.isDay=isDay;
+  const old=arena.userData.skyAssetG; if(old) arena.remove(old);   // shared geometry/materials -- never dispose, just detach
+  const model=assetClone('sky_'+locale+'_'+(isDay?'day':'night'));
+  let g=null;
+  if(model){
+    g=model;
+    g.traverse(o=>{ if(o.isMesh){ o.renderOrder=-10; if(o.material){ o.material.fog=false; o.material.depthWrite=false; } } });
+    g.position.set(0,1.6,0); arena.add(g);
+  } else if(locale==='ocean'){
+    g=buildProceduralDome(); arena.add(g);        // asset not loaded yet -- old canvas-gradient dome
+  }                                                // other locales: pure decor, simply skipped until the asset lands
+  arena.userData.skyAssetG=g;
+  const oceanG=arena.userData.oceanExtrasG; if(oceanG) oceanG.visible=(locale==='ocean');
+}
+buildOceanExtras();
+buildSky('ocean', true);   // safe literal default for the very first paint -- dayScene() retakes it once the run is live
 
 // (the enclosed glass windows are gone -- the terrace colonnade + pergola above
 // frame the open bay directly. winFrameMat/wellDark are reused by the posts.)
@@ -5816,6 +5857,7 @@ function dayScene(on){
   const bg=arena.userData.barG; if(bg) bg.visible=!on;                                // hide the liquor 'island'
   const pl=arena.userData.palmsG; if(pl) for(const p of pl) p.visible=!on;            // and the after-hours palms
   const pg=arena.userData.pergola; if(pg) for(const m of pg) m.visible=!on;           // and the overhead beams/colonnade
+  if(typeof buildSky==='function') buildSky(currentLocale(), on);                    // swap the outside view for tonight's locale + day/night
 }
 // bob every board's knife: fast up/down while COOK is held (s._chopping), easing
 // back to a raised rest otherwise. Flecks fly off the food on each down-stroke.

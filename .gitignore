@@ -15,6 +15,7 @@ dist-kitchen
 extracted/
 *.local
 public/short-order/game.js
+__pycache__/
 
 # Local Claude Code preview config
 .claude/

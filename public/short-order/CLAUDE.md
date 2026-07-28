@@ -191,6 +191,24 @@ Blender — it produces static assets.
   `assetClone(s.def)` in for the procedural cook body when present, keeping the
   dynamic glow/flame on top. Registry key == station `def`, so appliance models
   drop in per-def with automatic procedural fallback (`pot` is still procedural).
+- **Skybox:** `tools/blender/sky_common.py` holds shared helpers (`mat`/`box`/
+  `sphere`/`cone_z`/`ring_torus`/`dome_bands`) imported by six locale scripts
+  (`make_sky_ocean.py`, `_nebula`, `_city`, `_underwater`, `_aurora`, `_warp`),
+  each reading a `VARIANT=day|night` env var so day and night are genuinely
+  different bakes per locale, not a tint — `build.sh` runs all 12 combinations.
+  `buildSky(locale, isDay)` (index.html, next to `buildOceanExtras()`) swaps
+  `assetClone('sky_'+locale+'_'+variant)` in as `arena.userData.skyAssetG`,
+  called from `dayScene()` on every day/night transition. `currentLocale()`
+  cycles `LOCALE_ORDER` off `RUN.day`, so the view outside rotates night to
+  night. The ocean locale's sea/sun/island/boat/window-palms stay real
+  procedural JS (`buildOceanExtras()`) — Blender only bakes the dome — and
+  that group is hidden whenever the active locale isn't `'ocean'`. Fallback:
+  `'ocean'` still has the original canvas-gradient dome (`buildProceduralDome()`)
+  for when the GLB hasn't loaded yet; the other five locales simply have no
+  dome until their asset lands (pure decor, matches the "or simply skip" rule).
+  The dead `LOCALES`/`loc*` canvas-painting block (~line 696–850, ported
+  near-verbatim from culinary-dash) predates all of this and was left alone —
+  it still builds six unused canvases but nothing ever reads them.
 - **Render check:** `culinary-dash-3d/_plantgame.mjs` routes the vendored
   `GLTFLoader.js` for the unpkg URL; `_viewasset.mjs` previews a bare GLB over a
   local http server.
