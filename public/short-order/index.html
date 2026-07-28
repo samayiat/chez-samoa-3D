@@ -2548,26 +2548,32 @@ function updatePlayer(dt, pad){
   // >= the prompt's detection range so anything prompted is actually grabbable.
   // GRAB (R2 / Triangle / F) -- context-sensitive:
   //  - holding a patron        -> throw them (drop)
+  //  - at the bar, nobody to grab/rush -> chug a drink
   //  - MOVING (with a target)  -> GRAB RUSH: charge in; drop your weapon first if armed
   //  - stationary + armed      -> drop the weapon to bare hands
   //  - stationary + bare hands -> grab someone in reach (armed enemy = wrestle for their weapon),
   //                               else pick up a utensil you're standing on
   // HOLD the grab button at the bar to keep chugging (chugDrink self-throttles via drinkCD)
+  // atBar()'s zone is deliberately generous ("don't have to hunt for the exact spot"),
+  // which used to mean ANY grab press back there drank instead of grabbing/rushing --
+  // you could be nose-to-nose with an enemy at the back wall and GRAB would only ever
+  // chug. A real grab/rush target now always wins; the drink is the fallback.
   if(GAME.mode==='day'){ cookVerbs(P,pad,dt); }
   else if(GAME.mode==='plan'){ planVerbs(P,pad,dt); }
-  if(!COOKING && !P.attack && !P.hold && atBar(P) && (KEY['f']||pad.pickupHeld||TOUCH.pickupHeld)) chugDrink(P);
+  if(!COOKING && !P.attack && !P.hold && atBar(P) && !grabTarget(P,GRAB_REACH,1.4) && (KEY['f']||pad.pickupHeld||TOUCH.pickupHeld)) chugDrink(P);
   if(!COOKING && !P.attack && (pad.pickup||pad.rush||tapK('f')||consume('pickupEdge'))){   // no grab/throw/drop/pickup mid-swing
+    let ax=mv.x, az=mv.z; const al=Math.hypot(ax,az);
+    if(al>1e-3){ ax/=al; az/=al; } else { ax=Math.sin(P.facing); az=Math.cos(P.facing); }
+    const barTarget = moving ? (rushTarget(P, ax, az) || grabTarget(P, GRAB_REACH, 1.4)) : grabTarget(P, GRAB_REACH, 1.4);
     if(P.hold){ throwHeld(P); }
-    else if(atBar(P)){ chugDrink(P); }                          // at the bar: GRAB = chug a drink
+    else if(atBar(P) && !barTarget){ chugDrink(P); }            // at the bar, nobody in reach: chug
     else if(moving){
-      let ax=mv.x, az=mv.z; const al=Math.hypot(ax,az);
-      if(al>1e-3){ ax/=al; az/=al; } else { ax=Math.sin(P.facing); az=Math.cos(P.facing); }
-      const t = rushTarget(P, ax, az) || grabTarget(P, GRAB_REACH, 1.4);
+      const t=barTarget;
       if(t){ if(P.wpn!=='fists') dropWeapon(P); startGrabRush(P, t); }
     }
     else if(P.wpn!=='fists'){ dropWeapon(P); }
     else {
-      const g=grabTarget(P, GRAB_REACH, 1.4);
+      const g=barTarget;
       if(g){ if(g.wpn!=='fists') startWeaponSteal(P,g); else grabEnemy(P,g); }
       else if(nearPickup && Math.hypot(nearPickup.x-P.pos.x, nearPickup.z-P.pos.z)<2.0) tryPickup();
     }
@@ -3795,8 +3801,11 @@ const PARRY_WINDOW=0.2;   // seconds after a fresh guard tap that an incoming hi
 // wander (movement drift). player._drunk is the 0..1 source of truth every drunk
 // visual/feel reads (ported from the 2D game's wastedAmt). ----
 const DRINK_BUZZ_AT=2, DRINK_WASTED_AT=4, WASTED_TIME=28, DRINK_CD=0.7, DRINK_ANIM_TIME=0.7;   // 28s wasted window (doubled)
-// generous zone in FRONT of the bar so you don't have to hunt for the exact spot
-function atBar(P){ return Math.abs(P.pos.x-BAR.x)<BAR.w/2+1.4 && Math.abs(P.pos.z-BAR.z)<BAR.d/2+3.0; }
+// generous zone in FRONT of the bar so you don't have to hunt for the exact spot --
+// but not SO generous it reaches into the kitchen-side combat space (the old +3.0
+// front reach covered the whole back-wall cook line, so GRAB fallback-chugged with
+// nobody around and no bar in sight; +1.6 still forgives a step or two of miss).
+function atBar(P){ return Math.abs(P.pos.x-BAR.x)<BAR.w/2+1.4 && Math.abs(P.pos.z-BAR.z)<BAR.d/2+1.6; }
 function chugDrink(P){
   if((P.drinkCD||0)>0) return;
   P.drinks=(P.drinks||0)+1; P.wastedT=WASTED_TIME; P.drinkCD=DRINK_CD; P._drinkT=DRINK_ANIM_TIME; P._sq=Math.max(P._sq||0,0.18);
