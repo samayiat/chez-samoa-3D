@@ -192,15 +192,25 @@ Blender — it produces static assets.
   dynamic glow/flame on top. Registry key == station `def`, so appliance models
   drop in per-def with automatic procedural fallback (`pot` is still procedural).
 - **Skybox:** `tools/blender/sky_common.py` holds shared helpers (`mat`/`box`/
-  `sphere`/`cone_z`/`ring_torus`/`dome_bands`) imported by six locale scripts
-  (`make_sky_ocean.py`, `_nebula`, `_city`, `_underwater`, `_aurora`, `_warp`),
-  each reading a `VARIANT=day|night` env var so day and night are genuinely
-  different bakes per locale, not a tint — `build.sh` runs all 12 combinations.
-  `buildSky(locale, isDay)` (index.html, next to `buildOceanExtras()`) swaps
-  `assetClone('sky_'+locale+'_'+variant)` in as `arena.userData.skyAssetG`,
-  called from `dayScene()` on every day/night transition. `currentLocale()`
-  cycles `LOCALE_ORDER` off `RUN.day`, so the view outside rotates night to
-  night. The ocean locale's sea/sun/island/boat/window-palms stay real
+  `sphere`/`cone_z`/`ring_torus`/`dome_bands`) imported by five locale scripts
+  (`make_sky_ocean.py`, `_nebula`, `_city`, `_underwater`, `_aurora` — `_warp`
+  was cut, it wasn't earning its slot), each reading a `VARIANT=day|night` env
+  var so day and night are genuinely different bakes per locale, not a tint —
+  `build.sh` runs all 10 combinations. `buildSky(locale, isDay)` (index.html,
+  next to `buildOceanExtras()`) swaps `assetClone('sky_'+locale+'_'+variant)`
+  in as `arena.userData.skyAssetG`, called from `dayScene()` on every
+  day/night transition. Loaded sky materials are re-mapped onto unlit
+  `MeshBasicMaterial` in `buildSky()` — Blender's Principled BSDF exports as a
+  *lit* PBR material over glTF, and a background dome/skyline lit by the
+  room's actual key light shades wrong-looking dark on the far side, so the
+  swap (base colour + emissive folded in) is required, not cosmetic.
+  `currentLocale()` cycles `LOCALE_ORDER` off `RUN.day`, so the view outside
+  rotates night to night. `make_sky_city.py` in particular builds two rings —
+  a close ring of looming "neighbour" rooftops (water towers / antennas / AC
+  clutter, one signature spire, gaps for street sightlines) plus a dense hazy
+  distant skyline faded toward the horizon colour for cheap atmospheric
+  perspective — so the restaurant reads as sitting ON a rooftop, not looking
+  at a skyline postcard out one window. The ocean locale's sea/sun/island/boat/window-palms stay real
   procedural JS (`buildOceanExtras()`) — Blender only bakes the dome — and
   that group is hidden whenever the active locale isn't `'ocean'`. Fallback:
   `'ocean'` still has the original canvas-gradient dome (`buildProceduralDome()`)

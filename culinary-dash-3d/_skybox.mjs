@@ -30,7 +30,7 @@ const info = await p.evaluate(()=>({
 }));
 console.log('sky assets declared:', info.soAssets.length, '| loaded so far:', info.loaded.length);
 
-const LOCALES=['ocean','nebula','city','underwater','aurora','warp'];
+const LOCALES=['ocean','nebula','city','underwater','aurora'];
 
 await p.evaluate(()=>{ window.__origUpdateCamera=updateCamera; });   // save before nooping it below
 
@@ -76,6 +76,6 @@ for (let i=0;i<LOCALES.length;i++){
 }
 
 const finalInfo = await p.evaluate(()=>Object.keys(ASSETS||{}).filter(k=>k.startsWith('sky_')));
-console.log('sky assets loaded by end of run:', finalInfo.length, '/ 12 ->', finalInfo.join(','));
+console.log('sky assets loaded by end of run:', finalInfo.length, '/', LOCALES.length*2, '->', finalInfo.join(','));
 await b.close();
 console.log('errors:', errs.length ? errs.slice(0,8).join(' | ') : 'none');

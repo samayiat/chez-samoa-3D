@@ -979,7 +979,7 @@ function buildOceanExtras(){
    currentLocale() reads RUN.day, so never call it before RUN exists --
    the very first paint (module init, below) primes with a literal 'ocean'
    default instead and dayScene() takes over once the run is live. */
-const LOCALE_ORDER=['ocean','nebula','city','underwater','aurora','warp'];
+const LOCALE_ORDER=['ocean','nebula','city','underwater','aurora'];
 function currentLocale(){ return LOCALE_ORDER[((RUN.day-1)%LOCALE_ORDER.length+LOCALE_ORDER.length)%LOCALE_ORDER.length]; }
 let SKY_STATE={locale:'ocean', isDay:true};
 function buildSky(locale, isDay){
