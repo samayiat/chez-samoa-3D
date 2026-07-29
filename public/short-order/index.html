@@ -989,7 +989,23 @@ function buildSky(locale, isDay){
   let g=null;
   if(model){
     g=model;
-    g.traverse(o=>{ if(o.isMesh){ o.renderOrder=-10; if(o.material){ o.material.fog=false; o.material.depthWrite=false; } } });
+    // Blender's Principled BSDF exports as a LIT PBR material over glTF, so
+    // loaded as-is it gets shaded by the room's actual key light -- the side
+    // of the dome facing away from it renders dark/gray instead of its
+    // authored colour. Sky/space/skyline geometry should read as unlit
+    // background, exactly like the old MeshBasicMaterial dome and every
+    // other ocean-extras prop here, so swap each submesh onto an unlit
+    // MeshBasicMaterial (base colour + emissive folded in) instead.
+    g.traverse(o=>{ if(o.isMesh){ o.renderOrder=-10;
+      const m=o.material; if(m){
+        const col=(m.color?m.color.clone():new THREE.Color(0xffffff));
+        if(m.emissive && (m.emissiveIntensity||0)>0){
+          const k=Math.min(1,m.emissiveIntensity);
+          col.r=Math.min(1,col.r+m.emissive.r*k); col.g=Math.min(1,col.g+m.emissive.g*k); col.b=Math.min(1,col.b+m.emissive.b*k);
+        }
+        o.material=new THREE.MeshBasicMaterial({color:col, fog:false, depthWrite:false, side:m.side});
+      }
+    } });
     g.position.set(0,1.6,0); arena.add(g);
   } else if(locale==='ocean'){
     g=buildProceduralDome(); arena.add(g);        // asset not loaded yet -- old canvas-gradient dome
