@@ -1,45 +1,39 @@
-# Short Order sky pipeline -- CITY locale. The restaurant reads as a ROOFTOP
-# deck in the middle of a real skyline, not a postcard skyline out one window:
-# a close ring of looming "neighbour" rooftops (with water towers / antennas /
-# AC-unit clutter, one signature tall spire) surrounds the whole horizon, with
-# a denser, hazier, atmospheric-perspective-faded skyline further out filling
-# the gaps between them. Day: clear sky, silhouettes fade toward the horizon
-# haze. Night: the near buildings light up window-by-window, a searchlight
-# sweeps from one rooftop, the far skyline is a field of dim distant lights.
-#
-# Windows are a baked texture (window_grid_image/facade_mat), not one box per
-# window -- hundreds of windows per building for the cost of one quad, the
-# standard game-art cheat for dense facades. See sky_common.py for why the
-# glow itself is baked into the colour image rather than routed through a
-# separate Emission map (the vendored r128 GLTFLoader this game uses doesn't
-# understand KHR_materials_emissive_strength -- verified by an actual
-# export+reload round-trip -- so Emission Strength above 1 silently clamps).
+# Short Order sky pipeline -- CITY locale. Two attempts at a rooftop skyline
+# with real per-building geometry (even textured) still read as too sparse --
+# there's a hard ceiling on how many boxes are worth modelling. The actual
+# game-art cheat: don't model the city at all. ONE cylinder wall, wrapped in
+# ONE big painted skyline texture (numpy raster, unlimited "building" count
+# since it's just pixels) with an alpha cutout above the rooflines so the sky
+# dome shows through behind it. Two baked depth layers (hazy distant strip +
+# darker looming near strip, drawn into the SAME image) fake the near/far
+# read a real geometry ring gave without needing one. A handful of real 3D
+# elements survive on top for pop: one signature spire+beacon and a
+# searchlight beam -- everything else here is paint.
 # Run headless:  OUT=/path/out.glb VARIANT=day|night blender --background --python make_sky_city.py
-import sys, os, math, random
+import sys, os, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sky_common import init, variant, mat, box, textured_box, window_grid_image, facade_mat, cone_z, finish, dome_bands, export
-import bmesh
+from sky_common import init, variant, mat, cone_z, finish, dome_bands, cylinder_wall, facade_mat_alpha, export
+import bpy, bmesh, numpy as np
 
 OUT=os.environ.get("OUT","/tmp/sky_city.glb")
 V=variant()
 init()
 R=90.0
-R_FAR=86.0     # distant skyline, hazy, dense, full ring
-R_NEAR=40.0    # close "neighbour" rooftops -- what actually sells the rooftop feel
+R_WALL=55.0     # the one skyline cylinder
 
 if V=="day":
     bands=[
-        (-5, 12, mat("b0",(0.72,0.78,0.84))),     # low haze -- also the atmospheric-perspective target colour
+        (-5, 12, mat("b0",(0.72,0.78,0.84))),
         (12, 40, mat("b1",(0.46,0.60,0.82))),
         (40, 72, mat("b2",(0.26,0.44,0.78))),
         (72, 90, mat("b3",(0.14,0.30,0.64))),
     ]
     haze=(0.72,0.78,0.84)
-    near_wall_cols=[(0.36,0.36,0.40),(0.44,0.34,0.28),(0.30,0.40,0.46),(0.40,0.40,0.44)]   # concrete / brick / glass-blue / concrete
-    near_win_col=(0.16,0.20,0.26)      # dark glass panes, not glowing -- daytime windows just read darker than the wall
-    far_win_col=(0.20,0.24,0.30)
-    lit_frac=0.85                       # "windows" always -- it's glazing, not lighting, during the day
-    window_lit=False; beacon_emit=0.4; searchlight=False
+    far_wall,far_win=(0.55,0.60,0.66),(0.30,0.36,0.44)
+    near_walls=[(0.32,0.32,0.36),(0.40,0.30,0.24),(0.26,0.36,0.42),(0.36,0.36,0.40)]
+    near_win=(0.14,0.18,0.24)
+    far_lit,near_lit=0.75,0.75           # daytime "lit" = distinct glass panes, not glow
+    beacon_emit=0.4; searchlight=False
 else:
     bands=[
         (-5, 12, mat("b0",(0.10,0.09,0.14))),
@@ -48,90 +42,82 @@ else:
         (72, 90, mat("b3",(0.012,0.012,0.04))),
     ]
     haze=(0.10,0.09,0.14)
-    near_wall_cols=[(0.05,0.05,0.06),(0.045,0.04,0.045),(0.04,0.045,0.055),(0.05,0.045,0.05)]
-    near_win_col=(1.0,0.82,0.35)        # bright warm lit windows -- baked straight into the texture, see header
-    far_win_col=(0.9,0.75,0.5)
-    lit_frac=0.4                        # only some windows lit at night
-    window_lit=True; beacon_emit=2.6; searchlight=True
+    far_wall,far_win=(0.06,0.055,0.09),(0.55,0.48,0.35)
+    near_walls=[(0.045,0.045,0.05),(0.04,0.035,0.04),(0.035,0.04,0.05),(0.045,0.04,0.045)]
+    near_win=(1.0,0.82,0.35)
+    far_lit,near_lit=0.20,0.42
+    beacon_emit=2.6; searchlight=True
 
 dome_bands(R, bands)
 
-# ---- FAR skyline: a dense full ring, faded toward the haze colour (cheap
-# atmospheric perspective -- no fog shader needed, just blend the albedo).
-# One shared window-grid texture (not unique per building -- these are too
-# small/distant for individual variety to read) gives the whole ring a
-# consistent "field of tiny windows" texture instead of a flat silhouette. ----
-random.seed(3)
-def lerp(a,b,t): return tuple(a[i]+(b[i]-a[i])*t for i in range(3))
-far_wall=lerp((0.30,0.32,0.38) if V=="day" else (0.03,0.03,0.05), haze, 0.55)
-far_img=window_grid_image("far", cols=4, rows=14, wall_rgb=far_wall, win_rgb=lerp(far_win_col,haze,0.35), lit_frac=(0.9 if V=="day" else 0.3), seed=101)
-m_far=facade_mat("m_far", far_img, rough=0.85)
-n_far=52
-bm=bmesh.new()
-for i in range(n_far):
-    az=2*math.pi*i/n_far + random.uniform(-0.05,0.05)
-    h=4+random.random()*12; w=1.6+random.random()*1.6
-    cx,cy=R_FAR*math.cos(az), R_FAR*math.sin(az)
-    textured_box(bm, cx, cy, h/2, w, w*0.75, h)
-finish("farskyline", bm, m_far)
+def lerp3(a,b,t): return tuple(a[i]+(b[i]-a[i])*t for i in range(3))
+far_wall=lerp3(far_wall,haze,0.5)   # atmospheric perspective -- fade the distant layer toward the horizon colour
+far_win=lerp3(far_win,haze,0.35)
 
-# ---- NEAR "neighbour" rooftops: fewer, bigger, looming, each with its OWN
-# baked facade texture (window count scaled to its real height/width) so the
-# ring reads as genuinely varied buildings up close, not a repeated tile.
-# Gaps between them read as open street sightlines rather than a solid wall. ----
-random.seed(19)
-n_near=20
-buildings=[]   # (cx,cy,h,w,landmark) for clutter passes below
-bidx=0
-for i in range(n_near):
-    if random.random()<0.18: continue   # gaps -- an open sightline down a "street"
-    az=2*math.pi*i/n_near + random.uniform(-0.07,0.07)
-    landmark = (i==0)
-    h=(30+random.random()*10) if landmark else (10+random.random()*16)
-    w=3.5+random.random()*2.5
-    cx,cy=R_NEAR*math.cos(az), R_NEAR*math.sin(az)
-    wall=near_wall_cols[bidx%len(near_wall_cols)]
-    win=lerp(near_win_col,(0,0,0),random.uniform(0,0.15))   # slight per-building tint variance
-    cols=max(3,round(w*1.3)); rows=max(5,round(h*0.7))
-    img=window_grid_image("near%d"%bidx, cols=cols, rows=rows, wall_rgb=wall, win_rgb=win, lit_frac=lit_frac, seed=200+bidx)
-    m=facade_mat("m_near%d"%bidx, img, rough=0.8, metal=0.1)
-    bm=bmesh.new(); textured_box(bm, cx, cy, h/2, w, w*0.85, h)
-    finish("nearbldg%d"%bidx, bm, m)
-    buildings.append((cx,cy,h,w,landmark))
-    bidx+=1
+# ---- the ONE skyline texture: two depth layers painted into one raster ----
+W,H,CELL=1536,384,6
+rng=np.random.default_rng(11 if V=="day" else 12)
+img=np.zeros((H,W,4),dtype=np.float32)   # fully transparent -- alpha cutout lets the dome show through above the roofline
 
-# rooftop clutter: water towers / AC clusters / antennas on ~half the buildings
-random.seed(29)
-m_clutter=mat("m_clutter",(0.32,0.24,0.18) if V=="day" else (0.06,0.05,0.04), rough=0.7)
-bm=bmesh.new()
-for (cx,cy,h,w,landmark) in buildings:
-    if landmark:
-        cone_z(bm, 0.5, 0.05, h, h+8, cx, cy, segs=8)   # the signature spire
-        continue
-    roll=random.random()
-    if roll<0.35:                                        # water tower: barrel on legs
-        cone_z(bm, 1.1, 1.1, h, h+1.6, cx+random.uniform(-w*0.2,w*0.2), cy, segs=10)
-        cone_z(bm, 1.3, 0.0, h+1.6, h+2.3, cx, cy, segs=10)
-    elif roll<0.6:                                        # AC unit cluster
-        for _ in range(3):
-            box(bm, cx+random.uniform(-w*0.3,w*0.3), cy+random.uniform(-w*0.3,w*0.3), h+0.3, 0.6, 0.6, 0.6)
-    elif roll<0.8:                                        # antenna spike
-        cone_z(bm, 0.15, 0.02, h, h+3.5, cx, cy, segs=6)
-finish("clutter", bm, m_clutter)
+# wall_cols: either one (r,g,b) tuple or a list -- when a list, each building
+# picks a random entry so the skyline shows real colour variety up close.
+def draw_layer(img, rng, wall_cols, win_col, lit_frac, hmin, hmax, wmin, wmax, gap_prob, clutter_prob):
+    cols_list = wall_cols if isinstance(wall_cols[0], (tuple,list)) else [wall_cols]
+    m=max(1,int(CELL*0.16))
+    x=0
+    while x<W:
+        if rng.random()<gap_prob:
+            x+=int(rng.integers(wmin,wmax+1)); continue
+        w=int(rng.integers(wmin,wmax+1)); h=int(rng.integers(hmin,hmax+1))
+        x1=min(W,x+w)
+        if x1<=x: break
+        wall_col=cols_list[rng.integers(0,len(cols_list))]
+        img[0:h, x:x1, 0]=wall_col[0]; img[0:h, x:x1, 1]=wall_col[1]; img[0:h, x:x1, 2]=wall_col[2]; img[0:h, x:x1, 3]=1.0
+        cols=max(1,(x1-x)//CELL); rows=max(1,h//CELL)
+        for r in range(rows):
+            ry0,ry1=r*CELL+m,(r+1)*CELL-m
+            if ry1<=ry0 or ry1>h: continue
+            for c in range(cols):
+                if rng.random()>=lit_frac: continue
+                cx0,cx1=x+c*CELL+m, x+(c+1)*CELL-m
+                if cx1<=cx0 or cx1>x1: continue
+                img[ry0:ry1, cx0:cx1, 0]=win_col[0]; img[ry0:ry1, cx0:cx1, 1]=win_col[1]; img[ry0:ry1, cx0:cx1, 2]=win_col[2]
+        if rng.random()<clutter_prob:                       # antenna or water-tower blob on the roof
+            ccol=(wall_col[0]*0.6,wall_col[1]*0.6,wall_col[2]*0.6)
+            if rng.random()<0.5:
+                ah=int(rng.integers(14,30)); ax=(x+x1)//2; aw=max(2,CELL//3)
+                img[h:h+ah, ax-aw//2:ax+aw//2, 0]=ccol[0]; img[h:h+ah, ax-aw//2:ax+aw//2, 1]=ccol[1]; img[h:h+ah, ax-aw//2:ax+aw//2, 2]=ccol[2]; img[h:h+ah, ax-aw//2:ax+aw//2, 3]=1.0
+            else:
+                tw=max(6,(x1-x)//3); tx=(x+x1)//2-tw//2
+                img[h:h+10, tx:tx+tw, 0]=ccol[0]; img[h:h+10, tx:tx+tw, 1]=ccol[1]; img[h:h+10, tx:tx+tw, 2]=ccol[2]; img[h:h+10, tx:tx+tw, 3]=1.0
+        x=x1
 
-# beacon: kept as its own small landmark distinct from the signature spire above
+# hazy distant layer first (shorter, denser, near-continuous)
+draw_layer(img, rng, far_wall, far_win, far_lit, hmin=30,hmax=130, wmin=18,wmax=42, gap_prob=0.04, clutter_prob=0.0)
+# looming near layer on top, occluding the distant one where it overlaps -- real colour variety per building
+draw_layer(img, rng, near_walls, near_win, near_lit, hmin=110,hmax=320, wmin=45,wmax=95, gap_prob=0.14, clutter_prob=0.30)
+
+bimg=bpy.data.images.new("city_wall", width=W, height=H, alpha=True)
+bimg.pixels=img.flatten().tolist(); bimg.pack()
+m_wall=facade_mat_alpha("m_citywall", bimg, rough=0.85)
+
 bm=bmesh.new()
-cone_z(bm, 0.5, 0.08, 0, 12, R_NEAR*0.55, R_NEAR*0.2)
-finish("beacon", bm, m_clutter)
+cylinder_wall(bm, R_WALL, 0, 48, segs=64)
+finish("citywall", bm, m_wall)
+
+# ---- the few real 3D elements that survive: one signature spire+beacon, one searchlight ----
 bm=bmesh.new()
-cone_z(bm, 0.25, 0.03, 12, 14, R_NEAR*0.55, R_NEAR*0.2)
+cone_z(bm, 0.6, 0.06, 0, 40, R_WALL*0.55, R_WALL*0.2, segs=8)
+finish("spire", bm, mat("m_spire", near_walls[0], rough=0.8))
+bm=bmesh.new()
+cone_z(bm, 0.25, 0.03, 40, 42, R_WALL*0.55, R_WALL*0.2)
 finish("beacontip", bm, mat("m_beacon",(1.0,0.2,0.55), rough=0.2, emit=(1.0,0.2,0.55), estrength=beacon_emit))
 
 if searchlight:
     bm=bmesh.new()
     m_beam=mat("m_beam",(0.75,0.85,1.0), rough=0.3, emit=(0.75,0.85,1.0), estrength=1.6)
-    bx,by = R_NEAR*0.7, -R_NEAR*0.3
-    cone_z(bm, 0.06, 2.4, 24, 82, bx, by, segs=10)   # thin at the source, wide against the sky -- silhouettes as a beam
+    bx,by = R_WALL*0.7, -R_WALL*0.3
+    cone_z(bm, 0.06, 2.4, 22, 82, bx, by, segs=10)
     finish("searchbeam", bm, m_beam)
 
 export(OUT)

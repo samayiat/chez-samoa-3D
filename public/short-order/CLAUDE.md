@@ -207,22 +207,29 @@ Blender — it produces static assets.
   must also copy `map` onto the replacement material, or a textured facade
   (see next) silently loses its texture and renders as a flat colour.
   `currentLocale()` cycles `LOCALE_ORDER` off `RUN.day`, so the view outside
-  rotates night to night. `make_sky_city.py` in particular builds two rings —
-  a close ring of looming "neighbour" rooftops (water towers / antennas / AC
-  clutter, one signature spire, gaps for street sightlines) plus a dense hazy
-  distant skyline faded toward the horizon colour for cheap atmospheric
-  perspective — so the restaurant reads as sitting ON a rooftop, not looking
-  at a skyline postcard out one window. Building windows are a baked texture
-  (`sky_common.py`'s `window_grid_image`/`facade_mat`/`textured_box`), not one
-  box per window — the standard game-art cheat for dense facades, hundreds of
-  windows per building for the cost of one UV-mapped quad. The window glow
-  itself is baked straight into that colour texture rather than routed
-  through a separate Emission map: an actual export→reload round-trip showed
-  the vendored r128 GLTFLoader doesn't understand
+  rotates night to night. `make_sky_city.py` went through three passes before
+  it stopped reading as bare: individual window boxes, then per-building
+  baked facade textures (`window_grid_image`/`facade_mat`/`textured_box`) —
+  both still hit a ceiling on how many buildings are worth placing as real
+  geometry. The one that actually reads as a dense city: **one cylinder**
+  (`cylinder_wall`, a single UV-mapped mesh wrapping the full 360°) wearing
+  **one big painted skyline texture** (numpy raster, two depth layers —
+  hazy/short/near-continuous distant strip, then a darker/taller/gappier near
+  strip drawn on top — baked into the same image), alpha-cut (`facade_mat_alpha`,
+  Blender `blend_method='CLIP'`) above the rooflines so the sky dome shows
+  through behind it. Building count is now just pixel-painting cost, not
+  geometry cost, so it can be as dense as the texture resolution allows — a
+  handful of real 3D elements (one signature spire+beacon, one searchlight
+  beam) still sit on top for pop, but every "building" is paint. Two export
+  round-trip gotchas this surfaced, both worth knowing before touching sky
+  assets again: (1) the vendored r128 GLTFLoader doesn't understand
   `KHR_materials_emissive_strength`, so `Emission Strength` above 1 silently
-  clamps to 1 on load — not enough punch to read as lit-window-vs-dark-wall.
-  Don't reach for Emission textures on new sky assets for that reason; paint
-  the desired brightness directly into the base colour image instead. The
+  clamps to 1 on load — bake glow brightness straight into the base colour
+  texture instead of an Emission map; (2) `blend_method='CLIP'` round-trips
+  cleanly as `alphaTest`+`transparent:false` (verified the same way), but
+  `buildSky()`'s unlit-material swap has to copy `alphaTest`/`transparent`
+  (and `map`) onto the replacement `MeshBasicMaterial` or the cutout — or the
+  whole texture — silently disappears. The
   ocean locale's sea/sun/island/boat/window-palms stay real
   procedural JS (`buildOceanExtras()`) — Blender only bakes the dome — and
   that group is hidden whenever the active locale isn't `'ocean'`. Fallback:
