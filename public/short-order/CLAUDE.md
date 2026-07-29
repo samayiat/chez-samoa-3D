@@ -203,14 +203,27 @@ Blender — it produces static assets.
   `MeshBasicMaterial` in `buildSky()` — Blender's Principled BSDF exports as a
   *lit* PBR material over glTF, and a background dome/skyline lit by the
   room's actual key light shades wrong-looking dark on the far side, so the
-  swap (base colour + emissive folded in) is required, not cosmetic.
+  swap (base colour + emissive folded in) is required, not cosmetic — and it
+  must also copy `map` onto the replacement material, or a textured facade
+  (see next) silently loses its texture and renders as a flat colour.
   `currentLocale()` cycles `LOCALE_ORDER` off `RUN.day`, so the view outside
   rotates night to night. `make_sky_city.py` in particular builds two rings —
   a close ring of looming "neighbour" rooftops (water towers / antennas / AC
   clutter, one signature spire, gaps for street sightlines) plus a dense hazy
   distant skyline faded toward the horizon colour for cheap atmospheric
   perspective — so the restaurant reads as sitting ON a rooftop, not looking
-  at a skyline postcard out one window. The ocean locale's sea/sun/island/boat/window-palms stay real
+  at a skyline postcard out one window. Building windows are a baked texture
+  (`sky_common.py`'s `window_grid_image`/`facade_mat`/`textured_box`), not one
+  box per window — the standard game-art cheat for dense facades, hundreds of
+  windows per building for the cost of one UV-mapped quad. The window glow
+  itself is baked straight into that colour texture rather than routed
+  through a separate Emission map: an actual export→reload round-trip showed
+  the vendored r128 GLTFLoader doesn't understand
+  `KHR_materials_emissive_strength`, so `Emission Strength` above 1 silently
+  clamps to 1 on load — not enough punch to read as lit-window-vs-dark-wall.
+  Don't reach for Emission textures on new sky assets for that reason; paint
+  the desired brightness directly into the base colour image instead. The
+  ocean locale's sea/sun/island/boat/window-palms stay real
   procedural JS (`buildOceanExtras()`) — Blender only bakes the dome — and
   that group is hidden whenever the active locale isn't `'ocean'`. Fallback:
   `'ocean'` still has the original canvas-gradient dome (`buildProceduralDome()`)

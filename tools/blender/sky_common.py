@@ -135,6 +135,73 @@ def dome_bands(radius, bands):
         objs.append(finish('skyband%d'%idx, bm, m))
     return objs
 
+# textured box: same 6 faces as box(), but with a UV layer so a facade_mat's
+# window-grid texture actually shows up (box() alone has no UVs -- every face
+# would sample a single texel). Every face gets its own full 0..1 UV quad.
+def textured_box(bm, cx,cy,cz, sx,sy,sz):
+    hx,hy,hz=sx/2,sy/2,sz/2
+    v={}
+    for dx in(-1,1):
+        for dy in(-1,1):
+            for dz in(-1,1):
+                v[(dx,dy,dz)]=bm.verts.new((cx+dx*hx, cy+dy*hy, cz+dz*hz))
+    F=[[(-1,-1,-1),(1,-1,-1),(1,1,-1),(-1,1,-1)],
+       [(-1,-1,1),(-1,1,1),(1,1,1),(1,-1,1)],
+       [(-1,-1,-1),(-1,1,-1),(-1,1,1),(-1,-1,1)],
+       [(1,-1,-1),(1,-1,1),(1,1,1),(1,1,-1)],
+       [(-1,-1,-1),(-1,-1,1),(1,-1,1),(1,-1,-1)],
+       [(-1,1,-1),(1,1,-1),(1,1,1),(-1,1,1)]]
+    uv=bm.loops.layers.uv.verify() if hasattr(bm.loops.layers.uv,'verify') else bm.loops.layers.uv.new()
+    UVQ=[(0,0),(1,0),(1,1),(0,1)]
+    for f in F:
+        face=bm.faces.new([v[k] for k in f])
+        for loop,co in zip(face.loops, UVQ): loop[uv].uv=co
+
+# a dense WINDOW-GRID texture, generated procedurally (no image assets, no
+# PIL -- numpy only) instead of modelling one box per window. This is the
+# standard game-art cheat for distant/large facades: bake window density
+# into a small tiled texture, not geometry -- hundreds of windows for the
+# cost of one quad instead of hundreds of boxes.
+#   NB: the window GLOW for night is baked straight into this colour image
+#   (bright cells), not routed through a separate Emission texture. Verified
+#   by an actual export+reload round-trip that the vendored three r128
+#   GLTFLoader this game uses doesn't understand KHR_materials_emissive_
+#   strength, so any Emission Strength above 1 silently clamps to 1 on
+#   load -- not enough punch to read as "lit window vs. dark wall" reliably.
+#   Baking the glow into the colour itself sidesteps that entirely, and since
+#   buildSky() converts every sky material to unlit anyway (see index.html),
+#   "glowing" here just means "painted bright," which is all that's needed.
+def window_grid_image(name, cols, rows, wall_rgb, win_rgb, lit_frac=0.4, seed=0, margin=0.18):
+    import numpy as np
+    rng=np.random.default_rng(seed)
+    cell=8                                    # px per cell -- coarse/pixelated, matches the flat-shaded look
+    h,w=rows*cell, cols*cell
+    img=np.empty((h,w,4),dtype=np.float32)
+    img[...,0]=wall_rgb[0]; img[...,1]=wall_rgb[1]; img[...,2]=wall_rgb[2]; img[...,3]=1.0
+    lit=rng.random((rows,cols))<lit_frac
+    m=max(1,int(cell*margin))
+    for r in range(rows):
+        y0,y1=r*cell+m,(r+1)*cell-m
+        for c in range(cols):
+            if not lit[r,c]: continue
+            x0,x1=c*cell+m,(c+1)*cell-m
+            img[y0:y1,x0:x1,0]=win_rgb[0]; img[y0:y1,x0:x1,1]=win_rgb[1]; img[y0:y1,x0:x1,2]=win_rgb[2]
+    bimg=bpy.data.images.new(name, width=w, height=h, alpha=True)
+    bimg.pixels=img.flatten().tolist(); bimg.pack()
+    return bimg
+
+# a material driven by window_grid_image() -- unlit-friendly Base Color
+# texture, low roughness variance since it never actually gets lit (see
+# buildSky()'s unlit conversion).
+def facade_mat(name, img, rough=0.85, metal=0.05):
+    m=bpy.data.materials.new(name); m.use_nodes=True
+    nt=m.node_tree; bsdf=nt.nodes.get("Principled BSDF")
+    tb=nt.nodes.new("ShaderNodeTexImage"); tb.image=img; tb.interpolation='Closest'
+    nt.links.new(tb.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value=rough; bsdf.inputs["Metallic"].default_value=metal
+    m.use_backface_culling=False
+    return m
+
 def export(out):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_apply=True)
